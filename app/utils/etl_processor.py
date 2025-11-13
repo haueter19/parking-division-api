@@ -7,20 +7,32 @@ from datetime import datetime
 from typing import Optional, Dict, List, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
+from sqlalchemy import Table, MetaData, select
 import pandas as pd
 from app.models.database import (
     Transaction, DataSourceType, LocationType, PaymentType,
     WindcaveStaging, PaymentsInsiderStaging, IPSCreditCardStaging,
     IPSMobileStaging, IPSCashStaging, SQLCashStaging,
-    ETLProcessingLog, UploadedFile
+    ETLProcessingLog, UploadedFile, PU_PARCS_UCD, PU_REVENUE_CREDITCARDTERMINALS
 )
 
 
 class ETLProcessor:
     """Main ETL processor for transforming staging data to final transactions"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, traffic_db: Optional[Session] = None):
+        """
+        ETLProcessor can accept two session objects:
+        - db: primary application DB session (PUReporting)
+        - traffic_db: optional session bound to the Traffic engine
+
+        If `traffic_db` is provided, `get_org_code` will query the Traffic
+        database tables (`PU_PARCS_UCD` and `PU_REVENUE_CREDITCARDTERMINALS`) and
+        return the matching org_code. If not provided, the method falls back to
+        the default behavior (placeholder/None).
+        """
         self.db = db
+        self.traffic_db = traffic_db
         self.org_code_cache = {}  # Cache for terminal_id -> org_code lookups
         
     def get_org_code(self, terminal_id: str) -> Optional[str]:
@@ -30,15 +42,41 @@ class ETLProcessor:
         """
         if terminal_id in self.org_code_cache:
             return self.org_code_cache[terminal_id]
-        
-        # TODO: Replace with actual query to your terminal/org_code tables
-        # Example:
+        # If a Traffic DB session was provided, query the Traffic DB tables.
+        # We'll use SQLAlchemy Core (select + union) with table reflection so
+        # we don't need ORM model classes for those legacy tables.
+        if self.traffic_db is not None:
+            try:
+                engine = self.traffic_db.get_bind()
+                metadata = MetaData()
+
+                tbl1 = Table("PU_PARCS_UCD", metadata, autoload_with=engine)
+                tbl2 = Table("PU_REVENUE_CREDITCARDTERMINALS", metadata, autoload_with=engine)
+
+                s1 = select(tbl1.c.org_code).where(tbl1.c.terminal_id == terminal_id)
+                s2 = select(tbl2.c.org_code).where(tbl2.c.terminal_id == terminal_id)
+
+                # Union the two selects and limit to one result
+                union_stmt = s1.union_all(s2).limit(1)
+
+                result = self.traffic_db.execute(union_stmt).scalar_one_or_none()
+                org_code = result
+            except Exception as e:
+                # On error, log/print and fall back to None
+                print(f"Error querying Traffic DB for org_code: {e}")
+                org_code = None
+
+            self.org_code_cache[terminal_id] = org_code
+            return org_code
+
+        # TODO: Replace with actual query to your terminal/org_code tables on
+        # the primary DB if Traffic DB is not used. Example placeholder:
         # result = self.db.query(TerminalOrgCode).filter(
         #     TerminalOrgCode.terminal_id == terminal_id
         # ).first()
         # org_code = result.org_code if result else None
-        
-        org_code = None  # Placeholder
+
+        org_code = None  # Placeholder when no traffic_db is provided
         self.org_code_cache[terminal_id] = org_code
         return org_code
     

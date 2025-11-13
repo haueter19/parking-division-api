@@ -34,7 +34,9 @@ class DataSourceType(str, enum.Enum):
     """Data source type enumeration for categorizing uploaded files"""
     WINDCAVE = "windcave"  # Windcave credit card settlements
     PAYMENTS_INSIDER = "payments_insider"  # Payments Insider credit card
-    IPS = "ips"  # IPS credit card
+    IPS_CC = "ips_cc"  # IPS credit card
+    IPS_PBP = "ips_pbp"  # IPS credit card
+    IPS_Cash = "ips_cash" 
     CASH_COLLECTION = "cash_collection"  # Cash collection PDFs
     RP3_PERMITS = "rp3_permits"  # Residential Parking Permit Program
     MONTHLY_PERMITS = "monthly_permits"  # Monthly parking permits
@@ -84,6 +86,17 @@ class UploadedFile(Base):
     
     # Relationships
     uploader = relationship("User", back_populates="uploaded_files")
+    
+    @property
+    def uploaded_by_user(self):
+        """Alias property for API/serialization compatibility.
+
+        Some parts of the codebase (Pydantic schemas and templates) expect
+        an attribute named `uploaded_by_user`. The actual relationship is
+        named `uploader`. Expose this property so Pydantic's
+        `from_attributes=True` can find the nested User object.
+        """
+        return self.uploader
     # Link to staging records for audit trail
     windcave_records = relationship("WindcaveStaging", back_populates="source_file")
     payments_insider_records = relationship("PaymentsInsiderStaging", back_populates="source_file")

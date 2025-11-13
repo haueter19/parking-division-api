@@ -2,7 +2,7 @@ from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
-from app.models.database import UserRole, DataSourceType
+from app.models.database import UserRole, DataSourceType, LocationType, PaymentType
 
 
 # ============= User Schemas =============
@@ -55,32 +55,7 @@ class TokenData(BaseModel):
     username: Optional[str] = None
 
 # ============= Enums (matching database enums) =============
-class DataSourceType(str, Enum):
-    WINDCAVE_CC = "windcave_cc"
-    PAYMENTS_INSIDER_CC = "payments_insider_cc"
-    IPS_CC = "ips_cc"
-    IPS_MOBILE = "ips_mobile"
-    IPS_CASH = "ips_cash"
-    TREASURY_PDF = "treasury_pdf"
-    SQL_CASH_QUERY = "sql_cash_query"
-    OTHER = "other"
 
-
-class LocationType(str, Enum):
-    GARAGE = "garage"
-    LOT = "lot"
-    METER = "meter"
-    OTHER = "other"
-
-
-class PaymentType(str, Enum):
-    VISA = "visa"
-    MASTERCARD = "mastercard"
-    AMEX = "amex"
-    DISCOVER = "discover"
-    CASH = "cash"
-    MOBILE = "mobile"
-    OTHER = "other"
 
 
 class UploadedFileBase(BaseModel):
@@ -138,7 +113,7 @@ class ProcessTransactionResponse(BaseModel):
     errors: Optional[List[str]] = None
     
     model_config = ConfigDict(from_attributes=True)
-    
+
 # ============= File Upload Processing =============
 class FileProcessRequest(BaseModel):
     """Request to process an uploaded file to staging"""

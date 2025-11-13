@@ -9,6 +9,7 @@ from app.models.database import User, UploadedFile, UserRole, DataSourceType
 from app.models.schemas import UploadedFileCreate, UploadedFileResponse, UploadedFileWithUser
 from app.api.dependencies import get_current_active_user, require_role
 from app.config import settings
+from app.utils.file_inference import infer_data_source_type
 
 router = APIRouter()
 
@@ -16,13 +17,15 @@ router = APIRouter()
 @router.post("/upload", response_model=UploadedFileResponse, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile = File(...),
-    data_source_type: DataSourceType = Form(...),
     description: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Upload a file with metadata tracking
+    Upload a file with metadata tracking.
+    
+    The data source type is automatically inferred from the filename using
+    pattern matching. No manual selection is required.
     
     Requires: UPLOADER, MANAGER, or ADMIN role
     """
@@ -58,6 +61,9 @@ async def upload_file(
         file_extension = os.path.splitext(file.filename)[1]
         unique_filename = f"{timestamp}_{current_user.username}_{file.filename}"
         
+        # Infer data source type from filename using pattern matching
+        data_source_type = infer_data_source_type(file.filename)
+        
         # Create subdirectory for data source type
         source_dir = os.path.join(settings.upload_dir, data_source_type.value)
         os.makedirs(source_dir, exist_ok=True)
@@ -68,26 +74,6 @@ async def upload_file(
         # Move file to final location
         shutil.move(temp_file, file_path)
         temp_file = None  # Mark as moved
-
-        # Infer type from filename
-        if file.filename.lower().startswith("pbp"):
-            data_source_type = DataSourceType.IPS
-        elif file.filename.lower().startswith("dailybankrecon"):
-            data_source_type = DataSourceType.IPS
-        elif file.filename.lower().startswith("collection report"):
-            data_source_type = DataSourceType.IPS
-        elif file.filename.lower().startswith("sales"):
-            data_source_type = DataSourceType.PAYMENTS_INSIDER
-        elif file.filename.lower().startswith("payment"):
-            data_source_type = DataSourceType.PAYMENTS_INSIDER
-        elif file.filename.lower().startswith("windcave"):
-            data_source_type = DataSourceType.WINDCAVE
-        elif file.filename.lower().startswith("untitled"):
-            data_source_type = DataSourceType.WINDCAVE
-        elif file.filename.lower().startswith("full"):
-            data_source_type = DataSourceType.WINDCAVE
-        else:
-            data_source_type = data_source_type  # Use provided type
         
         # Create database record
         uploaded_file_record = UploadedFile(

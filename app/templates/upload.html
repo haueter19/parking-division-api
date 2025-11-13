@@ -285,27 +285,6 @@
             </div>
 
             <div class="form-group">
-                <label for="dataSourceType">Data Source Type *</label>
-                <select id="dataSourceType" required>
-                    <option value="">Select a data source...</option>
-                    <option value="windcave_cc">Windcave</option>
-                    <option value="payments_insider_cc">Payments Insider</option>
-                    <option value="ips_cc">IPS Credit Card</option>
-                    <option value="ips_mobile">IPS Mobile</option>
-                    <option value="ips_cash">IPS Cash</option>
-                    <option value="cash_collection">Cash Collection (Finance Dept)</option>
-                    <option value="ooph_charges">Out of Hours Parking Charges</option>
-                    <option value="pci_inspections">PCI Compliance Inspections</option>
-                    <option value="rp3_permits">RP3 Permits (Residential Parking)</option>
-                    <option value="monthly_permits">Monthly Parking Permits</option>
-                    <option value="garage_transactions">Garage Transactions</option>
-                    <option value="parking_tickets">Parking Tickets (AIMS)</option>
-                    <option value="towed_vehicles">Towed/Abandoned Vehicles</option>
-                    <option value="other">Other</option>
-                </select>
-            </div>
-
-            <div class="form-group">
                 <label for="description">Description (Optional)</label>
                 <textarea id="description" placeholder="Add any notes about this file..."></textarea>
             </div>
@@ -454,12 +433,10 @@
                 return;
             }
 
-            const dataSourceType = document.getElementById('dataSourceType').value;
             const description = document.getElementById('description').value;
 
             const formData = new FormData();
             formData.append('file', selectedFile);
-            formData.append('data_source_type', dataSourceType);
             if (description) {
                 formData.append('description', description);
             }

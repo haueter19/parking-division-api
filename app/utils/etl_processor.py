@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional, Dict, List, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
-from sqlalchemy import Table, MetaData, select, insert
+from sqlalchemy import Table, MetaData, select, insert, text
 import numpy as np
 import pandas as pd
 from app.models.database import (
@@ -16,7 +16,8 @@ from app.models.database import (
     IPSCreditCardStaging, IPSMobileStaging, IPSCashStaging, SQLCashStaging,
     ETLProcessingLog, UploadedFile, PU_PARCS_UCD, PU_REVENUE_CREDITCARDTERMINALS
 )
-
+#from db_manager import ConnectionManager
+#cnxn = ConnectionManager()
 
 class ETLProcessor:
     """Main ETL processor for transforming staging data to final transactions"""
@@ -34,52 +35,44 @@ class ETLProcessor:
         """
         self.db = db
         self.traffic_db = traffic_db
-        self.org_code_cache = {}  # Cache for terminal_id -> org_code lookups
+        self.org_code_cache = None  # Cache for terminal_id -> org_code lookups
         
-    def get_org_code(self, terminal_id: str) -> Optional[str]:
+    def get_org_code(self) -> Optional[pd.DataFrame]:
         """
         Get org code for a terminal ID
         This should connect to your existing terminal/org_code tables
         """
-        if terminal_id in self.org_code_cache:
-            return self.org_code_cache[terminal_id]
+
         # If a Traffic DB session was provided, query the Traffic DB tables.
         # We'll use SQLAlchemy Core (select + union) with table reflection so
         # we don't need ORM model classes for those legacy tables.
-        if self.traffic_db is not None:
-            try:
-                engine = self.traffic_db.get_bind()
-                metadata = MetaData()
 
-                tbl1 = Table("PU_PARCS_UCD", metadata, autoload_with=engine)
-                tbl2 = Table("PU_REVENUE_CREDITCARDTERMINALS", metadata, autoload_with=engine)
+        try:
+            org_lookup_tbl = pd.read_sql("""
+                with ucds as (
+                    SELECT * FROM [Traffic].[data_admin8].[PU_PARCS_UCD] WHERE HousingID IS NOT NULL AND ChargeCode IS NOT NULL
+                ), cc_terminals as (
+                    SELECT * FROM [Traffic].[data_admin8].[PU_REVENUE_CREDITCARDTERMINALS] WHERE ChargeCode IS NOT NULL
+                )
+                SELECT 
+                    ucds.HousingID, CONCAT('0010050008016090',CAST(ucds.TerminalID As varchar)) TerminalID, ucds.ChargeCode, 'Windcave' as Brand
+                FROM ucds 
+                UNION
+                SELECT
+                    NULL, cc_terminals.TerminalID, cc_terminals.ChargeCode, Brand
+                FROM cc_terminals
+                ORDER BY TerminalID
+                """, self.traffic_db.get_bind())
+        
+        except Exception as e:
+            # On error, log/print and fall back to None
+            print(f"Error querying Traffic DB for org_codes: {e}")
+            
+            self.org_code_cache = org_lookup_tbl
+            return org_lookup_tbl
 
-                s1 = select(tbl1.c.org_code).where(tbl1.c.terminal_id == terminal_id)
-                s2 = select(tbl2.c.org_code).where(tbl2.c.terminal_id == terminal_id)
-
-                # Union the two selects and limit to one result
-                union_stmt = s1.union_all(s2).limit(1)
-
-                result = self.traffic_db.execute(union_stmt).scalar_one_or_none()
-                org_code = result
-            except Exception as e:
-                # On error, log/print and fall back to None
-                print(f"Error querying Traffic DB for org_code: {e}")
-                org_code = None
-
-            self.org_code_cache[terminal_id] = org_code
-            return org_code
-
-        # TODO: Replace with actual query to your terminal/org_code tables on
-        # the primary DB if Traffic DB is not used. Example placeholder:
-        # result = self.db.query(TerminalOrgCode).filter(
-        #     TerminalOrgCode.terminal_id == terminal_id
-        # ).first()
-        # org_code = result.org_code if result else None
-
-        org_code = None  # Placeholder when no traffic_db is provided
-        self.org_code_cache[terminal_id] = org_code
-        return org_code
+        self.org_code_cache = org_lookup_tbl
+        return org_lookup_tbl
     
     def determine_location_type(self, location_name: str, terminal_id: str = None) -> LocationType:
         """Determine location type from location name or terminal ID"""
@@ -90,7 +83,7 @@ class ETLProcessor:
         elif "lot" in location_lower or "surface" in location_lower:
             return LocationType.LOT
         elif "meter" in location_lower or terminal_id and terminal_id.startswith("M"):
-            return LocationType.METER
+            return LocationType.SINGLE_SPACE_METER
         else:
             return LocationType.OTHER
     
@@ -117,42 +110,56 @@ class ETLProcessor:
         """Process Windcave staging records to final transactions"""
         log_entry = self._start_log("windcave_staging", file_id)
         
+        if self.org_code_cache is None:
+            self.get_org_code()
+            
         try:
             # Query unprocessed records
-            query = self.db.query(WindcaveStaging).filter(
-                WindcaveStaging.processed_to_final == False
-            )
-            if file_id:
-                query = query.filter(WindcaveStaging.source_file_id == file_id)
+            qry = text("SELECT * FROM app.windcave_staging WHERE processed_to_final = :processed_to_final AND voided = 0")
+            records = pd.read_sql(qry, self.db.get_bind(), params={'processed_to_final':0})
             
-            records = query.all()
+            if file_id:
+                records = records[records['source_file_id']==file_id]
+            
+            # Need to get the device ID from txnref
+            records['txnref'] = records['txnref'].apply(lambda x: x.split('-')[0])
+
+            # Merge on device_id to HousingID to get ChargeCode
+            records.merge(self.org_lookup_tbl[['HousingID', 'ChargeCode']], left_on='device_id', right_on='HousingID', how='left')
+
+            # Sometimes device_id has a weird value. In this case, use txnref
+            records.merge(self.org_lookup_tbl[['HousingID', 'ChargeCode']], left_on='txnref', right_on='HousingID', how='left', suffixes=['','_y'])
+            
+            # Fill missing ChargeCode from second merge
+            records.fillna({'ChargeCode':records['ChargeCode_y']},inplace=True)
+
             created_count = 0
             failed_count = 0
             
-            for record in records:
+            for _, record in records.iterrows():
                 try:
                     transaction = Transaction(
-                        transaction_date=record.transaction_date,
-                        transaction_amount=record.amount,
-                        settle_date=record.settlement_date,
-                        settle_amount=record.settlement_amount,
+                        transaction_date=record['time'],
+                        transaction_amount=record['amount'],
+                        settle_date=record['settlement_date'],
+                        settle_amount=record['amount'],
                         source=DataSourceType.WINDCAVE,
-                        location_type=self.determine_location_type("", record.terminal_id),
+                        location_type=LocationType.GARAGE,
                         location_name=None,  # Windcave might not have location names
-                        device_terminal_id=record.terminal_id,
-                        payment_type=self.map_payment_type(record.card_type),
-                        reference_number=record.reference,
-                        org_code=self.get_org_code(record.terminal_id),
+                        device_terminal_id=record['device_id'],
+                        payment_type=self.map_payment_type(record['card_type']),
+                        reference_number=record['dpstxnref'],
+                        org_code=self.get_org_code(record['terminal_id']),
                         staging_table="windcave_staging",
-                        staging_record_id=record.id
+                        staging_record_id=record['id']
                     )
                     
                     self.db.add(transaction)
                     self.db.flush()
                     
                     # Update staging record
-                    record.processed_to_final = True
-                    record.transaction_id = transaction.id
+                    record['processed_to_final'] = True
+                    record['transaction_id'] = transaction.id
                     created_count += 1
                     
                 except Exception as e:

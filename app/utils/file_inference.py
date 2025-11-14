@@ -31,7 +31,7 @@ def infer_data_source_type(filename: str) -> DataSourceType:
     if filename_lower.startswith("payments"):
         return DataSourceType.PAYMENTS_INSIDER_PAYMENTS
     
-    if filename_lower.startswith("sales"):
+    if filename_lower.contains("sales"):
         return DataSourceType.PAYMENTS_INSIDER_SALES
     
     # IPS patterns
@@ -39,10 +39,10 @@ def infer_data_source_type(filename: str) -> DataSourceType:
         return DataSourceType.IPS_CC
     
     if filename_lower.startswith("pbp"):
-        return DataSourceType.IPS_PBP
+        return DataSourceType.IPS_MOBILE
     
     if filename_lower.startswith("collection report"):
-        return DataSourceType.IPS_Cash
+        return DataSourceType.IPS_CASH
     
     # Windcave patterns
     if (filename_lower.startswith("windcave") or 

@@ -212,12 +212,20 @@ class IPSCreditCardStaging(Base):
     source_file_id = Column(Integer, ForeignKey("uploaded_files.id"), nullable=False)
     
     # Raw fields from IPS CC - adjust based on actual columns
-    transaction_date = Column(DateTime)
-    amount = Column(Numeric(10, 2))
-    terminal_id = Column(String(100))
-    location = Column(String(255))
-    card_type = Column(String(50))
-    reference = Column(String(255))
+    settlement_date_time = Column(DateTime)
+    transaction_reference = Column(String(15))
+    transaction_date_time = Column(DateTime)
+    zone = Column(String(24))
+    area = Column(String(50))
+    sub_area = Column(String(50))
+    pole = Column(String(24))
+    terminal = Column(String(12))
+    batch_number = Column(Integer)
+    authorization_code = Column(String(8))
+    card_type = Column(String(12))
+    card_number = Column(String(15))
+    expiry = Column(String(8))
+    amount = Column(Numeric(10,2))
     
     # Processing metadata
     loaded_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -238,12 +246,23 @@ class IPSMobileStaging(Base):
     source_file_id = Column(Integer, ForeignKey("uploaded_files.id"), nullable=False)
     
     # Raw fields from IPS Mobile - adjust based on actual columns
-    transaction_date = Column(DateTime)
-    amount = Column(Numeric(10, 2))
-    phone_number = Column(String(20))  # Masked/partial
-    location = Column(String(255))
-    meter_id = Column(String(100))
-    payment_method = Column(String(50))  # SMS or App
+    received_Date_time = Column(DateTime)
+    zone = Column(String(24))
+    area = Column(String(50))
+    sub_area = Column(String(50))
+    pole = Column(String(24))
+    meter_type = Column(String(12))
+    space_name = Column(Integer)
+    license_plate = Column(String(10))
+    prid = Column(Integer)
+    paid = Column(Numeric(10,2))
+    convenience_fee = Column(Numeric(10,2))
+    time_purchased = Column(String(8))
+    session_start_date_time = Column(DateTime)
+    session_end_date_time = Column(DateTime)
+    sms__ble = Column(String(8))
+    sms__ble_received = Column(String(3))
+    partner_name = Column(String(12))
     
     # Processing metadata
     loaded_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -265,10 +284,23 @@ class IPSCashStaging(Base):
     
     # Raw fields from IPS Cash reports
     collection_date = Column(DateTime)
-    amount = Column(Numeric(10, 2))
-    meter_id = Column(String(100))
-    location = Column(String(255))
-    collector_id = Column(String(100))
+    collection_time = Column(String(11))
+    zone = Column(String(24))
+    area = Column(String(50))
+    sub_area = Column(String(50))
+    pole_ser_no = Column(String(24))
+    terminal = Column(String(12))
+    meter_type = Column(String(12))
+    pennies = Column(Numeric(10,2))
+    nickels = Column(Numeric(10,2))
+    dimes = Column(Numeric(10,2))
+    quarters = Column(Numeric(10,2))
+    dollars = Column(Numeric(10,2))
+    coin_total = Column(Integer)
+    coin_revenue = Column(Numeric(10,2))
+    unrecognized_coins = Column(Integer)
+    invalid_coin_revenue = Column(Numeric(10,2))
+    coin_reversal_count = Column(Integer)
     
     # Processing metadata
     loaded_at = Column(DateTime(timezone=True), server_default=func.now())

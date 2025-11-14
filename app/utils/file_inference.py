@@ -28,9 +28,11 @@ def infer_data_source_type(filename: str) -> DataSourceType:
     filename_lower = filename.lower()
     
     # Payments Insider patterns
-    if (filename_lower.startswith("payments") or 
-        filename_lower.startswith("sales")):
-        return DataSourceType.PAYMENTS_INSIDER
+    if filename_lower.startswith("payments"):
+        return DataSourceType.PAYMENTS_INSIDER_PAYMENTS
+    
+    if filename_lower.startswith("sales"):
+        return DataSourceType.PAYMENTS_INSIDER_SALES
     
     # IPS patterns
     if filename_lower.startswith("dailybankrecon"):
@@ -44,8 +46,7 @@ def infer_data_source_type(filename: str) -> DataSourceType:
     
     # Windcave patterns
     if (filename_lower.startswith("windcave") or 
-        filename_lower.startswith("untitled") or
-        filename_lower.startswith("full")):
+        filename_lower.startswith("wc")):
         return DataSourceType.WINDCAVE
     
     # Default fallback

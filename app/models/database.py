@@ -108,23 +108,21 @@ class UploadedFile(Base):
 # ============= Staging Tables =============
 
 class WindcaveStaging(Base):
-    """Staging table for Windcave credit card transactions"""
     __tablename__ = "windcave_staging"
     __table_args__ = {"schema": "app"}
-    
+
     id = Column(Integer, primary_key=True, index=True)
     source_file_id = Column(Integer, ForeignKey("uploaded_files.id"), nullable=False)
-    
-    # Raw fields from Windcave CSV - adjust these based on actual columns
+
     time = Column(DateTime)
-    settlement_date = Column(String(20))
+    settlement_date = Column(DateTime)
     group_account = Column(String(24))
     type = Column(String(5))
     authorized = Column(Integer)
-    reference = Column(Integer)
+    reference = Column(String(20))
     auth_code = Column(String(12))
     cur = Column(String(5))
-    amount = Column(Numeric(10, 2))
+    amount = Column(Float)
     card_num = Column(String(12))
     card_type = Column(String(20))
     card_holder_name = Column(String(50))
@@ -138,22 +136,21 @@ class WindcaveStaging(Base):
     txndata2 = Column(String(20))
     txndata3 = Column(String(20))
     username = Column(String(20))
-    caid = Column(Integer)
+    caid = Column(String(24))
     catid = Column(Integer)
     merch_corp_ref = Column(Integer)
     order_number = Column(Integer)
     device_id = Column(String(20))
     voided = Column(Integer)
-    cardnumber2 = Column(Integer)
-
-    # Processing metadata
+    cardnumber2 = Column(String(32))
+    
     loaded_at = Column(DateTime(timezone=True), server_default=func.now())
     processed_to_final = Column(Boolean, default=False)
-    transaction_id = Column(Integer, ForeignKey("transactions.id"))  # Link to final transaction
-    
-    # Relationships
+    transaction_id = Column(Integer, ForeignKey("transactions.id"))
+
     source_file = relationship("UploadedFile", back_populates="windcave_records")
     final_transaction = relationship("Transaction", back_populates="windcave_source")
+
 
 
 class PaymentsInsiderStaging(Base):
@@ -163,17 +160,36 @@ class PaymentsInsiderStaging(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     source_file_id = Column(Integer, ForeignKey("uploaded_files.id"), nullable=False)
-    report_type = Column(String(20))  # 'sales' or 'payments'
     
     # Raw fields from PI reports - adjust based on actual columns
+    business_name = Column(String(30))
+    mid = Column(String(15))
+    store_number = Column(Integer)
+    card_brand = Column(String(20))
+    card_number = Column(String(20))
+    transaction_type = Column(String(20))
+    void_ind = Column(String(3))
+    settled_amount = Column(Numeric(10,2))
+    settled_currency = Column(String(5))
+    settled_date = Column(DateTime)
+    transaction_amount = Column(Numeric(10,2))
+    transaction_currency = Column(String(5))
     transaction_date = Column(DateTime)
-    payment_date = Column(DateTime)
-    amount = Column(Numeric(10, 2))
-    card_type = Column(String(50))
-    terminal_id = Column(String(100))
-    location = Column(String(255))
-    reference_number = Column(String(255))
-    batch_number = Column(String(100))
+    transaction_time = Column(String(8))
+    authorization_code = Column(String(12))
+    gbok__batch_id = Column(String(12))
+    terminal_id = Column(String(24))
+    exchange_type = Column(String(12))
+    durbin_regulated = Column(String(1))
+    roc_text = Column(String(10))
+    invoice = Column(String(50))
+    ticket_number = Column(String(20))
+    order_number = Column(String(50))
+    check_number = Column(String(20))
+    custom_data_1 = Column(String(20))
+    card_swipe_indicator = Column(String(16))
+    pos_entry = Column(String(3))
+    bnpl_product_code = Column(String(12))
     
     # Processing metadata
     loaded_at = Column(DateTime(timezone=True), server_default=func.now())

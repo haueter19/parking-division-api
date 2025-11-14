@@ -12,8 +12,8 @@ import numpy as np
 import pandas as pd
 from app.models.database import (
     Transaction, DataSourceType, LocationType, PaymentType,
-    WindcaveStaging, PaymentsInsiderStaging, IPSCreditCardStaging,
-    IPSMobileStaging, IPSCashStaging, SQLCashStaging,
+    WindcaveStaging, PaymentsInsiderPaymentsStaging, PaymentsInsiderSalesStaging, 
+    IPSCreditCardStaging, IPSMobileStaging, IPSCashStaging, SQLCashStaging,
     ETLProcessingLog, UploadedFile, PU_PARCS_UCD, PU_REVENUE_CREDITCARDTERMINALS
 )
 
@@ -136,7 +136,7 @@ class ETLProcessor:
                         transaction_amount=record.amount,
                         settle_date=record.settlement_date,
                         settle_amount=record.settlement_amount,
-                        source=DataSourceType.WINDCAVE_CC,
+                        source=DataSourceType.WINDCAVE,
                         location_type=self.determine_location_type("", record.terminal_id),
                         location_name=None,  # Windcave might not have location names
                         device_terminal_id=record.terminal_id,
@@ -193,16 +193,16 @@ class ETLProcessor:
                 )
             )
             if file_id:
-                query = query.filter(PaymentsInsiderStaging.source_file_id == file_id)
+                query = query.filter(PaymentsInsiderSalesStaging.source_file_id == file_id)
             
-            sales_records = query.filter(PaymentsInsiderStaging.report_type == "sales").all()
+            sales_records = query.filter(PaymentsInsiderSalesStaging.report_type == "sales").all()
             created_count = 0
             failed_count = 0
             
             for sales_record in sales_records:
                 try:
                     # Get matching payment record
-                    payment_record = self.db.query(PaymentsInsiderStaging).filter(
+                    payment_record = self.db.query(PaymentsInsiderSalesStaging).filter(
                         PaymentsInsiderStaging.id == sales_record.matching_report_id
                     ).first()
                     
@@ -214,14 +214,14 @@ class ETLProcessor:
                         transaction_amount=sales_record.amount,
                         settle_date=payment_record.payment_date,
                         settle_amount=payment_record.amount,
-                        source=DataSourceType.PAYMENTS_INSIDER_CC,
+                        source=DataSourceType.PAYMENTS_INSIDER_SALES,
                         location_type=self.determine_location_type(sales_record.location),
                         location_name=sales_record.location,
                         device_terminal_id=sales_record.terminal_id,
                         payment_type=self.map_payment_type(sales_record.card_type),
                         reference_number=sales_record.reference_number,
                         org_code=self.get_org_code(sales_record.terminal_id),
-                        staging_table="payments_insider_staging",
+                        staging_table="payments_insider_sales_staging",
                         staging_record_id=sales_record.id
                     )
                     
@@ -257,21 +257,21 @@ class ETLProcessor:
     def _match_pi_reports(self):
         """Match Payments Insider sales and payments reports"""
         # Get unmatched sales reports
-        unmatched_sales = self.db.query(PaymentsInsiderStaging).filter(
+        unmatched_sales = self.db.query(PaymentsInsiderSalesStaging).filter(
             and_(
-                PaymentsInsiderStaging.report_type == "sales",
-                PaymentsInsiderStaging.matching_report_id == None
+                PaymentsInsiderSalesStaging.report_type == "sales",
+                PaymentsInsiderSalesStaging.matching_report_id == None
             )
         ).all()
         
         for sales in unmatched_sales:
             # Try to find matching payment by reference number and amount
-            payment = self.db.query(PaymentsInsiderStaging).filter(
+            payment = self.db.query(PaymentsInsiderSalesStaging).filter(
                 and_(
-                    PaymentsInsiderStaging.report_type == "payments",
-                    PaymentsInsiderStaging.reference_number == sales.reference_number,
-                    PaymentsInsiderStaging.amount == sales.amount,
-                    PaymentsInsiderStaging.matching_report_id == None
+                    PaymentsInsiderSalesStaging.report_type == "payments",
+                    PaymentsInsiderSalesStaging.reference_number == sales.reference_number,
+                    PaymentsInsiderSalesStaging.amount == sales.amount,
+                    PaymentsInsiderSalesStaging.matching_report_id == None
                 )
             ).first()
             
@@ -350,6 +350,7 @@ class ETLProcessor:
             ("windcave", self.process_windcave),
             ("payments_insider", self.process_payments_insider),
             ("ips_cash", self.process_ips_cash),
+            
             # Add other processors as needed
         ]
         
@@ -379,7 +380,7 @@ class ETLProcessor:
     def _complete_log(self, log_entry: ETLProcessingLog, processed: int, 
                      created: int, updated: int, failed: int):
         """Complete a processing log entry"""
-        log_entry.end_time = datetime.utcnow()
+        log_entry.end_time = datetime.now()
         log_entry.records_processed = processed
         log_entry.records_created = created
         log_entry.records_updated = updated
@@ -389,7 +390,7 @@ class ETLProcessor:
     
     def _fail_log(self, log_entry: ETLProcessingLog, error_message: str):
         """Mark a processing log entry as failed"""
-        log_entry.end_time = datetime.utcnow()
+        log_entry.end_time = datetime.now()
         log_entry.status = "failed"
         log_entry.error_message = error_message
         self.db.commit()
@@ -398,8 +399,19 @@ class ETLProcessor:
 class DataLoader:
     """Load data from files to staging tables"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, data_source_type: DataSourceType):
         self.db = db
+        self.data_source_type = data_source_type
+        self.mapping = {
+            DataSourceType.WINDCAVE: self.load_windcave_csv,
+            DataSourceType.PAYMENTS_INSIDER_PAYMENTS: self.load_payments_insider,
+            DataSourceType.PAYMENTS_INSIDER_SALES: self.load_payments_insider,
+            DataSourceType.IPS_CC: self.load_ips_credit,
+            DataSourceType.IPS_MOBILE: self.load_ips_mobile,
+            DataSourceType.IPS_CASH: self.load_ips_cash,
+            #DataSourceType.SQL_CASH_QUERY: self.load_sql_cash_query
+            # Add other mappings as needed
+            }
     
     def load_windcave_csv(self, file_path: str, file_id: int) -> int:
         """Load Windcave CSV to staging table"""
@@ -410,7 +422,7 @@ class DataLoader:
             df = pd.read_csv(file_path)
         
         # --- Normalize column names ---
-        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
     
         # --- Add metadata columns ---
         df["source_file_id"] = file_id
@@ -453,22 +465,34 @@ class DataLoader:
         file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
         if file_record:
             file_record.is_processed = True
-            file_record.processed_at = datetime.utcnow()
+            file_record.processed_at = datetime.now()
             file_record.records_processed = len(records)
             self.db.commit()
         
         return len(records)
     
-    def load_payments_insider(self, file_path: str, file_id: int, report_type: str) -> int:
+    def load_payments_insider(self, file_path: str, file_id: int, report_type: Optional[str] = None) -> int:
         """Load Payments Insider report to staging table"""
+
+        # Determine Sales or Payments from filename
+        
+        if not report_type:
+            if 'sales' in self.data_source_type.value.lower():
+                report_type = 'Sales'
+            if 'payments' in self.data_source_type.value.lower():
+                report_type = 'Payments'
+        
+        # Establish dtypes
+        set_dtypes = {'MID':str, 'Merchant ID':str, 'Terminal ID':str, 'GBOK / Batch ID':str, 'Payment No.':str}
+        
         # Determine if Excel or CSV
         if file_path.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(file_path, sheet_name=report_type, skiprows=1, dtype={'MID':str, 'Terminal ID':str, 'GBOK / Batch ID':str})
+            df = pd.read_excel(file_path, sheet_name=report_type, skiprows=1, dtype=set_dtypes)
         else:
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, dtype=set_dtypes)
 
         # --- Normalize column names ---
-        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","")
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
 
         # --- Add metadata columns ---
         df["source_file_id"] = file_id
@@ -483,7 +507,7 @@ class DataLoader:
                     pass
 
         # --- Handle integer columns - replace NaN with None ---
-        int_columns = ['store_number', 'pos_entry']
+        int_columns = ['store_number', 'store_numbe', 'pos_entry', 'roc_text', 'case_id']
         
         for col in int_columns:
             if col in df.columns:
@@ -499,14 +523,17 @@ class DataLoader:
         records = df.to_dict(orient="records")
 
         # --- Bulk insert using SQLAlchemy ---
-        self.db.execute(insert(PaymentsInsiderStaging), records)
+        if report_type == 'Sales':
+            self.db.execute(insert(PaymentsInsiderSalesStaging), records)
+        else:
+            self.db.execute(insert(PaymentsInsiderPaymentsStaging), records)
         self.db.commit()
 
         # Update file as processed
         file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
         if file_record:
             file_record.is_processed = True
-            file_record.processed_at = datetime.utcnow()
+            file_record.processed_at = datetime.now()
             file_record.records_processed = len(records)
             self.db.commit()
         
@@ -525,7 +552,7 @@ class DataLoader:
         df = df[df['Transaction Date Time'].notna()]
         
         # --- Normalize column names ---
-        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","")
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
         df.rename(columns=({'Amount ($)':'amount', '$ Paid':'paid', '$0.01':'pennies', '$0.05':'nickels', '$0.10':'dimes', '$0.25':'quarters', '$1.00':'dollars'}), inplace=True)
         
         # --- Add metadata columns ---
@@ -564,7 +591,7 @@ class DataLoader:
         file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
         if file_record:
             file_record.is_processed = True
-            file_record.processed_at = datetime.utcnow()
+            file_record.processed_at = datetime.now()
             file_record.records_processed = len(records)
             self.db.commit()
         
@@ -584,7 +611,7 @@ class DataLoader:
         df['convenience_fee'] = convenience_fee
         
         # --- Normalize column names ---
-        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","")
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
         df.rename(columns=({'Amount ($)':'amount', '$ Paid':'paid', '$0.01':'pennies', '$0.05':'nickels', '$0.10':'dimes', '$0.25':'quarters', '$1.00':'dollars'}), inplace=True)
         
         # --- Add metadata columns ---
@@ -623,7 +650,7 @@ class DataLoader:
         file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
         if file_record:
             file_record.is_processed = True
-            file_record.processed_at = datetime.utcnow()
+            file_record.processed_at = datetime.now()
             file_record.records_processed = len(records)
             self.db.commit()
             
@@ -642,7 +669,7 @@ class DataLoader:
         df = df[df['Collection Date'].notna()]
         
         # --- Normalize column names ---
-        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","")
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
         df.rename(columns=({'Amount ($)':'amount', '$ Paid':'paid', '$0.01':'pennies', '$0.05':'nickels', '$0.10':'dimes', '$0.25':'quarters', '$1.00':'dollars'}), inplace=True)
         
         # --- Add metadata columns ---
@@ -681,7 +708,7 @@ class DataLoader:
         file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
         if file_record:
             file_record.is_processed = True
-            file_record.processed_at = datetime.utcnow()
+            file_record.processed_at = datetime.now()
             file_record.records_processed = len(records)
             self.db.commit()
         

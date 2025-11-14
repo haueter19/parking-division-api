@@ -75,6 +75,7 @@ class UploadedFile(Base):
     original_filename = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)
     file_size = Column(Integer, nullable=False)
+    file_hash = Column(String(64), unique=True, index=True)
     data_source_type = Column(Enum(DataSourceType), nullable=False, index=True)
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     description = Column(Text)

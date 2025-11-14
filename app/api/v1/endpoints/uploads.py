@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, status, Form
 from sqlalchemy.orm import Session
 from typing import Optional
+import hashlib
+from pathlib import Path
 import os
 import shutil
 from datetime import datetime
@@ -14,6 +16,29 @@ from app.utils.file_inference import infer_data_source_type
 router = APIRouter()
 
 
+async def calculate_upload_hash(file: UploadFile, algorithm: str = "sha256") -> str:
+    """
+    Calculate hash from FastAPI UploadFile object
+    
+    Args:
+        file: FastAPI UploadFile object
+        algorithm: Hash algorithm to use
+    
+    Returns:
+        Hexadecimal hash string
+    """
+    hash_obj = hashlib.new(algorithm)
+    
+    # Read file in chunks
+    while chunk := await file.read(65536):
+        hash_obj.update(chunk)
+    
+    # Reset file pointer so it can be read again for saving
+    await file.seek(0)
+    
+    return hash_obj.hexdigest()
+
+
 @router.post("/upload", response_model=UploadedFileResponse, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile = File(...),
@@ -22,7 +47,7 @@ async def upload_file(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Upload a file with metadata tracking.
+    Upload a file with metadata tracking and duplicate detection.
     
     The data source type is automatically inferred from the filename using
     pattern matching. No manual selection is required.
@@ -34,6 +59,23 @@ async def upload_file(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions to upload files"
+        )
+    
+    # Calculate hash BEFORE saving
+    file_hash = await calculate_upload_hash(file)
+
+    # Check if file with this hash already exists
+    existing_file = db.query(UploadedFile).filter(
+        UploadedFile.file_hash == file_hash
+    ).first()
+
+    if existing_file:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"This file has already been uploaded. "
+                   f"Original upload: {existing_file.original_filename} "
+                   f"on {existing_file.upload_date.strftime('%Y-%m-%d %H:%M')} "
+                   f"by {existing_file.uploader.username}"
         )
     
     # Check file size
@@ -81,6 +123,7 @@ async def upload_file(
             original_filename=file.filename,
             file_path=file_path,
             file_size=file_size,
+            file_hash=file_hash,
             data_source_type=data_source_type,
             uploaded_by=current_user.id,
             description=description

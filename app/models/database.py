@@ -17,7 +17,10 @@ class LocationType(str, enum.Enum):
     """Location type for transactions"""
     GARAGE = "garage"
     LOT = "lot"
-    METER = "meter"
+    #METER = "meter"
+    SINGLE_SPACE_METER = "single_space_meter"
+    MULTI_SPACE_METER = "multi_space_meter"
+    SMART_METER = "smart_meter"
     OTHER = "other"
 
 class PaymentType(str, enum.Enum):
@@ -28,15 +31,17 @@ class PaymentType(str, enum.Enum):
     DISCOVER = "discover"
     CASH = "cash"
     MOBILE = "mobile"
+    TEXT = 'text'
     OTHER = "other"  
 
 class DataSourceType(str, enum.Enum):
     """Data source type enumeration for categorizing uploaded files"""
     WINDCAVE = "windcave"  # Windcave credit card settlements
-    PAYMENTS_INSIDER = "payments_insider"  # Payments Insider credit card
+    PAYMENTS_INSIDER_PAYMENTS = "pi_payments"  # Payments Insider credit card
+    PAYMENTS_INSIDER_SALES = "pi_sales"  # Payments Insider sales report
     IPS_CC = "ips_cc"  # IPS credit card
-    IPS_PBP = "ips_pbp"  # IPS credit card
-    IPS_Cash = "ips_cash" 
+    IPS_MOBILE = "ips_mobile"  # IPS credit card
+    IPS_CASH = "ips_cash" 
     CASH_COLLECTION = "cash_collection"  # Cash collection PDFs
     RP3_PERMITS = "rp3_permits"  # Residential Parking Permit Program
     MONTHLY_PERMITS = "monthly_permits"  # Monthly parking permits
@@ -100,7 +105,8 @@ class UploadedFile(Base):
         return self.uploader
     # Link to staging records for audit trail
     windcave_records = relationship("WindcaveStaging", back_populates="source_file")
-    payments_insider_records = relationship("PaymentsInsiderStaging", back_populates="source_file")
+    payments_insider_sales_records = relationship("PaymentsInsiderSalesStaging", back_populates="source_file")
+    payments_insider_payments_records = relationship("PaymentsInsiderPaymentsStaging", back_populates="source_file")
     ips_cc_records = relationship("IPSCreditCardStaging", back_populates="source_file")
     ips_mobile_records = relationship("IPSMobileStaging", back_populates="source_file")
     ips_cash_records = relationship("IPSCashStaging", back_populates="source_file")
@@ -154,9 +160,9 @@ class WindcaveStaging(Base):
 
 
 
-class PaymentsInsiderStaging(Base):
+class PaymentsInsiderSalesStaging(Base):
     """Staging table for Payments Insider credit card transactions"""
-    __tablename__ = "payments_insider_staging"
+    __tablename__ = "payments_insider_sales_staging"
     __table_args__ = {"schema": "app"}
     
     id = Column(Integer, primary_key=True, index=True)
@@ -199,8 +205,60 @@ class PaymentsInsiderStaging(Base):
     matching_report_id = Column(Integer)  # ID of matching sales/payments report
     
     # Relationships
-    source_file = relationship("UploadedFile", back_populates="payments_insider_records")
-    final_transaction = relationship("Transaction", back_populates="pi_source")
+    source_file = relationship("UploadedFile", back_populates="payments_insider_sales_records")
+    final_transaction = relationship("Transaction", back_populates="pi_sales_source")
+
+
+class PaymentsInsiderPaymentsStaging(Base):
+    """Staging table for Payments Insider credit card transaction payments"""
+    __tablename__ = "payments_insider_payments_staging"
+    __table_args__ = {"schema": "app"}
+    
+    id = Column(Integer, primary_key=True, index=True)
+    source_file_id = Column(Integer, ForeignKey("uploaded_files.id"), nullable=False)
+    
+    # Raw fields from PI reports - adjust based on actual columns
+    payment_amount = Column(Numeric(10,2))
+    currency = Column(String(3))
+    transaction_amount = Column(Integer)
+    payment_no = Column(String(20))
+    payment_date = Column(DateTime)
+    fund_source = Column(String(3))
+    account = Column(String(12))
+    merchant_id = Column(String(10))
+    business_name = Column(String(30))
+    payment_type = Column(String(12))
+    adjustment_description = Column(String(50))
+    batch_amount = Column(Numeric(10,2))
+    paid_to_others = Column(Numeric(10,2))
+    paid_to_others_reason = Column(String(50))
+    net_fund_batch_amount = Column(Numeric(10,2))
+    gbok__batch_id = Column(String(12))
+    terminal_id = Column(String(24))
+    roc_text = Column(Integer)
+    card_brand = Column(String(12))
+    interchange_description = Column(String(40))
+    card_number = Column(String(20))
+    transaction_date = Column(DateTime)
+    authorization_code = Column(String(8))
+    settlement_date = Column(DateTime)
+    case_id = Column(Integer)
+    chargeback_code = Column(String(16))
+    chargeback_description = Column(String(50))
+    arn_number = Column(String(25))
+    purchase_id_number = Column(String(30))
+    airline_ticket_number = Column(String(30))
+    store_numbe = Column(Integer)
+        
+    # Processing metadata
+    loaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    processed_to_final = Column(Boolean, default=False)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"))
+    matching_report_id = Column(Integer)  # ID of matching sales/payments report
+    
+    # Relationships
+    source_file = relationship("UploadedFile", back_populates="payments_insider_payments_records")
+    final_transaction = relationship("Transaction", back_populates="pi_payments_source")
 
 
 class IPSCreditCardStaging(Base):
@@ -377,7 +435,8 @@ class Transaction(Base):
     
     # Relationships back to staging tables (for audit trail)
     windcave_source = relationship("WindcaveStaging", back_populates="final_transaction", uselist=False)
-    pi_source = relationship("PaymentsInsiderStaging", back_populates="final_transaction", uselist=False)
+    pi_sales_source = relationship("PaymentsInsiderSalesStaging", back_populates="final_transaction", uselist=False)
+    pi_payments_source = relationship("PaymentsInsiderPaymentsStaging", back_populates="final_transaction", uselist=False)
     ips_cc_source = relationship("IPSCreditCardStaging", back_populates="final_transaction", uselist=False)
     ips_mobile_source = relationship("IPSMobileStaging", back_populates="final_transaction", uselist=False)
     ips_cash_source = relationship("IPSCashStaging", back_populates="final_transaction", uselist=False)

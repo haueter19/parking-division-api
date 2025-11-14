@@ -7,7 +7,8 @@ from datetime import datetime
 from typing import Optional, Dict, List, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
-from sqlalchemy import Table, MetaData, select
+from sqlalchemy import Table, MetaData, select, insert
+import numpy as np
 import pandas as pd
 from app.models.database import (
     Transaction, DataSourceType, LocationType, PaymentType,
@@ -402,27 +403,54 @@ class DataLoader:
     
     def load_windcave_csv(self, file_path: str, file_id: int) -> int:
         """Load Windcave CSV to staging table"""
-        df = pd.read_csv(file_path)
+        
+        if file_path.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(file_path)
+        else:
+            df = pd.read_csv(file_path)
         
         # Map CSV columns to staging table columns
         # Adjust these mappings based on actual Windcave CSV structure
-        records = []
-        for _, row in df.iterrows():
-            record = WindcaveStaging(
-                source_file_id=file_id,
-                transaction_date=pd.to_datetime(row.get('TransactionDate')),
-                card_number_masked=row.get('CardNumber'),
-                amount=row.get('Amount'),
-                settlement_date=pd.to_datetime(row.get('SettlementDate')),
-                settlement_amount=row.get('SettlementAmount'),
-                terminal_id=row.get('TerminalID'),
-                reference=row.get('Reference'),
-                card_type=row.get('CardType'),
-                merchant_id=row.get('MerchantID')
-            )
-            records.append(record)
         
-        self.db.bulk_save_objects(records)
+        # --- Clean and normalize ---
+        # --- Normalize column names ---
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+    
+        # --- Add metadata columns ---
+        df["source_file_id"] = file_id
+        df["processed_to_final"] = False
+
+        # --- Convert datetimes where possible ---
+        for col in df.columns:
+            if "date" in col or "time" in col:
+                try:
+                    df[col] = pd.to_datetime(df[col], errors="coerce")
+                except Exception:
+                    pass
+
+        # --- Convert large integers to string ---
+        df['caid'] = df['caid'].astype(str)
+        df['cardnumber2'] = df['cardnumber2'].astype(str)
+
+        # --- Handle integer columns - replace NaN with None ---
+        int_columns = ['authorized', 'reco', 'billingid', 'dpsbillingid', 
+                   'catid', 'merch_corp_ref', 'order_number', 'voided']
+        
+        for col in int_columns:
+            if col in df.columns:
+                # Convert to nullable integer type or replace NaN with None
+                df[col] = df[col].replace({pd.NA: None, np.nan: None})
+                # Convert to int where not None
+                df.loc[df[col].notna(), col] = df[col].loc[df[col].notna()].astype(int)
+        
+        # --- Convert pandas NaN to None for SQL ---
+        df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
+        
+        # --- Convert to list of dictionaries ---
+        records = df.to_dict(orient="records")
+
+        # --- Bulk insert using SQLAlchemy ---
+        self.db.execute(insert(WindcaveStaging), records)
         self.db.commit()
         
         # Update file as processed
@@ -439,27 +467,38 @@ class DataLoader:
         """Load Payments Insider report to staging table"""
         # Determine if Excel or CSV
         if file_path.endswith('.xlsx'):
-            df = pd.read_excel(file_path)
+            df = pd.read_excel(file_path, sheet_name=report_type, skiprows=1, dtype={'Terminal ID':str})
         else:
             df = pd.read_csv(file_path)
+
+        # --- Normalize column names ---
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","")
+
+        # --- Add metadata columns ---
+        df["source_file_id"] = file_id
+        df["processed_to_final"] = False
         
-        records = []
-        for _, row in df.iterrows():
-            record = PaymentsInsiderStaging(
-                source_file_id=file_id,
-                report_type=report_type,  # 'sales' or 'payments'
-                transaction_date=pd.to_datetime(row.get('TransactionDate')) if report_type == 'sales' else None,
-                payment_date=pd.to_datetime(row.get('PaymentDate')) if report_type == 'payments' else None,
-                amount=row.get('Amount'),
-                card_type=row.get('CardType'),
-                terminal_id=row.get('TerminalID'),
-                location=row.get('Location'),
-                reference_number=row.get('ReferenceNumber'),
-                batch_number=row.get('BatchNumber')
-            )
-            records.append(record)
-        
-        self.db.bulk_save_objects(records)
+        # --- Convert datetimes where possible ---
+        for col in df.columns:
+            if "date" in col or "time" in col:
+                try:
+                    df[col] = pd.to_datetime(df[col], errors="coerce")
+                except Exception:
+                    pass
+
+        # --- Convert to list of dictionaries ---
+        records = df.to_dict(orient="records")
+
+        # --- Bulk insert using SQLAlchemy ---
+        self.db.execute(insert(PaymentsInsiderStaging), records)
         self.db.commit()
+
+        # Update file as processed
+        file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+        if file_record:
+            file_record.is_processed = True
+            file_record.processed_at = datetime.utcnow()
+            file_record.records_processed = len(records)
+            self.db.commit()
         
         return len(records)

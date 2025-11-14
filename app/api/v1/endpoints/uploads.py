@@ -93,6 +93,7 @@ async def upload_file(
         # Check size limit
         max_size = settings.max_upload_size_mb * 1024 * 1024  # Convert MB to bytes
         if file_size > max_size:
+            os.remove(temp_file)
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail=f"File size exceeds maximum allowed size of {settings.max_upload_size_mb}MB"

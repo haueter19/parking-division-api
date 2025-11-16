@@ -100,16 +100,16 @@ class ETLProcessor:
         self.org_code_cache = org_lookup_tbl
         return org_lookup_tbl
     
-    def determine_location_type(self, location_name: str, terminal_id: str = None) -> LocationType:
+    def determine_location_type(self, terminal_id: str = None) -> LocationType:
         """Determine location type from location name or terminal ID"""
-        location_lower = (location_name or "").lower()
+        #location_lower = (location_name or "").lower()
         
-        if "garage" in location_lower or "parking structure" in location_lower:
-            return LocationType.GARAGE
-        elif "lot" in location_lower or "surface" in location_lower:
-            return LocationType.LOT
-        elif "meter" in location_lower or terminal_id and terminal_id.startswith("M"):
+        if terminal_id == '0010050008031494050786':
             return LocationType.SINGLE_SPACE_METER
+        elif terminal_id == '0010050008031494050908':
+            return LocationType.MULTI_SPACE_METER
+        elif terminal_id in self.charge_code_from_housing_id.keys():
+            return LocationType.GARAGE
         else:
             return LocationType.OTHER
     

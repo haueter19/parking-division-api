@@ -8,6 +8,7 @@ from typing import Optional, Dict, List, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from sqlalchemy import Table, MetaData, select, insert, text
+from sqlalchemy.ext.hybrid import hybrid_property
 import numpy as np
 import pandas as pd
 from app.models.database import (
@@ -35,7 +36,9 @@ class ETLProcessor:
         """
         self.db = db
         self.traffic_db = traffic_db
-        self.org_code_cache = None  # Cache for terminal_id -> org_code lookups
+        self.charge_code_from_housing_id = None
+        self.charge_code_from_terminal_id = None
+        self.garage_from_station = None
         
     def get_org_code(self) -> Optional[pd.DataFrame]:
         """
@@ -63,7 +66,30 @@ class ETLProcessor:
                 FROM cc_terminals
                 ORDER BY TerminalID
                 """, self.traffic_db.get_bind())
-        
+
+            
+            # Get station to garage mapping
+            garage_and_station_records = pd.read_sql(text("""
+                    SELECT 
+                        Location.TxnT2StationAdddress, pa.ParkingName Garage
+                    FROM Location
+                    INNER JOIN ParkingAdmin pa On (Location.Id_Parking=pa.Id_Parking)
+                   """), self.db.get_bind())
+            
+            # Turn DataFrame into dicts
+            charge_code_from_housing_id = {a:b for a,b in zip(org_lookup_tbl['HousingID'], org_lookup_tbl['ChargeCode']) if a != None}
+            charge_code_from_terminal_id = {a:b for a,b in zip(org_lookup_tbl['TerminalID'], org_lookup_tbl['ChargeCode']) if a != None}
+            garage_from_station = {a:b for a,b in zip(garage_and_station_records['TxnT2StationAdddress'], garage_and_station_records['Garage']) if a != None}
+
+            # Additional hardcoded mappings -- remove after updating Traffic DB
+            charge_code_from_terminal_id['0010050008031494050786'] = 82088
+            charge_code_from_terminal_id['0010050008031494050908'] = 82074
+
+            # Save dicts to the class
+            self.charge_code_from_housing_id = charge_code_from_housing_id
+            self.charge_code_from_terminal_id = charge_code_from_terminal_id
+            self.garage_from_station = garage_from_station
+
         except Exception as e:
             # On error, log/print and fall back to None
             print(f"Error querying Traffic DB for org_codes: {e}")
@@ -106,6 +132,8 @@ class ETLProcessor:
         else:
             return PaymentType.OTHER
     
+        
+
     def process_windcave(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """Process Windcave staging records to final transactions"""
         log_entry = self._start_log("windcave_staging", file_id)
@@ -115,23 +143,34 @@ class ETLProcessor:
             
         try:
             # Query unprocessed records
-            qry = text("SELECT * FROM app.windcave_staging WHERE processed_to_final = :processed_to_final AND voided = 0")
-            records = pd.read_sql(qry, self.db.get_bind(), params={'processed_to_final':0})
+            query = self.db.query(WindcaveStaging).filter(
+                WindcaveStaging.processed_to_final == False,
+                WindcaveStaging.voided == 0
+            )
+            #qry = text("SELECT * FROM app.windcave_staging WHERE processed_to_final = :processed_to_final AND voided = 0")
+            #records = pd.read_sql(qry, self.db.get_bind(), params={'processed_to_final':0})
             
             if file_id:
-                records = records[records['source_file_id']==file_id]
+                query = query.filter(WindcaveStaging.source_file_id == file_id)
+                #records = records[records['source_file_id']==file_id]
             
-            # Need to get the device ID from txnref
-            records['txnref'] = records['txnref'].apply(lambda x: x.split('-')[0])
+            # Query to get the records
+            records = query.all()
+
+            # For any device_id with len > 3, use the first part of txnref
+            for record in records:
+                if len(record.device_id) > 3:
+                    record.device_id = record.txnref.split('-')[0]
+            #records['txnref'] = records['txnref'].apply(lambda x: x.split('-')[0])
 
             # Merge on device_id to HousingID to get ChargeCode
-            records.merge(self.org_lookup_tbl[['HousingID', 'ChargeCode']], left_on='device_id', right_on='HousingID', how='left')
+            #records.merge(self.org_lookup_tbl[['HousingID', 'ChargeCode']], left_on='device_id', right_on='HousingID', how='left')
 
             # Sometimes device_id has a weird value. In this case, use txnref
-            records.merge(self.org_lookup_tbl[['HousingID', 'ChargeCode']], left_on='txnref', right_on='HousingID', how='left', suffixes=['','_y'])
+            #records.merge(self.org_lookup_tbl[['HousingID', 'ChargeCode']], left_on='txnref', right_on='HousingID', how='left', suffixes=['','_y'])
             
             # Fill missing ChargeCode from second merge
-            records.fillna({'ChargeCode':records['ChargeCode_y']},inplace=True)
+            #records.fillna({'ChargeCode':records['ChargeCode_y']},inplace=True)
 
             created_count = 0
             failed_count = 0
@@ -145,11 +184,11 @@ class ETLProcessor:
                         settle_amount=record['amount'],
                         source=DataSourceType.WINDCAVE,
                         location_type=LocationType.GARAGE,
-                        location_name=None,  # Windcave might not have location names
-                        device_terminal_id=record['device_id'],
+                        location_name=self.garage_from_station(record['device_id']), 
+                        device_terminal_id=record['device_id'], # May need to look at this. Do I care about the weird ones going to final?
                         payment_type=self.map_payment_type(record['card_type']),
-                        reference_number=record['dpstxnref'],
-                        org_code=self.get_org_code(record['terminal_id']),
+                        reference_number=record['dpstxnref'], # Do I need reference number? Is this the best choice?
+                        org_code=self.charge_code_from_housing_id.get(record['device_id']) or self.charge_code_from_housing_id.get(record['txn']), # Try using device_id, fail to txn
                         staging_table="windcave_staging",
                         staging_record_id=record['id']
                     )
@@ -186,47 +225,46 @@ class ETLProcessor:
         Process Payments Insider staging records to final transactions
         Note: PI requires matching Sales and Payments reports
         """
-        log_entry = self._start_log("payments_insider_staging", file_id)
+        log_entry = self._start_log("payments_insider_sales_staging", file_id)
         
         try:
-            # First, match sales and payments reports by reference numbers
-            self._match_pi_reports()
-            
-            # Query matched records that haven't been processed
-            query = self.db.query(PaymentsInsiderStaging).filter(
+            # Query sales LEFT JOIN payments (match SQL behavior).
+            # Select sales rows (even when there's no matching payment) where
+            # the sale hasn't been processed and is not voided.
+            query = self.db.query(
+                PaymentsInsiderSalesStaging,
+                PaymentsInsiderPaymentsStaging
+            ).outerjoin(
+                PaymentsInsiderPaymentsStaging,
+                PaymentsInsiderSalesStaging.invoice == PaymentsInsiderPaymentsStaging.purchase_id_number
+            ).filter(
                 and_(
-                    PaymentsInsiderStaging.processed_to_final == False,
-                    PaymentsInsiderStaging.matching_report_id != None
+                    PaymentsInsiderSalesStaging.processed_to_final == False,
+                    PaymentsInsiderSalesStaging.void_ind == 'N'
                 )
             )
+            
             if file_id:
                 query = query.filter(PaymentsInsiderSalesStaging.source_file_id == file_id)
             
-            sales_records = query.filter(PaymentsInsiderSalesStaging.report_type == "sales").all()
+            records = query.all()
             created_count = 0
             failed_count = 0
             
-            for sales_record in sales_records:
+            for sales_record, payment_record in records:
                 try:
-                    # Get matching payment record
-                    payment_record = self.db.query(PaymentsInsiderSalesStaging).filter(
-                        PaymentsInsiderStaging.id == sales_record.matching_report_id
-                    ).first()
-                    
-                    if not payment_record:
-                        continue
                     
                     transaction = Transaction(
-                        transaction_date=sales_record.transaction_date,
-                        transaction_amount=sales_record.amount,
-                        settle_date=payment_record.payment_date,
-                        settle_amount=payment_record.amount,
+                        transaction_date=sales_record.transaction_datetime,
+                        transaction_amount=sales_record.transaction_amount,
+                        settle_date=payment_record.payment_date if payment_record else None,
+                        settle_amount=payment_record.payment_amount if payment_record else None,
                         source=DataSourceType.PAYMENTS_INSIDER_SALES,
                         location_type=self.determine_location_type(sales_record.location),
                         location_name=sales_record.location,
                         device_terminal_id=sales_record.terminal_id,
-                        payment_type=self.map_payment_type(sales_record.card_type),
-                        reference_number=sales_record.reference_number,
+                        payment_type=self.map_payment_type(sales_record.card_brand),
+                        reference_number=sales_record.invoice,
                         org_code=self.get_org_code(sales_record.terminal_id),
                         staging_table="payments_insider_sales_staging",
                         staging_record_id=sales_record.id
@@ -238,8 +276,9 @@ class ETLProcessor:
                     # Update both staging records
                     sales_record.processed_to_final = True
                     sales_record.transaction_id = transaction.id
-                    payment_record.processed_to_final = True
-                    payment_record.transaction_id = transaction.id
+                    if payment_record:
+                        payment_record.processed_to_final = True
+                        payment_record.transaction_id = transaction.id
                     created_count += 1
                     
                 except Exception as e:
@@ -247,11 +286,11 @@ class ETLProcessor:
                     print(f"Error processing PI record {sales_record.id}: {e}")
             
             self.db.commit()
-            self._complete_log(log_entry, len(sales_records), created_count, 0, failed_count)
+            self._complete_log(log_entry, len(records), created_count, 0, failed_count)
             
             return {
                 "success": True,
-                "records_processed": len(sales_records),
+                "records_processed": len(records),
                 "records_created": created_count,
                 "records_failed": failed_count
             }
@@ -261,32 +300,6 @@ class ETLProcessor:
             self._fail_log(log_entry, str(e))
             raise
     
-    def _match_pi_reports(self):
-        """Match Payments Insider sales and payments reports"""
-        # Get unmatched sales reports
-        unmatched_sales = self.db.query(PaymentsInsiderSalesStaging).filter(
-            and_(
-                PaymentsInsiderSalesStaging.report_type == "sales",
-                PaymentsInsiderSalesStaging.matching_report_id == None
-            )
-        ).all()
-        
-        for sales in unmatched_sales:
-            # Try to find matching payment by reference number and amount
-            payment = self.db.query(PaymentsInsiderSalesStaging).filter(
-                and_(
-                    PaymentsInsiderSalesStaging.report_type == "payments",
-                    PaymentsInsiderSalesStaging.reference_number == sales.reference_number,
-                    PaymentsInsiderSalesStaging.amount == sales.amount,
-                    PaymentsInsiderSalesStaging.matching_report_id == None
-                )
-            ).first()
-            
-            if payment:
-                sales.matching_report_id = payment.id
-                payment.matching_report_id = sales.id
-        
-        self.db.commit()
     
     def process_ips_cash(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """Process IPS Cash staging records to final transactions"""
@@ -308,16 +321,16 @@ class ETLProcessor:
                     # For cash, settle date = transaction date
                     transaction = Transaction(
                         transaction_date=record.collection_date,
-                        transaction_amount=record.amount,
+                        transaction_amount=record.coin_revenue,
                         settle_date=record.collection_date,  # Same as transaction date for cash
-                        settle_amount=record.amount,
+                        settle_amount=record.coin_revenue,
                         source=DataSourceType.IPS_CASH,
-                        location_type=LocationType.METER,  # IPS Cash is always meters
-                        location_name=record.location,
-                        device_terminal_id=record.meter_id,
+                        location_type=LocationType.METER,  # NEED TO FIND Single Space or Multi-Space
+                        location_name=record.pole_ser_no,
+                        device_terminal_id=record.terminal,
                         payment_type=PaymentType.CASH,
-                        reference_number=record.collector_id,
-                        org_code=self.get_org_code(record.meter_id),
+                        reference_number=record.id,
+                        org_code=self.get_org_code(record.meter_id), # 82088 for single, 82074 for multi
                         staging_table="ips_cash_staging",
                         staging_record_id=record.id
                     )
@@ -371,6 +384,25 @@ class ETLProcessor:
                 }
         
         return results
+    
+    def _parse_time_string(self, t):
+        if not t:
+            return None
+        
+        t = t.strip()
+
+        # Adjust these formats depending on real data
+        formats = ["%H:%M:%S", "%H:%M", "%H%M%S", "%H%M"]
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(t, fmt).time()
+            except ValueError:
+                continue
+
+        # Fallback: can't parse
+        return None
+
     
     # Logging helper methods
     def _start_log(self, source_table: str, file_id: Optional[int]) -> ETLProcessingLog:

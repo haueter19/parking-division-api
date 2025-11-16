@@ -1,10 +1,30 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Enum, Text, Numeric, JSON, Float
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.sql import func
 from app.db.session import Base
 import enum
+from datetime import datetime
 
 
+
+def parse_time_string(t):
+    if not t:
+        return None
+    
+    t = t.strip()
+
+    # Adjust these formats depending on real data
+    formats = ["%H:%M:%S", "%H:%M", "%H%M%S", "%H%M"]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(t, fmt).time()
+        except ValueError:
+            continue
+
+    # Fallback: can't parse
+    return None
 
 class UserRole(str, enum.Enum):
     """User role enumeration"""
@@ -208,6 +228,13 @@ class PaymentsInsiderSalesStaging(Base):
     source_file = relationship("UploadedFile", back_populates="payments_insider_sales_records")
     final_transaction = relationship("Transaction", back_populates="pi_sales_source")
 
+    @hybrid_property
+    def transaction_datetime(self):
+        from datetime import datetime
+        
+        time_value = parse_time_string(self.transaction_time)
+        if self.transaction_date and time_value:
+            return datetime.combine(self.transaction_date, time_value)
 
 class PaymentsInsiderPaymentsStaging(Base):
     """Staging table for Payments Insider credit card transaction payments"""
@@ -220,7 +247,7 @@ class PaymentsInsiderPaymentsStaging(Base):
     # Raw fields from PI reports - adjust based on actual columns
     payment_amount = Column(Numeric(10,2))
     currency = Column(String(3))
-    transaction_amount = Column(Integer)
+    transaction_amount = Column(Numeric(10,2))
     payment_no = Column(String(20))
     payment_date = Column(DateTime)
     fund_source = Column(String(3))

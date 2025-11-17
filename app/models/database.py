@@ -47,10 +47,13 @@ class PaymentType(str, enum.Enum):
     """Payment type enumeration"""
     VISA = "visa"
     MASTERCARD = "mastercard"
+    MC = 'mastercard'
     AMEX = "amex"
     DISCOVER = "discover"
     CASH = "cash"
     MOBILE = "mobile"
+    PARK_SMARTER = 'park_smarter'
+    TEXT_TO_PAY = 'text_to_pay'
     TEXT = 'text'
     OTHER = "other"  
 
@@ -228,6 +231,7 @@ class PaymentsInsiderSalesStaging(Base):
     source_file = relationship("UploadedFile", back_populates="payments_insider_sales_records")
     final_transaction = relationship("Transaction", back_populates="pi_sales_source")
 
+    # Calculate datetime from date and time fields
     @hybrid_property
     def transaction_datetime(self):
         from datetime import datetime
@@ -396,6 +400,15 @@ class IPSCashStaging(Base):
     source_file = relationship("UploadedFile", back_populates="ips_cash_records")
     final_transaction = relationship("Transaction", back_populates="ips_cash_source")
 
+    # Calculate datetime from date and time fields
+    @hybrid_property
+    def transaction_datetime(self):
+        from datetime import datetime
+        
+        time_value = parse_time_string(self.collection_time)
+        if self.collection_date and time_value:
+            return datetime.combine(self.collection_date, time_value)
+
 
 class SQLCashStaging(Base):
     """Staging table for cash transactions from SQL queries"""
@@ -450,15 +463,15 @@ class Transaction(Base):
     
     # Additional fields for tracking
     reference_number = Column(String(255))  # Original transaction reference
-    org_code = Column(String(50), index=True)  # Retrieved from terminal_id lookup
+    org_code = Column(String(5), index=True)  # Retrieved from terminal_id lookup
     
     # Audit trail - which staging record(s) created this transaction
     staging_table = Column(String(50))  # Which staging table this came from
     staging_record_id = Column(Integer)  # ID in that staging table
     
     # Processing metadata
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
     
     # Relationships back to staging tables (for audit trail)
     windcave_source = relationship("WindcaveStaging", back_populates="final_transaction", uselist=False)
@@ -479,8 +492,8 @@ class ETLProcessingLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     source_table = Column(String(50), nullable=False)
     source_file_id = Column(Integer, ForeignKey("uploaded_files.id"))
-    start_time = Column(DateTime(timezone=True), server_default=func.now())
-    end_time = Column(DateTime(timezone=True))
+    start_time = Column(DateTime, server_default=func.now())
+    end_time = Column(DateTime)
     records_processed = Column(Integer)
     records_created = Column(Integer)
     records_updated = Column(Integer)

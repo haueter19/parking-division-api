@@ -3,7 +3,7 @@ ETL Processing Functions for Data Lake
 Transforms data from staging tables to normalized transactions table
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
@@ -53,16 +53,38 @@ class ETLProcessor:
         try:
             org_lookup_tbl = pd.read_sql("""
                 with ucds as (
-                    SELECT * FROM [Traffic].[data_admin8].[PU_PARCS_UCD] WHERE HousingID IS NOT NULL AND ChargeCode IS NOT NULL
+    	            SELECT * FROM [Traffic].[data_admin8].[PU_PARCS_UCD] WHERE HousingID IS NOT NULL AND ChargeCode IS NOT NULL
                 ), cc_terminals as (
                     SELECT * FROM [Traffic].[data_admin8].[PU_REVENUE_CREDITCARDTERMINALS] WHERE ChargeCode IS NOT NULL
                 )
                 SELECT 
-                    ucds.HousingID, CONCAT('0010050008016090',CAST(ucds.TerminalID As varchar)) TerminalID, ucds.ChargeCode, 'Windcave' as Brand
+                    ucds.HousingID, CONCAT('0010050008016090',CAST(ucds.TerminalID As varchar)) TerminalID, ucds.ChargeCode, 'Windcave' as Brand, 
+                    CASE
+                        WHEN HousingID = 'E164' THEN 'Capitol Square North'
+                        WHEN HousingID LIKE '_1_' THEN 'Overture Center'
+                        WHEN HousingID LIKE '_2_' THEN 'State Street Capitol'
+                        WHEN HousingID LIKE '_4_' THEN 'Lake/Frances'
+                        WHEN HousingID LIKE '_5_' THEN 'Lake/Frances'
+                        WHEN HousingID LIKE '_6_' THEN 'Capitol Square North'
+                        WHEN HousingID LIKE '_7_' THEN 'Wilson Street'
+                        WHEN HousingID LIKE '_8_' THEN 'Livingston'
+                        WHEN HousingID LIKE '_9_' THEN 'Shop'
+                        ELSE NULL
+                    END As Location
                 FROM ucds 
                 UNION
                 SELECT
-                    NULL, cc_terminals.TerminalID, cc_terminals.ChargeCode, Brand
+                    NULL, cc_terminals.TerminalID, cc_terminals.ChargeCode, Brand,
+                    CASE
+                        WHEN cc_terminals.ChargeCode = 82001 THEN 'Capitol Square North'
+                        WHEN cc_terminals.ChargeCode = 82002 THEN 'Overture Center'
+                        WHEN cc_terminals.ChargeCode = 82004 THEN 'Wilson Street'
+                        WHEN cc_terminals.ChargeCode = 82005 THEN 'Lake/Frances'
+                        WHEN cc_terminals.ChargeCode = 82007 THEN 'State Street Capitol'
+                        WHEN cc_terminals.ChargeCode = 82162 THEN 'Livingston'
+                        WHEN cc_terminals.ChargeCode = 82172 THEN 'Shop'
+                        ELSE NULL
+                    END As Location
                 FROM cc_terminals
                 ORDER BY TerminalID
                 """, self.traffic_db.get_bind())
@@ -79,7 +101,23 @@ class ETLProcessor:
             # Turn DataFrame into dicts
             charge_code_from_housing_id = {a:b for a,b in zip(org_lookup_tbl['HousingID'], org_lookup_tbl['ChargeCode']) if a != None}
             charge_code_from_terminal_id = {a:b for a,b in zip(org_lookup_tbl['TerminalID'], org_lookup_tbl['ChargeCode']) if a != None}
+            location_from_charge_code = {a:b for a,b in zip(org_lookup_tbl['ChargeCode'], org_lookup_tbl['Location']) if a != None}
             garage_from_station = {a:b for a,b in zip(garage_and_station_records['TxnT2StationAdddress'], garage_and_station_records['Garage']) if a != None}
+            location_from_charge_code = {a:b for a,b in zip(org_lookup_tbl['ChargeCode'], org_lookup_tbl['Location']) if a != None}
+            location_from_charge_code[82044] = 'Capitol Square North'
+            location_from_charge_code[82045] = 'Overture Center'
+            location_from_charge_code[82047] = 'Wilson Street'
+            location_from_charge_code[82048] = 'Lake/Frances'
+            location_from_charge_code[82050] = 'State Street Capitol'
+            location_from_charge_code[82164] = 'Livingston'
+            location_from_charge_code[82172] = 'Over/Short/Helpline'
+            location_from_charge_code[82055] = 'Blair Lot'
+            location_from_charge_code[82057] = 'Wingra Lot'
+            location_from_charge_code[82074] = 'Multi-Space Meters'
+            location_from_charge_code[82088] = 'Single Space Meters'
+            location_from_charge_code[82224] = 'Buckeye Lot'
+            location_from_charge_code[82225] = 'Evergreen Lot'
+            location_from_charge_code[82935] = 'Meter Over/Short'
 
             # Additional hardcoded mappings -- remove after updating Traffic DB
             charge_code_from_terminal_id['0010050008031494050786'] = 82088
@@ -88,6 +126,7 @@ class ETLProcessor:
             # Save dicts to the class
             self.charge_code_from_housing_id = charge_code_from_housing_id
             self.charge_code_from_terminal_id = charge_code_from_terminal_id
+            self.location_from_charge_code = location_from_charge_code
             self.garage_from_station = garage_from_station
 
         except Exception as e:
@@ -123,12 +162,16 @@ class ETLProcessor:
         card_lower = (card_type or "").lower()
         if "visa" in card_lower:
             return PaymentType.VISA
-        elif "mastercard" in card_lower or "master" in card_lower:
+        elif "mastercard" in card_lower or "master" in card_lower or 'mc' in card_lower:
             return PaymentType.MASTERCARD
         elif "amex" in card_lower or "american express" in card_lower:
             return PaymentType.AMEX
         elif "discover" in card_lower:
             return PaymentType.DISCOVER
+        elif 'park_smarter' in card_lower:
+            return PaymentType.PARK_SMARTER
+        elif 'text_to_pay' in card_lower:
+            return PaymentType.TEXT_TO_PAY
         else:
             return PaymentType.OTHER
     
@@ -175,7 +218,7 @@ class ETLProcessor:
             created_count = 0
             failed_count = 0
             
-            for _, record in records.iterrows():
+            for record in records:
                 try:
                     transaction = Transaction(
                         transaction_date=record['time'],
@@ -184,11 +227,11 @@ class ETLProcessor:
                         settle_amount=record['amount'],
                         source=DataSourceType.WINDCAVE,
                         location_type=LocationType.GARAGE,
-                        location_name=self.garage_from_station(record['device_id']), 
-                        device_terminal_id=record['device_id'], # May need to look at this. Do I care about the weird ones going to final?
+                        location_name=self.garage_from_station.get(record['device_id']), 
+                        device_terminal_id=record['device_id'], 
                         payment_type=self.map_payment_type(record['card_type']),
                         reference_number=record['dpstxnref'], # Do I need reference number? Is this the best choice?
-                        org_code=self.charge_code_from_housing_id.get(record['device_id']) or self.charge_code_from_housing_id.get(record['txn']), # Try using device_id, fail to txn
+                        org_code=self.charge_code_from_housing_id.get(record['device_id']), # or self.charge_code_from_housing_id.get(record['txn']), # Try using device_id, fail to txn
                         staging_table="windcave_staging",
                         staging_record_id=record['id']
                     )
@@ -236,11 +279,16 @@ class ETLProcessor:
                 PaymentsInsiderPaymentsStaging
             ).outerjoin(
                 PaymentsInsiderPaymentsStaging,
-                PaymentsInsiderSalesStaging.invoice == PaymentsInsiderPaymentsStaging.purchase_id_number
+                #PaymentsInsiderSalesStaging.invoice == PaymentsInsiderPaymentsStaging.purchase_id_number # Only works for merchant id associated with IPS
+                and_(
+                    PaymentsInsiderSalesStaging.card_number == PaymentsInsiderPaymentsStaging.card_number,
+                    PaymentsInsiderSalesStaging.authorization_code == PaymentsInsiderPaymentsStaging.authorization_code
+                )
             ).filter(
                 and_(
                     PaymentsInsiderSalesStaging.processed_to_final == False,
-                    PaymentsInsiderSalesStaging.void_ind == 'N'
+                    PaymentsInsiderSalesStaging.void_ind == 'N',
+                    PaymentsInsiderSalesStaging.mid != '8031494050'
                 )
             )
             
@@ -258,14 +306,14 @@ class ETLProcessor:
                         transaction_date=sales_record.transaction_datetime,
                         transaction_amount=sales_record.transaction_amount,
                         settle_date=payment_record.payment_date if payment_record else None,
-                        settle_amount=payment_record.payment_amount if payment_record else None,
+                        settle_amount=payment_record.transaction_amount if payment_record else None,
                         source=DataSourceType.PAYMENTS_INSIDER_SALES,
-                        location_type=self.determine_location_type(sales_record.location),
-                        location_name=sales_record.location,
+                        location_type=self.determine_location_type(sales_record.terminal_id),
+                        location_name=self.location_from_charge_code.get(self.charge_code_from_terminal_id.get(sales_record.terminal_id)),
                         device_terminal_id=sales_record.terminal_id,
                         payment_type=self.map_payment_type(sales_record.card_brand),
-                        reference_number=sales_record.invoice,
-                        org_code=self.get_org_code(sales_record.terminal_id),
+                        reference_number=payment_record.arn_number if payment_record else None, # probably use invoice if including IPS
+                        org_code=self.charge_code_from_terminal_id[sales_record.terminal_id],
                         staging_table="payments_insider_sales_staging",
                         staging_record_id=sales_record.id
                     )
@@ -301,6 +349,122 @@ class ETLProcessor:
             raise
     
     
+    def process_ips_cc(self, file_id: Optional[int] = None) -> Dict[str, Any]:
+        """Process IPS credit card staging records to final transactions"""
+        log_entry = self._start_log("ips_cc_staging", file_id)
+
+        try:
+            query = self.db.query(IPSCreditCardStaging).filter(
+                IPSCreditCardStaging.processed_to_final == False
+            )
+            
+            if file_id:
+                query = query.filter(IPSCreditCardStaging.source_file_id == file_id)
+
+            records = query.all()
+            created_count = 0
+            failed_count = 0
+
+            for record in records:
+                try:
+                    # For cash, settle date = transaction date
+                    transaction = Transaction(
+                        transaction_date=record.transaction_date_time,
+                        transaction_amount=record.amount,
+                        settle_date=record.settlement_date_time,  # Same as transaction date for cash
+                        settle_amount=record.amount,
+                        source=DataSourceType.IPS_CC,
+                        #location_type= # Need a way to look up the meter type from the pole or terminal
+                        location_name=record.pole,
+                        device_terminal_id=record.terminal,
+                        payment_type=self.map_payment_type(record.card_type),
+                        reference_number=record.transaction_reference,
+                        #org_code= # Need a way to look up the meter type from the pole or terminal
+                        staging_table="ips_cc_staging",
+                        staging_record_id=record.id
+                    )
+                
+                    self.db.add(transaction)
+                    self.db.flush()
+                    
+                    record.processed_to_final = True
+                    record.transaction_id = transaction.id
+                    created_count += 1
+
+                except Exception as e:
+                    self.db.rollback()
+                    failed_count += 1
+                    self._fail_log(log_entry, str(e))
+                    print(f"Error processing IPS CC record {record.id}: {e}")
+                    raise
+
+            self.db.commit()
+            self._complete_log(log_entry, len(records), created_count, 0, failed_count)
+             
+        except Exception as e:
+            self.db.rollback()
+            self._fail_log(log_entry, str(e))
+            raise
+
+
+    def process_ips_mobile(self, file_id: Optional[int] = None) -> Dict[str, Any]:
+        """Process IPS mobile staging records to final transactions"""
+        log_entry = self._start_log("ips_mobile_staging", file_id)
+
+        try:
+            query = self.db.query(IPSMobileStaging).filter(
+                IPSMobileStaging.processed_to_final == False
+            )
+
+            if file_id:
+                query = query.filter(IPSMobileStaging.source_file_id == file_id)
+
+            records = query.all()
+            created_count = 0
+            failed_count = 0
+
+            for record in records:
+                try:
+                    # For cash, settle date = transaction date
+                    transaction = Transaction(
+                        transaction_date=record.session_start_date_time,
+                        transaction_amount=record.paid,
+                        settle_date=record.received_date_time + timedelta(hours=2),
+                        settle_amount=record.paid + record.convenience_fee,
+                        source=DataSourceType.IPS_MOBILE,
+                        location_type=LocationType.SINGLE_SPACE_METER if record.meter_type == 'MK5' else LocationType.MULTI_SPACE_METER, # Do I need to be more precise?
+                        location_name=record.pole,
+                        device_terminal_id=record.prid,
+                        payment_type=self.map_payment_type(record.partner_name),
+                        reference_number=record.prid,
+                        #org_code= # Need a way to look up the meter type from the pole or terminal
+                        staging_table="ips_mobile_staging",
+                        staging_record_id=record.id
+                    )
+                
+                    self.db.add(transaction)
+                    self.db.flush()
+                    
+                    record.processed_to_final = True
+                    record.transaction_id = transaction.id
+                    created_count += 1
+                    
+                except Exception as e:
+                    self.db.rollback()
+                    failed_count += 1
+                    self._fail_log(log_entry, str(e))
+                    print(f"Error processing IPS record {record.id}: {e}")
+                    raise
+
+            self.db.commit()
+            self._complete_log(log_entry, len(records), created_count, 0, failed_count)
+             
+        except Exception as e:
+            self.db.rollback()
+            self._fail_log(log_entry, str(e))
+            raise
+
+
     def process_ips_cash(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """Process IPS Cash staging records to final transactions"""
         log_entry = self._start_log("ips_cash_staging", file_id)
@@ -325,12 +489,12 @@ class ETLProcessor:
                         settle_date=record.collection_date,  # Same as transaction date for cash
                         settle_amount=record.coin_revenue,
                         source=DataSourceType.IPS_CASH,
-                        location_type=LocationType.METER,  # NEED TO FIND Single Space or Multi-Space
+                        location_type=LocationType.SINGLE_SPACE_METER if record.meter_type == 'MK5' else LocationType.MULTI_SPACE_METER, # Do I need to be more precise
                         location_name=record.pole_ser_no,
                         device_terminal_id=record.terminal,
                         payment_type=PaymentType.CASH,
                         reference_number=record.id,
-                        org_code=self.get_org_code(record.meter_id), # 82088 for single, 82074 for multi
+                        org_code=82088 if record.meter_type == 'MK5' else 82074, # 82088 for single, 82074 for multi
                         staging_table="ips_cash_staging",
                         staging_record_id=record.id
                     )
@@ -369,8 +533,9 @@ class ETLProcessor:
         processors = [
             ("windcave", self.process_windcave),
             ("payments_insider", self.process_payments_insider),
+            ("ips_cc", self.process_ips_cc),
+            ("ips_mobile", self.process_ips_mobile),
             ("ips_cash", self.process_ips_cash),
-            
             # Add other processors as needed
         ]
         
@@ -385,14 +550,31 @@ class ETLProcessor:
         
         return results
     
+    def _lookup_charge_code(self, id: str) -> str:
+        charge_code = None
+        
+        try:
+            charge_code = self.charge_code_from_terminal_id[id]
+        except:
+            charge_code = self.charge_code_from_housing_id[id]
+
+        return charge_code
+    
     def _parse_time_string(self, t):
         if not t:
             return None
         
         t = t.strip()
 
-        # Adjust these formats depending on real data
-        formats = ["%H:%M:%S", "%H:%M", "%H%M%S", "%H%M"]
+        # Supported formats (add more if needed)
+        formats = [
+            "%I:%M:%S %p",  # 9:05:32 AM
+            "%I:%M %p",     # 9:05 AM
+            "%H:%M:%S",     # 14:37:55
+            "%H:%M",        # 14:37
+            "%H%M%S",       # 143755
+            "%H%M",         # 1437
+        ]
 
         for fmt in formats:
             try:

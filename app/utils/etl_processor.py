@@ -36,6 +36,7 @@ class ETLProcessor:
         """
         self.db = db
         self.traffic_db = traffic_db
+        self.BATCH_SIZE = 500
         self.charge_code_from_housing_id = None
         self.charge_code_from_terminal_id = None
         self.garage_from_station = None
@@ -269,7 +270,6 @@ class ETLProcessor:
         Note: PI requires matching Sales and Payments reports
         """
         log_entry = self._start_log("payments_insider_sales_staging", file_id)
-        BATCH_SIZE = 500
 
         try:
             # Query sales LEFT JOIN payments (match SQL behavior).
@@ -328,7 +328,7 @@ class ETLProcessor:
                     created_count += 1
                     
                     # Batch commit every BATCH_SIZE records
-                    if (idx + 1) % BATCH_SIZE == 0:
+                    if (idx + 1) % self.BATCH_SIZE == 0:
                         self.db.flush()
                         self.db.commit()
                         print(f"Committed batch: {idx + 1}/{len(records)} records processed")
@@ -359,7 +359,7 @@ class ETLProcessor:
     def process_ips_cc(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """Process IPS credit card staging records to final transactions"""
         log_entry = self._start_log("ips_cc_staging", file_id)
-        BATCH_SIZE = 500
+        self.BATCH_SIZE = 500
 
         try:
             query = self.db.query(IPSCreditCardStaging).filter(
@@ -400,14 +400,14 @@ class ETLProcessor:
                     created_count += 1
 
                     # Batch commit every BATCH_SIZE records
-                    if (idx + 1) % BATCH_SIZE == 0:
+                    if (idx + 1) % self.BATCH_SIZE == 0:
                         self.db.flush()
                         self.db.commit()
                         print(f"Committed batch: {idx + 1}/{len(records)} records processed")
 
                 except Exception as e:
                     failed_count += 1
-                    #self._fail_log(log_entry, str(e))
+                    self._fail_log(log_entry, str(e))
                     print(f"Error processing IPS CC record {record.id}: {e}")
                     raise
 
@@ -445,7 +445,7 @@ class ETLProcessor:
             created_count = 0
             failed_count = 0
 
-            for record in records:
+            for idx, record in enumerate(records):
                 try:
                     # For cash, settle date = transaction date
                     transaction = Transaction(
@@ -465,11 +465,15 @@ class ETLProcessor:
                     )
                 
                     self.db.add(transaction)
-                    self.db.flush()
                     
                     record.processed_to_final = True
                     record.transaction_id = transaction.id
                     created_count += 1
+
+                    if (idx + 1) % self.BATCH_SIZE == 0:
+                        self.db.flush()
+                        self.db.commit()
+                        print(f"Committed batch: {idx + 1} of {len(records)} records processed")
                     
                 except Exception as e:
                     self.db.rollback()
@@ -478,6 +482,7 @@ class ETLProcessor:
                     print(f"Error processing IPS record {record.id}: {e}")
                     raise
 
+            self.db.flush()
             self.db.commit()
             self._complete_log(log_entry, len(records), created_count, 0, failed_count)
              
@@ -502,7 +507,7 @@ class ETLProcessor:
             created_count = 0
             failed_count = 0
             
-            for record in records:
+            for idx, record in enumerate(records):
                 try:
                     # For cash, settle date = transaction date
                     transaction = Transaction(
@@ -522,16 +527,23 @@ class ETLProcessor:
                     )
                     
                     self.db.add(transaction)
-                    self.db.flush()
                     
                     record.processed_to_final = True
                     record.transaction_id = transaction.id
                     created_count += 1
                     
+                    if (idx + 1) % self.BATCH_SIZE == 0:
+                        self.db.flush()
+                        self.db.commit()
+                        print(f"Committed batch: {idx + 1} of {len(records)} records processed")
+
                 except Exception as e:
                     failed_count += 1
                     print(f"Error processing IPS Cash record {record.id}: {e}")
+                    self._fail_log(log_entry, str(e))
+                    raise
             
+            self.db.flush()
             self.db.commit()
             self._complete_log(log_entry, len(records), created_count, 0, failed_count)
             

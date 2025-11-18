@@ -269,7 +269,8 @@ class ETLProcessor:
         Note: PI requires matching Sales and Payments reports
         """
         log_entry = self._start_log("payments_insider_sales_staging", file_id)
-        
+        BATCH_SIZE = 500
+
         try:
             # Query sales LEFT JOIN payments (match SQL behavior).
             # Select sales rows (even when there's no matching payment) where
@@ -299,9 +300,8 @@ class ETLProcessor:
             created_count = 0
             failed_count = 0
             
-            for sales_record, payment_record in records:
+            for idx, (sales_record, payment_record) in enumerate(records):
                 try:
-                    
                     transaction = Transaction(
                         transaction_date=sales_record.transaction_datetime,
                         transaction_amount=sales_record.transaction_amount,
@@ -313,27 +313,34 @@ class ETLProcessor:
                         device_terminal_id=sales_record.terminal_id,
                         payment_type=self.map_payment_type(sales_record.card_brand),
                         reference_number=payment_record.arn_number if payment_record else None, # probably use invoice if including IPS
-                        org_code=self.charge_code_from_terminal_id[sales_record.terminal_id],
+                        org_code=self.charge_code_from_terminal_id.get(sales_record.terminal_id),
                         staging_table="payments_insider_sales_staging",
                         staging_record_id=sales_record.id
                     )
                     
                     self.db.add(transaction)
-                    self.db.flush()
                     
-                    # Update both staging records
+                    # Mark as processed
                     sales_record.processed_to_final = True
-                    sales_record.transaction_id = transaction.id
                     if payment_record:
                         payment_record.processed_to_final = True
-                        payment_record.transaction_id = transaction.id
+                    
                     created_count += 1
+                    
+                    # Batch commit every BATCH_SIZE records
+                    if (idx + 1) % BATCH_SIZE == 0:
+                        self.db.flush()
+                        self.db.commit()
+                        print(f"Committed batch: {idx + 1}/{len(records)} records processed")
                     
                 except Exception as e:
                     failed_count += 1
                     print(f"Error processing PI record {sales_record.id}: {e}")
             
+            self.db.flush()
             self.db.commit()
+            print(f"Final commit: {created_count} total records processed")
+            
             self._complete_log(log_entry, len(records), created_count, 0, failed_count)
             
             return {
@@ -352,6 +359,7 @@ class ETLProcessor:
     def process_ips_cc(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """Process IPS credit card staging records to final transactions"""
         log_entry = self._start_log("ips_cc_staging", file_id)
+        BATCH_SIZE = 500
 
         try:
             query = self.db.query(IPSCreditCardStaging).filter(
@@ -365,7 +373,7 @@ class ETLProcessor:
             created_count = 0
             failed_count = 0
 
-            for record in records:
+            for idx, record in enumerate(records):
                 try:
                     # For cash, settle date = transaction date
                     transaction = Transaction(
@@ -385,22 +393,36 @@ class ETLProcessor:
                     )
                 
                     self.db.add(transaction)
-                    self.db.flush()
+                    #self.db.flush()
                     
                     record.processed_to_final = True
                     record.transaction_id = transaction.id
                     created_count += 1
 
+                    # Batch commit every BATCH_SIZE records
+                    if (idx + 1) % BATCH_SIZE == 0:
+                        self.db.flush()
+                        self.db.commit()
+                        print(f"Committed batch: {idx + 1}/{len(records)} records processed")
+
                 except Exception as e:
-                    self.db.rollback()
                     failed_count += 1
-                    self._fail_log(log_entry, str(e))
+                    #self._fail_log(log_entry, str(e))
                     print(f"Error processing IPS CC record {record.id}: {e}")
                     raise
 
+            self.db.flush()
             self.db.commit()
+            print(f"Final commit: {created_count} total records processed")
             self._complete_log(log_entry, len(records), created_count, 0, failed_count)
-             
+            
+            return {
+                "success": True,
+                "records_processed": len(records),
+                "records_created": created_count,
+                "records_failed": failed_count
+            }
+        
         except Exception as e:
             self.db.rollback()
             self._fail_log(log_entry, str(e))
@@ -493,7 +515,7 @@ class ETLProcessor:
                         location_name=record.pole_ser_no,
                         device_terminal_id=record.terminal,
                         payment_type=PaymentType.CASH,
-                        reference_number=record.id,
+                        reference_number=str(record.id),
                         org_code=82088 if record.meter_type == 'MK5' else 82074, # 82088 for single, 82074 for multi
                         staging_table="ips_cash_staging",
                         staging_record_id=record.id

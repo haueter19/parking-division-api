@@ -12,6 +12,7 @@ from app.models.schemas import UploadedFileCreate, UploadedFileResponse, Uploade
 from app.api.dependencies import get_current_active_user, require_role
 from app.config import settings
 from app.utils.file_inference import infer_data_source_type
+from app.utils.etl_processor import DataLoader
 
 router = APIRouter()
 
@@ -134,6 +135,15 @@ async def upload_file(
         db.commit()
         db.refresh(uploaded_file_record)
         
+        # Get data from newly uploaded file -> need id
+        uploaded_file_result = db.query(UploadedFile).filter(UploadedFile.original_filename == file.filename).first()
+
+        # Load data from file to staging tables
+        data_loader = DataLoader(db, data_source_type)
+        
+        print('Beginning data load...')
+        data_loader.load(uploaded_file_record.file_path, uploaded_file_result.id)
+        print("Data load complete.")
         return uploaded_file_record
         
     except HTTPException:

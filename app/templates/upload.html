@@ -361,7 +361,8 @@
                                 <div class="upload-item-title">${upload.original_filename}</div>
                                 <div class="upload-item-meta">
                                     <span class="badge">${upload.data_source_type.replace(/_/g, ' ').toUpperCase()}</span>
-                                    Uploaded by ${upload.uploaded_by_user.username} on ${new Date(upload.upload_date).toLocaleDateString()}
+                                    Uploaded by ${upload.uploaded_by_user.username} on ${new Date(upload.upload_date).toLocaleDateString()} 
+                                    <span class="badge">${upload.records_processed}</span> records processed
                                 </div>
                             </div>
                         </div>
@@ -454,7 +455,9 @@
                 });
 
                 if (response.ok) {
-                    showMessage('File uploaded successfully!', 'success');
+                    const result = await response.json();
+                    showMessage(`Successfully uploaded file with ${result.records_processed} rows! `, 'success');
+                    console.log('Upload response:', result);
                     uploadForm.reset();
                     fileInfo.classList.remove('show');
                     selectedFile = null;

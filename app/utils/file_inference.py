@@ -31,7 +31,7 @@ def infer_data_source_type(filename: str) -> DataSourceType:
     if filename_lower.startswith("payments"):
         return DataSourceType.PAYMENTS_INSIDER_PAYMENTS
     
-    if filename_lower.contains("sales"):
+    if 'sales' in filename_lower:
         return DataSourceType.PAYMENTS_INSIDER_SALES
     
     # IPS patterns

@@ -40,6 +40,23 @@ class ETLProcessor:
         self.charge_code_from_housing_id = None
         self.charge_code_from_terminal_id = None
         self.garage_from_station = None
+        self.org_code_from_area = {
+                "SSCO": 82007,
+                "OC": 82002,
+                "CSN": 82001,
+                "SLS": 82162,
+                "BLAIR": 82055,
+                "WINGRA": 82057,
+                "BUCKEYE": 82224,
+                "EVERGREEN": 82225,
+                "Spares": 82935,
+                "CSN": 82001,
+                "OC": 82002,
+                "LAKE": 82005,
+                "FRANCES": 82005,
+                "TEST": 82935,
+                "WILSON": 82004
+            }
         
     def get_org_code(self) -> Optional[pd.DataFrame]:
         """
@@ -374,6 +391,14 @@ class ETLProcessor:
             failed_count = 0
 
             for idx, record in enumerate(records):
+
+                if record.area.upper() in self.org_code_from_area.keys():
+                    org_code = self.org_code_from_area.get(record.area.upper())
+                elif record.pole in ['60010', '60011', '60002', '60005', '60006', '60007', '9501', '60001', '60003', '60004', 'Campus MP']:
+                    org_code = 82074
+                else:
+                    org_code = 82088
+    
                 try:
                     # For cash, settle date = transaction date
                     transaction = Transaction(
@@ -382,12 +407,13 @@ class ETLProcessor:
                         settle_date=record.settlement_date_time,  # Same as transaction date for cash
                         settle_amount=record.amount,
                         source=DataSourceType.IPS_CC,
-                        #location_type= # Need a way to look up the meter type from the pole or terminal
+                        # Need a way to look up the meter type from the pole or terminal
+                        location_type=LocationType.MULTI_SPACE_METER if record.pole in ['60010', '60011', '60002', '60005', '60006', '60007', '9501', '60001', '60003', '60004', 'Campus MP'] else LocationType.SINGLE_SPACE_METER,
                         location_name=record.pole,
                         device_terminal_id=record.terminal,
                         payment_type=self.map_payment_type(record.card_type),
                         reference_number=record.transaction_reference,
-                        #org_code= # Need a way to look up the meter type from the pole or terminal
+                        org_code=org_code, # Need a way to look up the meter type from the pole or terminal
                         staging_table="ips_cc_staging",
                         staging_record_id=record.id
                     )
@@ -446,6 +472,14 @@ class ETLProcessor:
             failed_count = 0
 
             for idx, record in enumerate(records):
+
+                if record.area.upper() in self.org_code_from_area.keys():
+                    org_code = self.org_code_from_area.get(record.area.upper())
+                elif record.pole in ['60010', '60011', '60002', '60005', '60006', '60007', '9501', '60001', '60003', '60004', 'Campus MP']:
+                    org_code = 82074
+                else:
+                    org_code = 82088
+                    
                 try:
                     # For cash, settle date = transaction date
                     transaction = Transaction(
@@ -459,7 +493,7 @@ class ETLProcessor:
                         device_terminal_id=record.prid,
                         payment_type=self.map_payment_type(record.partner_name),
                         reference_number=record.prid,
-                        #org_code= # Need a way to look up the meter type from the pole or terminal
+                        org_code=org_code, # Need a way to look up the meter type from the pole or terminal
                         staging_table="ips_mobile_staging",
                         staging_record_id=record.id
                     )

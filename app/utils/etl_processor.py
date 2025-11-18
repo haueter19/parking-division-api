@@ -15,7 +15,7 @@ from app.models.database import (
     Transaction, DataSourceType, LocationType, PaymentType,
     WindcaveStaging, PaymentsInsiderPaymentsStaging, PaymentsInsiderSalesStaging, 
     IPSCreditCardStaging, IPSMobileStaging, IPSCashStaging, SQLCashStaging,
-    ETLProcessingLog, UploadedFile, PU_PARCS_UCD, PU_REVENUE_CREDITCARDTERMINALS
+    ETLProcessingLog, UploadedFile
 )
 #from db_manager import ConnectionManager
 #cnxn = ConnectionManager()
@@ -479,7 +479,7 @@ class ETLProcessor:
                     org_code = 82074
                 else:
                     org_code = 82088
-                    
+
                 try:
                     # For cash, settle date = transaction date
                     transaction = Transaction(
@@ -702,6 +702,14 @@ class DataLoader:
             # Add other mappings as needed
             }
     
+    def load(self, file_path: str, file_id: int) -> int:
+        """Dispatch the correct load method based on data_source_type"""
+        loader_method = self.mapping.get(self.data_source_type)
+        if not loader_method:
+            raise ValueError(f"No loader method for data source type: {self.data_source_type}")
+        return loader_method(file_path, file_id)
+    
+
     def load_windcave_csv(self, file_path: str, file_id: int) -> int:
         """Load Windcave CSV to staging table"""
         
@@ -778,7 +786,7 @@ class DataLoader:
         if file_path.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(file_path, sheet_name=report_type, skiprows=1, dtype=set_dtypes)
         else:
-            df = pd.read_csv(file_path, dtype=set_dtypes)
+            df = pd.read_csv(file_path, skiprows=2, dtype=set_dtypes)
 
         # --- Normalize column names ---
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
@@ -807,6 +815,12 @@ class DataLoader:
         
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
+
+        # --- Only use merchant IDs that are '8016090345' ---
+        if report_type == 'Sales':
+            df = df[df['mid'] == '8016090345']
+        else:
+            df = df[df['merchant_id'] == '8016090345']
 
         # --- Convert to list of dictionaries ---
         records = df.to_dict(orient="records")
@@ -842,8 +856,12 @@ class DataLoader:
         
         # --- Normalize column names ---
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
-        df.rename(columns=({'Amount ($)':'amount', '$ Paid':'paid', '$0.01':'pennies', '$0.05':'nickels', '$0.10':'dimes', '$0.25':'quarters', '$1.00':'dollars'}), inplace=True)
+        df.rename(columns=({'amount_($)':'amount', '$ Paid':'paid', '$0.01':'pennies', '$0.05':'nickels', '$0.10':'dimes', '$0.25':'quarters', '$1.00':'dollars'}), inplace=True)
         
+        # --- Make sure these columns are floats
+        for col in ['amount']:
+            df[col] = df[col].astype(float)
+            
         # --- Add metadata columns ---
         df["source_file_id"] = file_id
         df["processed_to_final"] = False
@@ -901,7 +919,10 @@ class DataLoader:
         
         # --- Normalize column names ---
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
-        df.rename(columns=({'Amount ($)':'amount', '$ Paid':'paid', '$0.01':'pennies', '$0.05':'nickels', '$0.10':'dimes', '$0.25':'quarters', '$1.00':'dollars'}), inplace=True)
+        df.rename(columns=({'Amount ($)':'amount', '$_paid':'paid', '$0.01':'pennies', '$0.05':'nickels', '$0.10':'dimes', '$0.25':'quarters', '$1.00':'dollars'}), inplace=True)
+
+        # --- Make sure the paid column is a float ---
+        df['paid'] = df['paid'].astype(float)
         
         # --- Add metadata columns ---
         df["source_file_id"] = file_id
@@ -959,7 +980,11 @@ class DataLoader:
         
         # --- Normalize column names ---
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
-        df.rename(columns=({'Amount ($)':'amount', '$ Paid':'paid', '$0.01':'pennies', '$0.05':'nickels', '$0.10':'dimes', '$0.25':'quarters', '$1.00':'dollars'}), inplace=True)
+        df.rename(columns=({'Amount ($)':'amount', '$_paid':'paid', '$001':'pennies', '$005':'nickels', '$010':'dimes', '$025':'quarters', '$100':'dollars'}), inplace=True)
+
+        # --- Make sure these columns are floats
+        for col in ['pennies', 'nickels', 'dimes', 'quarters', 'dollars']:
+            df[col] = df[col].astype(float)
         
         # --- Add metadata columns ---
         df["source_file_id"] = file_id

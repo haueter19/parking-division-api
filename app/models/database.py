@@ -14,8 +14,15 @@ def parse_time_string(t):
     
     t = t.strip()
 
-    # Adjust these formats depending on real data
-    formats = ["%H:%M:%S", "%H:%M", "%H%M%S", "%H%M"]
+    # Supported formats (add more if needed)
+    formats = [
+        "%I:%M:%S %p",  # 9:05:32 AM
+        "%I:%M %p",     # 9:05 AM
+        "%H:%M:%S",     # 14:37:55
+        "%H:%M",        # 14:37
+        "%H%M%S",       # 143755
+        "%H%M",         # 1437
+    ]
 
     for fmt in formats:
         try:

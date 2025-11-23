@@ -470,7 +470,7 @@ class Transaction(Base):
     
     # Additional fields for tracking
     reference_number = Column(String(255))  # Original transaction reference
-    org_code = Column(String(5), index=True)  # Retrieved from terminal_id lookup
+    org_code = Column(Integer, index=True)  # Retrieved from terminal_id lookup
     
     # Audit trail - which staging record(s) created this transaction
     staging_table = Column(String(50))  # Which staging table this came from

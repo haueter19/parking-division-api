@@ -272,6 +272,61 @@ class ETLStatusResponse(BaseModel):
     errors: Optional[List[str]]
 
 
+# ============= File Status Schemas =============
+class FileStatusResponse(BaseModel):
+    """Combined response showing uploaded file with ETL processing status"""
+    # File information
+    id: int
+    original_filename: str
+    file_size: int
+    data_source_type: DataSourceType
+    upload_date: datetime
+    description: Optional[str]
+    
+    # Processing status
+    processed_at: Optional[datetime]
+    records_processed: Optional[int]  # Records loaded to staging
+    
+    # ETL status
+    status: str  # 'not_started', 'in_progress', 'complete', 'failed'
+    records_created: Optional[int]  # Records created in final transactions table
+    records_failed: Optional[int]
+    error_message: Optional[str]
+    percent_complete: Optional[float]  # Percentage of staging records processed to final
+    
+    # Computed fields
+    needs_etl: bool  # True if loaded to staging but not completed in ETL
+    can_process: bool  # True if file can be processed
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FileStatusListResponse(BaseModel):
+    """Paginated list of file statuses"""
+    total: int
+    items: list[FileStatusResponse]
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class ProcessETLRequest(BaseModel):
+    """Request to process file through ETL pipeline"""
+    source_table: Optional[str] = None  # Specific staging table or all
+    force_reprocess: bool = False  # Reprocess already-processed records
+    dry_run: bool = False  # Preview without committing
+
+
+class ProcessETLResponse(BaseModel):
+    """Response from ETL processing request"""
+    success: bool
+    file_id: int
+    message: str
+    records_created: Optional[int]
+    records_failed: Optional[int]
+    errors: Optional[list[str]]
+
+
 # ============= Bulk Upload =============
 class BulkUploadRequest(BaseModel):
     """Request for bulk file upload and processing"""

@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Status - Parking Division</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #2d3748;
+            font-size: 1.5rem;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-name {
+            color: #4a5568;
+            font-weight: 600;
+        }
+
+        .nav-btn, .logout-btn {
+            background: #667eea;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+            text-decoration: none;
+        }
+
+        .logout-btn {
+            background: #f56565;
+        }
+
+        .nav-btn:hover {
+            background: #5568d3;
+        }
+
+        .logout-btn:hover {
+            background: #e53e3e;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-group label {
+            font-size: 0.85rem;
+            color: #4a5568;
+            font-weight: 600;
+        }
+
+        .filter-group select {
+            padding: 8px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        thead {
+            background: #f7fafc;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px;
+            font-weight: 600;
+            color: #2d3748;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #4a5568;
+        }
+
+        tbody tr:hover {
+            background: #f7fafc;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-not_started {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .status-not_complete {
+            background: #fef5e7;
+            color: #d97706;
+        }
+
+        .status-in_progress {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+
+        .status-complete {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .status-failed {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-process {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-process:hover:not(:disabled) {
+            background: #059669;
+        }
+
+        .btn-load {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-load:hover:not(:disabled) {
+            background: #5568d3;
+        }
+
+        .btn-view {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-view:hover {
+            background: #4b5563;
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+        }
+
+        .error-message {
+            color: #dc2626;
+            font-size: 0.85rem;
+            margin-top: 5px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            color: #2d3748;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6b7280;
+        }
+
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.success {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .message.error {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .page-btn {
+            padding: 8px 12px;
+            border: 2px solid #e2e8f0;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .page-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚗 File Status Dashboard</h1>
+        <div class="user-info">
+            <a href="/upload" class="nav-btn">Upload Files</a>
+            <span class="user-name" id="userName">Loading...</span>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="message" class="message"></div>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label for="statusFilter">Status</label>
+                <select id="statusFilter" onchange="loadFiles()">
+                    <option value="">All</option>
+                    <option value="not_started">Not Started</option>
+                    <option value="not_complete">Needs ETL</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="complete">Complete</option>
+                    <option value="failed">Failed</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="sourceFilter">Data Source</label>
+                <select id="sourceFilter" onchange="loadFiles()">
+                    <option value="">All Sources</option>
+                    <option value="windcave">Windcave</option>
+                    <option value="pi_sales">PI Sales</option>
+                    <option value="pi_payments">PI Payments</option>
+                    <option value="ips_cc">IPS Credit Card</option>
+                    <option value="ips_mobile">IPS Mobile</option>
+                    <option value="ips_cash">IPS Cash</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>&nbsp;</label>
+                <button class="nav-btn" onclick="loadFiles()">🔄 Refresh</button>
+            </div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>File ID</th>
+                    <th>Filename</th>
+                    <th>Description</th>
+                    <th>Data Source</th>
+                    <th>Upload Date</th>
+                    <th>Status</th>
+                    <th>Progress</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="filesTable">
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 40px;">Loading...</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>File Details</h2>
+                <button class="close-modal" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="detailContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = '/';
+        }
+
+        let currentPage = 1;
+        const pageSize = 20;
+
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/v1/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    const user = await response.json();
+                    document.getElementById('userName').textContent = user.full_name || user.username;
+                } else {
+                    logout();
+                }
+            } catch (error) {
+                console.error('Error loading user info:', error);
+            }
+        }
+
+        async function loadFiles(page = 1) {
+            currentPage = page;
+            const statusFilter = document.getElementById('statusFilter').value;
+            const sourceFilter = document.getElementById('sourceFilter').value;
+            
+            const skip = (page - 1) * pageSize;
+            let url = `/api/v1/files/status?skip=${skip}&limit=${pageSize}`;
+            
+            if (statusFilter) url += `&status_filter=${statusFilter}`;
+            if (sourceFilter) url += `&data_source_type=${sourceFilter}`;
+
+            try {
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    renderTable(data.items);
+                    renderPagination(data);
+                } else {
+                    showMessage('Error loading files', 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showMessage('Error loading files', 'error');
+            }
+        }
+
+        function renderTable(files) {
+            const tbody = document.getElementById('filesTable');
+            
+            if (files.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px;">No files found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = files.map(file => `
+                <tr>
+                    <td style="font-weight: 700; color: #4a5568;">${file.id}</td>
+                    <td><strong>${file.original_filename}</strong></td>
+                    <td>${file.description ? `<small style="color: #718096;">${file.description}</small>` : ''}</td>
+                    <td>
+                        <span class="status-badge status-${file.data_source_type}">
+                            ${formatDataSource(file.data_source_type)}
+                        </span>
+                    </td>
+                    <td>${new Date(file.upload_date).toLocaleString()}</td>
+                    <td>
+                        <span class="status-badge status-${file.status}">
+                            ${formatStatus(file.status)}
+                        </span>
+                        ${file.error_message ? `<div class="error-message">⚠️ Error: ${file.error_message.substring(0, 50)}...</div>` : ''}
+                    </td>
+                    <td style="min-width: 150px;">
+                        ${renderProgress(file)}
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                            ${renderActions(file)}
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderProgress(file) {
+            if (file.status === 'not_started') {
+                return '<small style="color: #6b7280;">Not loaded to staging</small>';
+            }
+            
+            const percent = file.percent_complete || 0;
+            return `
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: ${percent}%"></div>
+                </div>
+                <small style="color: #6b7280; display: block; margin-top: 4px;">
+                    ${file.records_created || 0} / ${file.records_processed || 0} records (${percent.toFixed(1)}%)
+                </small>
+            `;
+        }
+
+        function renderActions(file) {
+            let actions = '';
+            
+            // Load to Staging button
+            if (file.status === 'not_started') {
+                actions += `<button class="action-btn btn-load" onclick="loadToStaging(${file.id})">Load to Staging</button>`;
+            }
+            
+            // Process ETL button
+            if (file.can_process && file.needs_etl) {
+                actions += `<button class="action-btn btn-process" onclick="processETL(${file.id})">Process ETL</button>`;
+            }
+            
+            // View Details button
+            actions += `<button class="action-btn btn-view" onclick="showDetails(${file.id})">View Details</button>`;
+            
+            return actions;
+        }
+
+        async function loadToStaging(fileId) {
+            if (!confirm('Load this file to staging tables?')) return;
+
+            try {
+                const response = await fetch(`/api/v1/files/${fileId}/load-to-staging`, {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage(data.message, 'success');
+                    loadFiles(currentPage);
+                } else {
+                    showMessage(data.detail || 'Error loading to staging', 'error');
+                }
+            } catch (error) {
+                showMessage('Error loading to staging', 'error');
+            }
+        }
+
+        async function processETL(fileId) {
+            if (!confirm('Process this file through ETL pipeline?')) return;
+
+            try {
+                const response = await fetch(`/api/v1/files/${fileId}/process-etl`, {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage(data.message, 'success');
+                    loadFiles(currentPage);
+                } else {
+                    showMessage(data.detail || 'Error processing ETL', 'error');
+                }
+            } catch (error) {
+                showMessage('Error processing ETL', 'error');
+            }
+        }
+
+        async function showDetails(fileId) {
+            try {
+                const response = await fetch(`/api/v1/files/${fileId}/status`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const file = await response.json();
+                    document.getElementById('detailContent').innerHTML = `
+                        <h3>${file.original_filename}</h3>
+                        <table style="width: 100%; margin-top: 20px;">
+                            <tr><td><strong>File Size:</strong></td><td>${(file.file_size / 1024).toFixed(2)} KB</td></tr>
+                            <tr><td><strong>Data Source:</strong></td><td>${formatDataSource(file.data_source_type)}</td></tr>
+                            <tr><td><strong>Upload Date:</strong></td><td>${new Date(file.upload_date).toLocaleString()}</td></tr>
+                            <tr><td><strong>Status:</strong></td><td><span class="status-badge status-${file.status}">${formatStatus(file.status)}</span></td></tr>
+                            <tr><td><strong>Records in Staging:</strong></td><td>${file.records_processed || 'N/A'}</td></tr>
+                            <tr><td><strong>Records in Final:</strong></td><td>${file.records_created || 0}</td></tr>
+                            <tr><td><strong>Failed Records:</strong></td><td>${file.records_failed || 0}</td></tr>
+                            <tr><td><strong>Completion:</strong></td><td>${(file.percent_complete || 0).toFixed(1)}%</td></tr>
+                        </table>
+                        ${file.error_message ? `
+                            <div style="margin-top: 20px; padding: 15px; background: #fee2e2; border-radius: 8px;">
+                                <strong style="color: #dc2626;">Error Message:</strong>
+                                <p style="color: #4a5568; margin-top: 10px;">${file.error_message}</p>
+                            </div>
+                        ` : ''}
+                    `;
+                    document.getElementById('detailModal').classList.add('show');
+                }
+            } catch (error) {
+                showMessage('Error loading file details', 'error');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('detailModal').classList.remove('show');
+        }
+
+        function renderPagination(data) {
+            const container = document.getElementById('pagination');
+            const totalPages = data.total_pages;
+            const currentPage = data.page;
+            
+            let html = '';
+            
+            // Previous button
+            html += `<button class="page-btn" onclick="loadFiles(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>← Previous</button>`;
+            
+            // Page numbers
+            for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+                html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="loadFiles(${i})">${i}</button>`;
+            }
+            
+            // Next button
+            html += `<button class="page-btn" onclick="loadFiles(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next →</button>`;
+            
+            container.innerHTML = html;
+        }
+
+        function formatStatus(status) {
+            const statusMap = {
+                'not_started': 'Not Started',
+                'not_complete': 'Needs ETL',
+                'in_progress': 'In Progress',
+                'complete': 'Complete',
+                'failed': 'Failed'
+            };
+            return statusMap[status] || status;
+        }
+
+        function formatDataSource(source) {
+            const sourceMap = {
+                'windcave': 'Windcave',
+                'pi_sales': 'PI Sales',
+                'pi_payments': 'PI Payments',
+                'ips_cc': 'IPS CC',
+                'ips_mobile': 'IPS Mobile',
+                'ips_cash': 'IPS Cash'
+            };
+            return sourceMap[source] || source;
+        }
+
+        function showMessage(text, type) {
+            const message = document.getElementById('message');
+            message.textContent = text;
+            message.className = `message show ${type}`;
+            setTimeout(() => {
+                message.classList.remove('show');
+            }, 5000);
+        }
+
+        function logout() {
+            localStorage.removeItem('access_token');
+            window.location.href = '/';
+        }
+
+        // Initial load
+        loadUserInfo();
+        loadFiles();
+    </script>
+</body>
+</html>

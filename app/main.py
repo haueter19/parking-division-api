@@ -4,9 +4,13 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
-from app.db.session import init_db
+from app.db.session import init_db, SessionLocalTraffic
 from app.config import settings
+from app.utils import etl_cache
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Create FastAPI application
 app = FastAPI(
@@ -39,9 +43,23 @@ templates = Jinja2Templates(directory=templates_dir)
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database on startup"""
+    """Initialize database and ETL caches on startup"""
     init_db()
     print("Database initialized successfully")
+    
+    # Initialize ETL lookup caches
+    try:
+        traffic_db = SessionLocalTraffic()
+        success = etl_cache.initialize_etl_cache(None, traffic_db=traffic_db)
+        traffic_db.close()
+        
+        if success:
+            print("ETL caches initialized successfully")
+        else:
+            print("Warning: ETL cache initialization failed, ETL processing may have degraded performance")
+    except Exception as e:
+        logger.error(f"Error during ETL cache initialization: {e}", exc_info=True)
+        print(f"Warning: Could not initialize ETL caches: {e}")
 
 
 @app.get("/")
@@ -61,6 +79,22 @@ async def upload_page(request: Request):
         name="upload.html"
     )
 
+@app.get("/files/status", response_class=HTMLResponse)
+async def file_status_page(request: Request):
+    """
+    Serve the file status dashboard page
+    
+    This endpoint renders the file status HTML template that allows users to:
+    - View all uploaded files with their processing status
+    - Filter by status and data source type
+    - Load files to staging tables
+    - Process files through ETL pipeline
+    - View detailed error messages
+    """
+    return templates.TemplateResponse(
+        request=request,
+        name="file_status.html"
+    )
 
 if __name__ == "__main__":
     import uvicorn

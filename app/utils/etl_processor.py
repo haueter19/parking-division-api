@@ -23,7 +23,9 @@ from app.models.database import (
 class ETLProcessor:
     """Main ETL processor for transforming staging data to final transactions"""
     
-    def __init__(self, db: Session, traffic_db: Optional[Session] = None):
+    def __init__(self, db: Session, traffic_db: Optional[Session] = None, 
+                 org_code_cache: Optional[pd.DataFrame] = None,
+                 location_from_charge_code: Optional[Dict] = None):
         """
         ETLProcessor can accept two session objects:
         - db: primary application DB session (PUReporting)
@@ -33,6 +35,10 @@ class ETLProcessor:
         database tables (`PU_PARCS_UCD` and `PU_REVENUE_CREDITCARDTERMINALS`) and
         return the matching org_code. If not provided, the method falls back to
         the default behavior (placeholder/None).
+        
+        Optional pre-initialized caches can be passed in:
+        - org_code_cache: DataFrame from cache with org code lookup data
+        - location_from_charge_code: Dict mapping charge codes to location names
         """
         self.db = db
         self.traffic_db = traffic_db
@@ -58,11 +64,22 @@ class ETLProcessor:
                 "WILSON": 82004
             }
         
+        # Use pre-initialized caches if provided, otherwise will initialize on-demand
+        self.org_code_cache = org_code_cache
+        self.location_from_charge_code = location_from_charge_code
+        
     def get_org_code(self) -> Optional[pd.DataFrame]:
         """
         Get org code for a terminal ID
         This should connect to your existing terminal/org_code tables
+        
+        If org_code_cache is already initialized (from startup cache), returns immediately.
+        Otherwise, queries the Traffic DB.
         """
+        
+        # If caches are already initialized (from app startup), return immediately
+        if self.org_code_cache is not None and self.location_from_charge_code is not None:
+            return self.org_code_cache
 
         # If a Traffic DB session was provided, query the Traffic DB tables.
         # We'll use SQLAlchemy Core (select + union) with table reflection so
@@ -71,36 +88,43 @@ class ETLProcessor:
         try:
             org_lookup_tbl = pd.read_sql("""
                 with ucds as (
-    	            SELECT * FROM [Traffic].[data_admin8].[PU_PARCS_UCD] WHERE HousingID IS NOT NULL AND ChargeCode IS NOT NULL
+                    SELECT
+                        'EMV Reader' source, Device_ID, a.TerminalID, b.ChargeCode, a.Facility_Name_Abr, a.Facility_Name_Full, a.DateRemoved
+                    FROM data_admin8.PU_PARCS_EQUIP a
+                    INNER JOIN data_admin8.PU_PARCS_UCD b On (b.HousingID=a.Device_ID)
+                    WHERE 
+                        a.TerminalID IS NOT NULL 
+                        AND a.DateREmoved IS NULL
+                        AND b.ChargeCode IS NOT NULL
                 ), cc_terminals as (
-                    SELECT * FROM [Traffic].[data_admin8].[PU_REVENUE_CREDITCARDTERMINALS] WHERE ChargeCode IS NOT NULL
+                    SELECT 'CC Terminal' source, DeviceID, TerminalID, DateAssigned, DateRemoved, ChargeCode FROM [Traffic].[data_admin8].PU_CC_TERMINAL_HISTORY WHERE ChargeCode IS NOT NULL --AND DateRemoved IS NULL
                 )
                 SELECT 
-                    ucds.HousingID, CONCAT('0010050008016090',CAST(ucds.TerminalID As varchar)) TerminalID, ucds.ChargeCode, 'Windcave' as Brand, 
+                    source, ucds.Device_ID, CONCAT('0010050008016090',CAST(ucds.TerminalID As varchar)) TerminalID, NULL DateAssigned, DateRemoved, ucds.ChargeCode,
                     CASE
-                        WHEN HousingID = 'E164' THEN 'Capitol Square North'
-                        WHEN HousingID LIKE '_1_' THEN 'Overture Center'
-                        WHEN HousingID LIKE '_2_' THEN 'State Street Capitol'
-                        WHEN HousingID LIKE '_4_' THEN 'Lake/Frances'
-                        WHEN HousingID LIKE '_5_' THEN 'Lake/Frances'
-                        WHEN HousingID LIKE '_6_' THEN 'Capitol Square North'
-                        WHEN HousingID LIKE '_7_' THEN 'Wilson Street'
-                        WHEN HousingID LIKE '_8_' THEN 'Livingston'
-                        WHEN HousingID LIKE '_9_' THEN 'Shop'
+                        WHEN Device_ID = 'E164' THEN 'Capitol Square North'
+                        WHEN Device_ID LIKE '_1_' THEN 'Overture Center'
+                        WHEN Device_ID LIKE '_2_' THEN 'State Street Capitol'
+                        WHEN Device_ID LIKE '_4_' THEN 'Lake/Frances'
+                        WHEN Device_ID LIKE '_5_' THEN 'Lake/Frances'
+                        WHEN Device_ID LIKE '_6_' THEN 'Capitol Square North'
+                        WHEN Device_ID LIKE '_7_' THEN 'Wilson Street'
+                        WHEN Device_ID LIKE '_8_' THEN 'Livingston'
+                        WHEN Device_ID LIKE '_9_' THEN 'Shop'
                         ELSE NULL
                     END As Location
                 FROM ucds 
                 UNION
                 SELECT
-                    NULL, cc_terminals.TerminalID, cc_terminals.ChargeCode, Brand,
+                    source, NULL, cc_terminals.TerminalID, COALESCE(cc_terminals.DateAssigned, '1900-01-01') DateAssigned, COALESCE(cc_terminals.DateRemoved, '2050-01-01') DateRemoved, cc_terminals.ChargeCode,
                     CASE
-                        WHEN cc_terminals.ChargeCode = 82001 THEN 'Capitol Square North'
-                        WHEN cc_terminals.ChargeCode = 82002 THEN 'Overture Center'
-                        WHEN cc_terminals.ChargeCode = 82004 THEN 'Wilson Street'
-                        WHEN cc_terminals.ChargeCode = 82005 THEN 'Lake/Frances'
-                        WHEN cc_terminals.ChargeCode = 82007 THEN 'State Street Capitol'
-                        WHEN cc_terminals.ChargeCode = 82162 THEN 'Livingston'
-                        WHEN cc_terminals.ChargeCode = 82172 THEN 'Shop'
+                        WHEN cc_terminals.ChargeCode IN (82001, 82044) THEN 'Capitol Square North'
+                        WHEN cc_terminals.ChargeCode IN (82002, 82045) THEN 'Overture Center'
+                        WHEN cc_terminals.ChargeCode IN (82004, 82047) THEN 'Wilson Street'
+                        WHEN cc_terminals.ChargeCode IN (82005, 82048) THEN 'Lake/Frances'
+                        WHEN cc_terminals.ChargeCode IN (82007, 82050) THEN 'State Street Capitol'
+                        WHEN cc_terminals.ChargeCode IN (82162, 82164) THEN 'Livingston'
+                        WHEN cc_terminals.ChargeCode IN (82172) THEN 'Shop'
                         ELSE NULL
                     END As Location
                 FROM cc_terminals
@@ -117,18 +141,18 @@ class ETLProcessor:
                    """), self.db.get_bind())
             
             # Turn DataFrame into dicts
-            charge_code_from_housing_id = {a:b for a,b in zip(org_lookup_tbl['HousingID'], org_lookup_tbl['ChargeCode']) if a != None}
+            charge_code_from_housing_id = {a:b for a,b in zip(org_lookup_tbl['Device_ID'], org_lookup_tbl['ChargeCode']) if a != None}
             charge_code_from_terminal_id = {a:b for a,b in zip(org_lookup_tbl['TerminalID'], org_lookup_tbl['ChargeCode']) if a != None}
             location_from_charge_code = {a:b for a,b in zip(org_lookup_tbl['ChargeCode'], org_lookup_tbl['Location']) if a != None}
             garage_from_station = {a:b for a,b in zip(garage_and_station_records['TxnT2StationAdddress'], garage_and_station_records['Garage']) if a != None}
             location_from_charge_code = {a:b for a,b in zip(org_lookup_tbl['ChargeCode'], org_lookup_tbl['Location']) if a != None}
-            location_from_charge_code[82044] = 'Capitol Square North'
-            location_from_charge_code[82045] = 'Overture Center'
-            location_from_charge_code[82047] = 'Wilson Street'
-            location_from_charge_code[82048] = 'Lake/Frances'
-            location_from_charge_code[82050] = 'State Street Capitol'
-            location_from_charge_code[82164] = 'Livingston'
-            location_from_charge_code[82172] = 'Over/Short/Helpline'
+            #location_from_charge_code[82044] = 'Capitol Square North'
+            #location_from_charge_code[82045] = 'Overture Center'
+            #location_from_charge_code[82047] = 'Wilson Street'
+            #location_from_charge_code[82048] = 'Lake/Frances'
+            #location_from_charge_code[82050] = 'State Street Capitol'
+            #location_from_charge_code[82164] = 'Livingston'
+            #location_from_charge_code[82172] = 'Over/Short/Helpline'
             location_from_charge_code[82055] = 'Blair Lot'
             location_from_charge_code[82057] = 'Wingra Lot'
             location_from_charge_code[82074] = 'Multi-Space Meters'
@@ -318,6 +342,10 @@ class ETLProcessor:
             failed_count = 0
             
             for idx, (sales_record, payment_record) in enumerate(records):
+                # Look up charge code from terminal ID and transaction date
+                charge_code = self.org_code_cache[(self.org_code_cache['TerminalID']==sales_record.terminal_id) &
+                                    (self.org_code_cache['DateAssigned'] <= sales_record.transaction_datetime) &
+                                    (self.org_code_cache['DateRemoved'] >= sales_record.transaction_datetime)]['ChargeCode'].iloc[0]
                 try:
                     transaction = Transaction(
                         transaction_date=sales_record.transaction_datetime,
@@ -326,11 +354,11 @@ class ETLProcessor:
                         settle_amount=payment_record.transaction_amount if payment_record else None,
                         source=DataSourceType.PAYMENTS_INSIDER_SALES,
                         location_type=self.determine_location_type(sales_record.terminal_id),
-                        location_name=self.location_from_charge_code.get(self.charge_code_from_terminal_id.get(sales_record.terminal_id)),
+                        location_name=self.location_from_charge_code.get(charge_code),
                         device_terminal_id=sales_record.terminal_id,
                         payment_type=self.map_payment_type(sales_record.card_brand),
                         reference_number=payment_record.arn_number if payment_record else None, # probably use invoice if including IPS
-                        org_code=self.charge_code_from_terminal_id.get(sales_record.terminal_id),
+                        org_code=charge_code,
                         staging_table="payments_insider_sales_staging",
                         staging_record_id=sales_record.id
                     )
@@ -822,15 +850,20 @@ class DataLoader:
         else:
             df = df[df['merchant_id'] == '8016090345']
 
-        # --- Convert to list of dictionaries ---
-        records = df.to_dict(orient="records")
+        # --- Check if there are any records ---
+        if df.shape[0] > 0:
+        
+            # --- Convert to list of dictionaries ---
+            records = df.to_dict(orient="records")
 
-        # --- Bulk insert using SQLAlchemy ---
-        if report_type == 'Sales':
-            self.db.execute(insert(PaymentsInsiderSalesStaging), records)
+            # --- Bulk insert using SQLAlchemy ---
+            if report_type == 'Sales':
+                self.db.execute(insert(PaymentsInsiderSalesStaging), records)
+            else:
+                self.db.execute(insert(PaymentsInsiderPaymentsStaging), records)
+            self.db.commit()
         else:
-            self.db.execute(insert(PaymentsInsiderPaymentsStaging), records)
-        self.db.commit()
+            records = []
 
         # Update file as processed
         file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()

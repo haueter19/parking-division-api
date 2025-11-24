@@ -25,6 +25,8 @@ async def get_files_status(
     limit: int = 100,
     data_source_type: Optional[DataSourceType] = None,
     status_filter: Optional[str] = None,  # 'complete', 'not_complete', 'failed', 'not_started'
+    sort_by: str = "id",  # Column to sort by
+    sort_order: str = "asc",  # 'asc' or 'desc'
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -101,12 +103,14 @@ async def get_files_status(
     GROUP BY 
         uf.id, uf.original_filename, uf.file_size, uf.data_source_type,
         uf.upload_date, uf.processed_at, uf.records_processed, uf.description, uf.uploaded_by
-    ORDER BY uf.upload_date DESC
+    ORDER BY uf.{sort_col} {sort_dir}
     OFFSET :skip ROWS
     FETCH NEXT :limit ROWS ONLY
     """.format(
         data_source_filter=data_source_filter,
-        status_filter=status_filter_clause
+        status_filter=status_filter_clause,
+        sort_col=sort_by,
+        sort_dir=sort_order.upper()
     )
     
     # Wrap the formatted query with text()

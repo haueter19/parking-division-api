@@ -118,6 +118,28 @@
             font-weight: 600;
             color: #2d3748;
             border-bottom: 2px solid #e2e8f0;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th:hover {
+            background: #edf2f7;
+        }
+
+        th.sortable::after {
+            content: ' ↕';
+            color: #a0aec0;
+            font-size: 0.85rem;
+        }
+
+        th.sort-asc::after {
+            content: ' ↑';
+            color: #667eea;
+        }
+
+        th.sort-desc::after {
+            content: ' ↓';
+            color: #667eea;
         }
 
         td {
@@ -156,6 +178,11 @@
         .status-complete {
             background: #d1fae5;
             color: #059669;
+        }
+
+        .status-incomplete {
+            background: #fef3c7;
+            color: #b45309;
         }
 
         .status-failed {
@@ -347,6 +374,7 @@
                     <option value="not_complete">Needs ETL</option>
                     <option value="in_progress">In Progress</option>
                     <option value="complete">Complete</option>
+                    <option value="incomplete">Incomplete</option>
                     <option value="failed">Failed</option>
                 </select>
             </div>
@@ -373,12 +401,12 @@
         <table>
             <thead>
                 <tr>
-                    <th>File ID</th>
-                    <th>Filename</th>
+                    <th class="sortable" onclick="sortBy('id')">File ID</th>
+                    <th class="sortable" onclick="sortBy('original_filename')">Filename</th>
                     <th>Description</th>
-                    <th>Data Source</th>
-                    <th>Upload Date</th>
-                    <th>Status</th>
+                    <th class="sortable" onclick="sortBy('data_source_type')">Data Source</th>
+                    <th class="sortable" onclick="sortBy('upload_date')">Upload Date</th>
+                    <th class="sortable" onclick="sortBy('status')">Status</th>
                     <th>Progress</th>
                     <th>Actions</th>
                 </tr>
@@ -412,6 +440,43 @@
 
         let currentPage = 1;
         const pageSize = 20;
+        let sortColumn = 'id';
+        let sortDirection = 'asc';
+
+        function sortBy(column) {
+            // Toggle sort direction if clicking same column
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            currentPage = 1; // Reset to first page when sorting
+            loadFiles();
+        }
+
+        function updateSortIndicators() {
+            // Remove all sort indicators
+            document.querySelectorAll('th').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+            });
+            
+            // Add indicator to current sort column
+            const headers = {
+                'id': 'File ID',
+                'original_filename': 'Filename',
+                'data_source_type': 'Data Source',
+                'upload_date': 'Upload Date',
+                'status': 'Status'
+            };
+            
+            const ths = document.querySelectorAll('th.sortable');
+            ths.forEach(th => {
+                if (th.textContent.trim() === headers[sortColumn]) {
+                    th.classList.add(sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+                }
+            });
+        }
 
         async function loadUserInfo() {
             try {
@@ -439,6 +504,9 @@
             
             if (statusFilter) url += `&status_filter=${statusFilter}`;
             if (sourceFilter) url += `&data_source_type=${sourceFilter}`;
+            
+            // Add sort parameters
+            url += `&sort_by=${sortColumn}&sort_order=${sortDirection}`;
 
             try {
                 const response = await fetch(url, {
@@ -448,6 +516,7 @@
                 if (response.ok) {
                     const data = await response.json();
                     renderTable(data.items);
+                    updateSortIndicators();
                     renderPagination(data);
                 } else {
                     showMessage('Error loading files', 'error');
@@ -645,6 +714,7 @@
                 'not_complete': 'Needs ETL',
                 'in_progress': 'In Progress',
                 'complete': 'Complete',
+                'incomplete': 'Incomplete',
                 'failed': 'Failed'
             };
             return statusMap[status] || status;

@@ -12,6 +12,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Ensure basic logging is configured so logger.info/DEBUG messages appear
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+
+# Make sure uvicorn loggers are at INFO level as well
+logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+
 # Create FastAPI application
 app = FastAPI(
     title="Parking Division Operations & Revenue Tracking API",
@@ -49,6 +60,7 @@ async def startup_event():
     
     # Initialize ETL lookup caches
     try:
+        #get_traffic_db()
         traffic_db = SessionLocalTraffic()
         success = etl_cache.initialize_etl_cache(None, traffic_db=traffic_db)
         traffic_db.close()

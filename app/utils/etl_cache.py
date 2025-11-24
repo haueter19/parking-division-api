@@ -69,10 +69,12 @@ def initialize_etl_cache(db: Session, traffic_db: Optional[Session] = None) -> b
             location_from_charge_code[82225] = 'Evergreen Lot'
             location_from_charge_code[82935] = 'Meter Over/Short'
 
+                        
             # Save dicts to the class
             _etl_cache['charge_code_from_housing_id'] = charge_code_from_housing_id
             _etl_cache['charge_code_from_terminal_id'] = charge_code_from_terminal_id
             _etl_cache['location_from_charge_code'] = location_from_charge_code
+            _etl_cache['garage_from_station'] = _load_garage_cache(db)
             
             
         else:

@@ -13,6 +13,7 @@ from app.api.dependencies import get_current_active_user, require_role
 from app.config import settings
 from app.utils.file_inference import infer_data_source_type
 from app.utils.etl_processor import DataLoader
+from app.utils.functions import extract_date_from_filename
 
 router = APIRouter()
 
@@ -128,7 +129,7 @@ async def upload_file(
             file_hash=file_hash,
             data_source_type=data_source_type,
             uploaded_by=current_user.id,
-            description=description
+            description=extract_date_from_filename(file.filename)+f" - {description}" if description else extract_date_from_filename(file.filename)
         )
         
         db.add(uploaded_file_record)

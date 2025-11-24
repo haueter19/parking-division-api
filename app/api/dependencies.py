@@ -60,10 +60,16 @@ def require_role(allowed_roles: list[UserRole]):
             ...
     """
     async def role_checker(current_user: User = Depends(get_current_active_user)) -> User:
-        if current_user.role not in allowed_roles:
+        # Ensure we're comparing enum values
+        user_role = current_user.role
+        if isinstance(user_role, str):
+            user_role = UserRole(user_role)
+        
+        # Check if user's role is in allowed roles
+        if user_role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not enough permissions"
+                detail=f"Not enough permissions. Required roles: {[r.value for r in allowed_roles]}, but user has role: {user_role.value if isinstance(user_role, UserRole) else user_role}"
             )
         return current_user
     

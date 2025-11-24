@@ -26,7 +26,7 @@ async def get_files_status(
     data_source_type: Optional[DataSourceType] = None,
     status_filter: Optional[str] = None,  # 'complete', 'not_complete', 'failed', 'not_started'
     sort_by: str = "id",  # Column to sort by
-    sort_order: str = "asc",  # 'asc' or 'desc'
+    sort_order: str = "desc",  # 'asc' or 'desc'
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):

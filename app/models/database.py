@@ -342,7 +342,7 @@ class IPSMobileStaging(Base):
     source_file_id = Column(Integer, ForeignKey("uploaded_files.id"), nullable=False)
     
     # Raw fields from IPS Mobile - adjust based on actual columns
-    received_Date_time = Column(DateTime)
+    received_date_time = Column(DateTime)
     zone = Column(String(24))
     area = Column(String(50))
     sub_area = Column(String(50))
@@ -505,7 +505,7 @@ class ETLProcessingLog(Base):
     records_created = Column(Integer)
     records_updated = Column(Integer)
     records_failed = Column(Integer)
-    status = Column(String(20))  # 'running', 'completed', 'failed'
+    status = Column(String(20))  # 'running', 'completed', 'incomplete', 'failed'
     error_message = Column(Text)
     
     # Relationship

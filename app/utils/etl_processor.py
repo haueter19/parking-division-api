@@ -43,9 +43,10 @@ class ETLProcessor:
         self.db = db
         self.traffic_db = traffic_db
         self.BATCH_SIZE = 500
-        self.charge_code_from_housing_id = None
-        self.charge_code_from_terminal_id = None
-        self.garage_from_station = None
+        # initialize lookup dicts to empty dicts so .get() is always safe
+        self.charge_code_from_housing_id = {}
+        self.charge_code_from_terminal_id = {}
+        self.garage_from_station = {}
         self.org_code_from_area = {
                 "SSCO": 82007,
                 "OC": 82002,
@@ -172,11 +173,18 @@ class ETLProcessor:
             self.garage_from_station = garage_from_station
 
         except Exception as e:
-            # On error, log/print and fall back to None
+            # On error, log/print and fall back to empty lookups to avoid NoneType .get errors
             print(f"Error querying Traffic DB for org_codes: {e}")
-            
-            self.org_code_cache = org_lookup_tbl
-            return org_lookup_tbl
+            # Ensure lookup dicts exist as empty dicts
+            self.charge_code_from_housing_id = {}
+            self.charge_code_from_terminal_id = {}
+            self.location_from_charge_code = {}
+            self.garage_from_station = {}
+            try:
+                self.org_code_cache = org_lookup_tbl
+            except NameError:
+                self.org_code_cache = None
+            return self.org_code_cache
 
         self.org_code_cache = org_lookup_tbl
         return org_lookup_tbl
@@ -210,9 +218,9 @@ class ETLProcessor:
             return PaymentType.AMEX
         elif "discover" in card_lower:
             return PaymentType.DISCOVER
-        elif 'park_smarter' in card_lower:
+        elif 'park smarter' in card_lower:
             return PaymentType.PARK_SMARTER
-        elif 'text_to_pay' in card_lower:
+        elif 'text to pay' in card_lower:
             return PaymentType.TEXT_TO_PAY
         else:
             return PaymentType.OTHER
@@ -260,36 +268,43 @@ class ETLProcessor:
             created_count = 0
             failed_count = 0
             
-            for record in records:
+            # Create transaction records
+            for idx, record in enumerate(records):
                 try:
                     transaction = Transaction(
-                        transaction_date=record['time'],
-                        transaction_amount=record['amount'],
-                        settle_date=record['settlement_date'],
-                        settle_amount=record['amount'],
+                        transaction_date=record.time,
+                        transaction_amount=record.amount,
+                        settle_date=record.settlement_date,
+                        settle_amount=record.amount,
                         source=DataSourceType.WINDCAVE,
                         location_type=LocationType.GARAGE,
-                        location_name=self.garage_from_station.get(record['device_id']), 
-                        device_terminal_id=record['device_id'], 
-                        payment_type=self.map_payment_type(record['card_type']),
-                        reference_number=record['dpstxnref'], # Do I need reference number? Is this the best choice?
-                        org_code=self.charge_code_from_housing_id.get(record['device_id']), # or self.charge_code_from_housing_id.get(record['txn']), # Try using device_id, fail to txn
+                        location_name=self.garage_from_station.get(record.device_id), 
+                        device_terminal_id=record.device_id, 
+                        payment_type=self.map_payment_type(record.card_type),
+                        reference_number=record.dpstxnref, # Do I need reference number? Is this the best choice?
+                        org_code=self.charge_code_from_housing_id.get(record.device_id), # or self.charge_code_from_housing_id.get(record['txn']), # Try using device_id, fail to txn
                         staging_table="windcave_staging",
-                        staging_record_id=record['id']
+                        staging_record_id=record.id
                     )
                     
                     self.db.add(transaction)
-                    self.db.flush()
+                    #self.db.flush()
                     
                     # Update staging record
-                    record['processed_to_final'] = True
-                    record['transaction_id'] = transaction.id
+                    record.processed_to_final = True
+                    record.transaction_id = transaction.id
                     created_count += 1
-                    
+                
+                    if (idx +1) % self.BATCH_SIZE == 0:
+                        self.db.flush()
+                        self.db.commit()
+                        print(f"Committed batch: {idx + 1} of {len(records)} records processed")
+
                 except Exception as e:
                     failed_count += 1
                     print(f"Error processing Windcave record {record.id}: {e}")
             
+            self.db.flush()
             self.db.commit()
             self._complete_log(log_entry, len(records), created_count, 0, failed_count)
             
@@ -696,13 +711,29 @@ class ETLProcessor:
     
     def _complete_log(self, log_entry: ETLProcessingLog, processed: int, 
                      created: int, updated: int, failed: int):
-        """Complete a processing log entry"""
+        """Complete a processing log entry with status based on record counts"""
         log_entry.end_time = datetime.now()
         log_entry.records_processed = processed
         log_entry.records_created = created
         log_entry.records_updated = updated
         log_entry.records_failed = failed
-        log_entry.status = "completed"
+        
+        # Determine status based on success/failure counts
+        total_records = created + updated + failed
+        
+        if failed == 0 and total_records > 0:
+            # All records processed successfully
+            log_entry.status = "completed"
+        elif failed > 0 and (created > 0 or updated > 0):
+            # Some records succeeded, some failed
+            log_entry.status = "incomplete"
+        elif failed > 0 and created == 0 and updated == 0:
+            # All records failed
+            log_entry.status = "failed"
+        else:
+            # No records processed at all
+            log_entry.status = "completed"
+        
         self.db.commit()
     
     def _fail_log(self, log_entry: ETLProcessingLog, error_message: str):
@@ -779,6 +810,9 @@ class DataLoader:
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
         
+        # --- Remove voided transactions ---
+        df = df[df['voided'] == 0]
+
         # --- Convert to list of dictionaries ---
         records = df.to_dict(orient="records")
 
@@ -843,6 +877,9 @@ class DataLoader:
         
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
+
+        # --- Remove voided transactions ---
+        df = df[df['void_ind'] == 'N']
 
         # --- Only use merchant IDs that are '8016090345' ---
         if report_type == 'Sales':

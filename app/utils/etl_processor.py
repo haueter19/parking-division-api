@@ -84,7 +84,9 @@ class ETLProcessor:
             self.charge_code_from_terminal_id = etl_cache.get_charge_code_from_terminal_id()
             # Fill location_from_charge_code from org_code_cache if not provided explicitly
             self.location_from_charge_code = etl_cache.get_location_from_charge_code()
+            self.garage_from_station = etl_cache.get_garage_from_station()
             if not self.location_from_charge_code:
+                print('location_from_charge_code not provided')
                 try:
                     if 'Location' in self.org_code_cache.columns:
                         self.location_from_charge_code = {a: b for a, b in zip(self.org_code_cache['ChargeCode'], self.org_code_cache['Location']) if a is not None}
@@ -274,8 +276,8 @@ class ETLProcessor:
         """Process Windcave staging records to final transactions"""
         log_entry = self._start_log("windcave_staging", file_id)
         
-        if self.org_code_cache is None:
-            self.get_org_code()
+        #if self.org_code_cache is None:
+        #    self.get_org_code()
             
         try:
             # Query unprocessed records

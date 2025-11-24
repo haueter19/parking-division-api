@@ -4,13 +4,14 @@ Transforms data from staging tables to normalized transactions table
 """
 
 from datetime import datetime, timedelta
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Callable
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from sqlalchemy import Table, MetaData, select, insert, text
 from sqlalchemy.ext.hybrid import hybrid_property
 import numpy as np
 import pandas as pd
+from app.utils import etl_cache
 from app.models.database import (
     Transaction, DataSourceType, LocationType, PaymentType,
     WindcaveStaging, PaymentsInsiderPaymentsStaging, PaymentsInsiderSalesStaging, 
@@ -25,7 +26,8 @@ class ETLProcessor:
     
     def __init__(self, db: Session, traffic_db: Optional[Session] = None, 
                  org_code_cache: Optional[pd.DataFrame] = None,
-                 location_from_charge_code: Optional[Dict] = None):
+                 location_from_charge_code: Optional[Dict] = None,
+                 progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None):
         """
         ETLProcessor can accept two session objects:
         - db: primary application DB session (PUReporting)
@@ -57,8 +59,6 @@ class ETLProcessor:
                 "BUCKEYE": 82224,
                 "EVERGREEN": 82225,
                 "Spares": 82935,
-                "CSN": 82001,
-                "OC": 82002,
                 "LAKE": 82005,
                 "FRANCES": 82005,
                 "TEST": 82935,
@@ -68,6 +68,49 @@ class ETLProcessor:
         # Use pre-initialized caches if provided, otherwise will initialize on-demand
         self.org_code_cache = org_code_cache
         self.location_from_charge_code = location_from_charge_code
+
+        # If org_code_cache was provided, derive the dict lookups used throughout the processor
+        if self.org_code_cache is not None:
+            print('Using provided org_code_cache for ETLProcessor')
+            #try:
+                #self.charge_code_from_housing_id = {a: b for a, b in zip(self.org_code_cache['Device_ID'], self.org_code_cache['ChargeCode']) if a is not None}
+            #except Exception:
+                #self.charge_code_from_housing_id = {}
+            self.charge_code_from_housing_id = etl_cache.get_charge_code_from_housing_id()
+            #try:
+                #self.charge_code_from_terminal_id = {a: b for a, b in zip(self.org_code_cache['TerminalID'], self.org_code_cache['ChargeCode']) if a is not None}
+            #except Exception:
+                #self.charge_code_from_terminal_id = {}
+            self.charge_code_from_terminal_id = etl_cache.get_charge_code_from_terminal_id()
+            # Fill location_from_charge_code from org_code_cache if not provided explicitly
+            self.location_from_charge_code = etl_cache.get_location_from_charge_code()
+            if not self.location_from_charge_code:
+                try:
+                    if 'Location' in self.org_code_cache.columns:
+                        self.location_from_charge_code = {a: b for a, b in zip(self.org_code_cache['ChargeCode'], self.org_code_cache['Location']) if a is not None}
+                except Exception:
+                    self.location_from_charge_code = {}
+
+        # If garage map missing, attempt to read from global etl_cache if available
+        if not self.garage_from_station:
+            try:
+                from app.utils import etl_cache as _etl_cache_mod
+                self.garage_from_station = _etl_cache_mod.get_garage_from_station() or {}
+            except Exception:
+                # keep empty dict as fallback
+                self.garage_from_station = {}
+        # Optional callback to report progress updates. Callable should accept a dict payload.
+        self.progress_callback = progress_callback
+
+    def _report_progress(self, payload: Dict[str, Any]):
+        """Invoke progress callback if provided. Swallow any exceptions from callback."""
+        if not self.progress_callback:
+            return
+        try:
+            self.progress_callback(payload)
+        except Exception:
+            # Don't let progress reporting break processing
+            pass
         
     def get_org_code(self) -> Optional[pd.DataFrame]:
         """
@@ -298,6 +341,14 @@ class ETLProcessor:
                     if (idx +1) % self.BATCH_SIZE == 0:
                         self.db.flush()
                         self.db.commit()
+                        # Report progress after each batch
+                        self._report_progress({
+                            "source": "windcave",
+                            "processed": idx + 1,
+                            "total": len(records),
+                            "created": created_count,
+                            "failed": failed_count
+                        })
                         print(f"Committed batch: {idx + 1} of {len(records)} records processed")
 
                 except Exception as e:
@@ -324,30 +375,40 @@ class ETLProcessor:
         """
         Process Payments Insider staging records to final transactions
         Note: PI requires matching Sales and Payments reports
+        Handles both PAYMENTS_INSIDER_SALES and PAYMENTS_INSIDER_PAYMENTS data types
         """
         log_entry = self._start_log("payments_insider_sales_staging", file_id)
 
         try:
+            # Determine the data source type from the file record to know if we're processing Sales or Payments
+            is_sales = True  # Default to Sales
+            if file_id:
+                file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+                if file_record and file_record.data_source_type == DataSourceType.PAYMENTS_INSIDER_PAYMENTS:
+                    is_sales = False
+            
             # Query sales LEFT JOIN payments (match SQL behavior).
             # Select sales rows (even when there's no matching payment) where
-            # the sale hasn't been processed and is not voided.
+            # the sale hasn't been processed and is not voided (for Sales only).
+            filters = [
+                PaymentsInsiderSalesStaging.processed_to_final == False,
+                PaymentsInsiderSalesStaging.mid != '8031494050'
+            ]
+            
+            # Only filter void_ind if processing Sales data (Payments data doesn't have this field)
+            if is_sales:
+                filters.append(PaymentsInsiderSalesStaging.void_ind == 'N')
+            
             query = self.db.query(
                 PaymentsInsiderSalesStaging,
                 PaymentsInsiderPaymentsStaging
             ).outerjoin(
                 PaymentsInsiderPaymentsStaging,
-                #PaymentsInsiderSalesStaging.invoice == PaymentsInsiderPaymentsStaging.purchase_id_number # Only works for merchant id associated with IPS
                 and_(
                     PaymentsInsiderSalesStaging.card_number == PaymentsInsiderPaymentsStaging.card_number,
                     PaymentsInsiderSalesStaging.authorization_code == PaymentsInsiderPaymentsStaging.authorization_code
                 )
-            ).filter(
-                and_(
-                    PaymentsInsiderSalesStaging.processed_to_final == False,
-                    PaymentsInsiderSalesStaging.void_ind == 'N',
-                    PaymentsInsiderSalesStaging.mid != '8031494050'
-                )
-            )
+            ).filter(and_(*filters))
             
             if file_id:
                 query = query.filter(PaymentsInsiderSalesStaging.source_file_id == file_id)
@@ -360,7 +421,8 @@ class ETLProcessor:
                 # Look up charge code from terminal ID and transaction date
                 charge_code = self.org_code_cache[(self.org_code_cache['TerminalID']==sales_record.terminal_id) &
                                     (self.org_code_cache['DateAssigned'] <= sales_record.transaction_datetime) &
-                                    (self.org_code_cache['DateRemoved'] >= sales_record.transaction_datetime)]['ChargeCode'].iloc[0]
+                                    (self.org_code_cache['DateRemoved'] > sales_record.transaction_datetime)]['ChargeCode'].iloc[0]
+                
                 try:
                     transaction = Transaction(
                         transaction_date=sales_record.transaction_datetime,
@@ -368,12 +430,12 @@ class ETLProcessor:
                         settle_date=payment_record.payment_date if payment_record else None,
                         settle_amount=payment_record.transaction_amount if payment_record else None,
                         source=DataSourceType.PAYMENTS_INSIDER_SALES,
-                        location_type=self.determine_location_type(sales_record.terminal_id),
+                        location_type=LocationType.GARAGE,
                         location_name=self.location_from_charge_code.get(charge_code),
                         device_terminal_id=sales_record.terminal_id,
                         payment_type=self.map_payment_type(sales_record.card_brand),
-                        reference_number=payment_record.arn_number if payment_record else None, # probably use invoice if including IPS
-                        org_code=charge_code,
+                        reference_number=payment_record.card_number.replace('*','')+payment_record.authorization_code if payment_record else sales_record.card_number.replace('*','')+sales_record.authorization_code, # probably use invoice if including IPS
+                        org_code=int(charge_code),
                         staging_table="payments_insider_sales_staging",
                         staging_record_id=sales_record.id
                     )
@@ -391,6 +453,14 @@ class ETLProcessor:
                     if (idx + 1) % self.BATCH_SIZE == 0:
                         self.db.flush()
                         self.db.commit()
+                        # Report progress after each PI batch
+                        self._report_progress({
+                            "source": "payments_insider",
+                            "processed": idx + 1,
+                            "total": len(records),
+                            "created": created_count,
+                            "failed": failed_count
+                        })
                         print(f"Committed batch: {idx + 1}/{len(records)} records processed")
                     
                 except Exception as e:
@@ -472,6 +542,13 @@ class ETLProcessor:
                     if (idx + 1) % self.BATCH_SIZE == 0:
                         self.db.flush()
                         self.db.commit()
+                        self._report_progress({
+                            "source": "ips_cc",
+                            "processed": idx + 1,
+                            "total": len(records),
+                            "created": created_count,
+                            "failed": failed_count
+                        })
                         print(f"Committed batch: {idx + 1}/{len(records)} records processed")
 
                 except Exception as e:
@@ -550,6 +627,13 @@ class ETLProcessor:
                     if (idx + 1) % self.BATCH_SIZE == 0:
                         self.db.flush()
                         self.db.commit()
+                        self._report_progress({
+                            "source": "ips_mobile",
+                            "processed": idx + 1,
+                            "total": len(records),
+                            "created": created_count,
+                            "failed": failed_count
+                        })
                         print(f"Committed batch: {idx + 1} of {len(records)} records processed")
                     
                 except Exception as e:
@@ -612,6 +696,13 @@ class ETLProcessor:
                     if (idx + 1) % self.BATCH_SIZE == 0:
                         self.db.flush()
                         self.db.commit()
+                        self._report_progress({
+                            "source": "ips_cash",
+                            "processed": idx + 1,
+                            "total": len(records),
+                            "created": created_count,
+                            "failed": failed_count
+                        })
                         print(f"Committed batch: {idx + 1} of {len(records)} records processed")
 
                 except Exception as e:
@@ -622,6 +713,15 @@ class ETLProcessor:
             
             self.db.flush()
             self.db.commit()
+            # Final progress report for this processor
+            self._report_progress({
+                "source": "final",
+                "processed": len(records),
+                "total": len(records),
+                "created": created_count,
+                "failed": failed_count,
+                "status": "completed"
+            })
             self._complete_log(log_entry, len(records), created_count, 0, failed_count)
             
             return {
@@ -877,19 +977,24 @@ class DataLoader:
         
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
-
-        # --- Remove voided transactions ---
-        df = df[df['void_ind'] == 'N']
+        # --- Remove voided transactions (Sales files only) ---
+        # Some Payments files do not include a `void_ind` column; guard against that.
+        if report_type == 'Sales' and 'void_ind' in df.columns:
+            try:
+                df = df[df['void_ind'] == 'N']
+            except Exception:
+                # If any unexpected values exist in void_ind, skip this filter
+                pass
 
         # --- Only use merchant IDs that are '8016090345' ---
-        if report_type == 'Sales':
+        # Different report types use different column names; guard columns    
+        if 'mid' in df.columns:
             df = df[df['mid'] == '8016090345']
-        else:
+        if 'merchant_id' in df.columns:
             df = df[df['merchant_id'] == '8016090345']
 
         # --- Check if there are any records ---
         if df.shape[0] > 0:
-        
             # --- Convert to list of dictionaries ---
             records = df.to_dict(orient="records")
 

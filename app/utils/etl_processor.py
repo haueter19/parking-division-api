@@ -725,6 +725,140 @@ class ETLProcessor:
             self._fail_log(log_entry, str(e))
             raise
     
+
+    def process_zms_cash(self, process_date: Optional[str] = None) -> Dict[str, Any]:
+        """Process ZMS Cash records to final transactions. Skips staging table."""
+        
+        # If no date provided, defaults to previous day
+        if process_date is None:    
+            process_date = datetime.strftime(datetime.now() - timedelta(days=1), ("%Y-%m-%d"))
+        
+        try:
+            records = pd.read_sql(f"""
+                DECLARE @dt datetime
+                SET @dt = '{process_date}';
+                
+                with cte As (
+                    -- Pull cash payment data from a particular date from ZMS table
+                    select 
+                        CASE
+                            WHEN p.Id_Parking = 12 THEN 2
+                            ELSE p.Id_Parking
+                        END Id_Parking,
+                        pa.ParkingName, p.Id_Location, l.Name, l.ShortName, TicketNumber,
+                        CASE
+                            WHEN l.Name LIKE '%Cash%' THEN 'Cashiered'
+                            WHEN l.Name LIKE '%Pay%' THEN 'POF'
+                            WHEN l.Name like '%Ex%' THEN 'Exit'
+                            WHEN l.Name LIKE '%Entry%' THEN 'Entry'
+                            ELSE 'Unknown'
+                        END As StationType,
+                        l.TxnT2StationAdddress station, p.ParkhouseNumber, p.Amount, p.Amount/100. Amount2, p.Date, p.Time,
+                        CONVERT(DATETIME, CONVERT(VARCHAR, CAST(p.Date AS DATE), 120) + ' ' + p.Time) transactin_datetime
+                    from Payments p
+                    left join Location l On (p.Id_Parking=l.Id_Parking AND p.Id_Location=l.Id_Location)
+                    left join ParkingAdmin pa On (p.Id_Parking=pa.Id_Parking)
+                    where 
+                        Date = @dt
+                        AND PayMethod = 0
+                ),-- select * from cte
+                -- Pull rebates from the same date. Group by TicketID to get the sum of any rebates used.
+                rebate_group As (
+                    select 
+                        max(Id_Parking) Id_Parking, max(Id_Location) Id_Location, max(Id_Equipment) Id_Equipment, max(Date) Date, max(Time) Time, TicketId, count(RebateNumber) RebatesApplied, sum(RebateAmount) sumRebateAmount 
+                    from Rebates 
+                    where 
+                        Date = @dt
+                    GROUP BY TicketId
+                ), 
+                -- 
+                special_event_entries As (
+                    select 
+                        Id_Parking, count(*) special_event_entries
+                    from Transactions
+                    where
+                        TransactionDateStamp = @dt
+                        AND Parking IN (52, 16, 72, 92, 32, 42)
+                        AND TransactionType = 20
+                        AND PaymentMethod = 0
+                    group by Id_Parking
+                )
+                select
+                    cte.transactin_datetime transaction_date, Amount/100 - COALESCE(sumRebateAmount,0) transaction_amount, 
+                    CONVERT(VARCHAR, CAST(cte.transactin_datetime AS DATE), 120) settle_date, Amount/100 - COALESCE(sumRebateAmount,0) settle_amount, 
+                    'zms_cash_regular' source, 'GARAGE' location_type, ParkingName as location_name, station device_terminal_id, 'CASH' as payment_type, cte.TicketNumber reference_number,
+                    CASE
+                        WHEN station LIKE '_1_' THEN 82002
+                        WHEN station LIKE '_2_' THEN 82007
+                        WHEN station LIKE '_4_' THEN 82005
+                        WHEN station LIKE '_5_' THEN 82005
+                        WHEN station LIKE '_6_' THEN 82001
+                        WHEN station LIKE '_7_' THEN 82004
+                        WHEN station LIKE '_8_' THEN 82162
+                        ELSE 82172
+                    END As org_code,
+                    'zms_cash_regular' staging_table, cte.TicketNumber staging_record_id,
+                    cte.StationType station_type, Name LocationName, cte.ParkhouseNumber, cte.Id_Parking, 
+                    Amount/100 total_cash, sumRebateAmount sum_rebates, 
+                    RebatesApplied n_rebates, COALESCE(se.special_event_entries,0) total_se_entries
+                from cte
+                left join rebate_group r On (cte.TicketNumber=r.TicketId)
+                left join special_event_entries se On (cte.Id_Parking=se.Id_Parking)
+                --group by cte.Id_Parking, cte.StationType --cte.Id_Location
+                order by Id_Parking, StationType""", self.db.get_bind())
+
+            created_count = 0
+            failed_count = 0
+
+            for idx, record in records.iterrows():
+                try:
+                    transaction = Transaction(
+                            transaction_date=record.transaction_date,
+                            transaction_amount=record.transaction_amount,
+                            settle_date=record.settle_date,
+                            settle_amount=record.settle_amount,
+                            source=record.source,
+                            location_type=LocationType.GARAGE,
+                            location_name=record.location_name,
+                            device_terminal_id=record.device_terminal_id,
+                            payment_type=PaymentType.CASH,
+                            reference_number=record.reference_number,
+                            org_code=record.org_code,
+                            staging_table=record.staging_table,
+                            staging_record_id=record.staging_record_id
+                        )
+                    self.db.add(transaction)                
+                
+                    #record.processed_to_final = True
+                    #record.transaction_id = transaction.id
+                    created_count += 1
+
+                    if (idx + 1) % 500 == 0:
+                        self.db.flush()
+                        self.db.commit()
+                        print(f"Committed batch: {idx + 1} of {len(records)} records processed")
+                
+                except Exception as e:
+                    failed_count += 1
+                    print(f"Error processing ZMS Cash Regular record {record.id}: {e}")
+                    raise
+
+            self.db.flush()
+            self.db.commit()
+            print(f"Committed batch: {idx + 1} of {len(records)} records processed")
+
+            return {
+                "success": True,
+                "records_processed": len(records),
+                "records_created": created_count,
+                "records_failed": failed_count
+            }
+        
+        except Exception as e:
+            self.db.rollback()
+            raise        
+
+
     def process_all_staging_tables(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """Process all staging tables to final transactions"""
         results = {}

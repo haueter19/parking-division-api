@@ -463,6 +463,7 @@ class Transaction(Base):
     source = Column(Enum(DataSourceType), nullable=False, index=True)
     location_type = Column(Enum(LocationType), nullable=False)
     location_name = Column(String(255))
+    location_sub_area = Column(String(100))
     device_terminal_id = Column(String(100), index=True)
     
     # Payment information

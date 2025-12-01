@@ -297,6 +297,16 @@ class ETLProcessor:
                 if len(record.device_id) > 3:
                     record.device_id = record.txnref.split('-')[0]
 
+            for record in records:
+                if record.device_id[0] == 'A':
+                    record.location_sub_area = 'Exit'
+                if record.device_id[0] == 'E':
+                    record.location_sub_area = 'Entry'
+                if record.device_id[0] == 'H':
+                    record.location_sub_area = 'Cashiered'
+                if record.device_id[0] == 'K':
+                    record.location_sub_area = 'POF'
+
             created_count = 0
             failed_count = 0
             
@@ -311,6 +321,7 @@ class ETLProcessor:
                         source=DataSourceType.WINDCAVE,
                         location_type=LocationType.GARAGE,
                         location_name=self.garage_from_station.get(record.device_id), 
+                        location_sub_area=record.location_sub_area,
                         device_terminal_id=record.device_id, 
                         payment_type=self.map_payment_type(record.card_type),
                         reference_number=record.dpstxnref, # Do I need reference number? Is this the best choice?
@@ -421,6 +432,7 @@ class ETLProcessor:
                         source=DataSourceType.PAYMENTS_INSIDER_SALES,
                         location_type=LocationType.GARAGE,
                         location_name=self.location_from_charge_code.get(charge_code),
+                        location_sub_area=self.location_from_charge_code.get(charge_code),
                         device_terminal_id=sales_record.terminal_id,
                         payment_type=self.map_payment_type(sales_record.card_brand),
                         reference_number=payment_record.card_number.replace('*','')+payment_record.authorization_code if payment_record else sales_record.card_number.replace('*','')+sales_record.authorization_code, # probably use invoice if including IPS
@@ -512,6 +524,7 @@ class ETLProcessor:
                         # Need a way to look up the meter type from the pole or terminal
                         location_type=LocationType.MULTI_SPACE_METER if record.pole in ['60010', '60011', '60002', '60005', '60006', '60007', '9501', '60001', '60003', '60004', 'Campus MP'] else LocationType.SINGLE_SPACE_METER,
                         location_name=record.pole,
+                        location_sub_area=record.sub_area,
                         device_terminal_id=record.terminal,
                         payment_type=self.map_payment_type(record.card_type),
                         reference_number=record.transaction_reference,
@@ -599,6 +612,7 @@ class ETLProcessor:
                         source=DataSourceType.IPS_MOBILE,
                         location_type=LocationType.SINGLE_SPACE_METER if record.meter_type == 'MK5' else LocationType.MULTI_SPACE_METER, # Do I need to be more precise?
                         location_name=record.pole,
+                        location_sub_area=record.sub_area,
                         device_terminal_id=record.prid,
                         payment_type=self.map_payment_type(record.partner_name),
                         reference_number=record.prid,
@@ -668,6 +682,7 @@ class ETLProcessor:
                         source=DataSourceType.IPS_CASH,
                         location_type=LocationType.SINGLE_SPACE_METER if record.meter_type == 'MK5' else LocationType.MULTI_SPACE_METER, # Do I need to be more precise
                         location_name=record.pole_ser_no,
+                        location_sub_area=record.sub_area,
                         device_terminal_id=record.terminal,
                         payment_type=PaymentType.CASH,
                         reference_number=str(record.id),
@@ -747,17 +762,17 @@ class ETLProcessor:
                         END Id_Parking,
                         pa.ParkingName, p.Id_Location, l.Name, l.ShortName, TicketNumber,
                         CASE
-                            WHEN l.Name LIKE '%Cash%' THEN 'Cashiered'
-                            WHEN l.Name LIKE '%Pay%' THEN 'POF'
-                            WHEN l.Name like '%Ex%' THEN 'Exit'
-                            WHEN l.Name LIKE '%Entry%' THEN 'Entry'
+                            WHEN l.TxnT2StationAdddress LIKE 'A%' THEN 'Exit'
+                            WHEN l.TxnT2StationAdddress LIKE 'E%' THEN 'Entry'
+                            WHEN l.TxnT2StationAdddress LIKE 'H%' THEN 'Cashiered'
+                            WHEN l.TxnT2StationAdddress LIKE 'K%' THEN 'POF'
                             ELSE 'Unknown'
-                        END As StationType,
+                        END As location_sub_area,
                         l.TxnT2StationAdddress station, p.ParkhouseNumber, p.Amount, p.Amount/100. Amount2, p.Date, p.Time,
                         CONVERT(DATETIME, CONVERT(VARCHAR, CAST(p.Date AS DATE), 120) + ' ' + p.Time) transactin_datetime
-                    from Payments p
-                    left join Location l On (p.Id_Parking=l.Id_Parking AND p.Id_Location=l.Id_Location)
-                    left join ParkingAdmin pa On (p.Id_Parking=pa.Id_Parking)
+                    from Opms.dbo.Payments p
+                    left join Opms.dbo.Location l On (p.Id_Parking=l.Id_Parking AND p.Id_Location=l.Id_Location)
+                    left join Opms.dbo.ParkingAdmin pa On (p.Id_Parking=pa.Id_Parking)
                     where 
                         Date = @dt
                         AND PayMethod = 0
@@ -766,7 +781,7 @@ class ETLProcessor:
                 rebate_group As (
                     select 
                         max(Id_Parking) Id_Parking, max(Id_Location) Id_Location, max(Id_Equipment) Id_Equipment, max(Date) Date, max(Time) Time, TicketId, count(RebateNumber) RebatesApplied, sum(RebateAmount) sumRebateAmount 
-                    from Rebates 
+                    from Opms.dbo.Rebates 
                     where 
                         Date = @dt
                     GROUP BY TicketId
@@ -775,7 +790,7 @@ class ETLProcessor:
                 special_event_entries As (
                     select 
                         Id_Parking, count(*) special_event_entries
-                    from Transactions
+                    from Opms.dbo.Transactions
                     where
                         TransactionDateStamp = @dt
                         AND Parking IN (52, 16, 72, 92, 32, 42)
@@ -798,14 +813,14 @@ class ETLProcessor:
                         ELSE 82172
                     END As org_code,
                     'zms_cash_regular' staging_table, cte.TicketNumber staging_record_id,
-                    cte.StationType station_type, Name LocationName, cte.ParkhouseNumber, cte.Id_Parking, 
+                    cte.location_sub_area, Name LocationName, cte.ParkhouseNumber, cte.Id_Parking, 
                     Amount/100 total_cash, sumRebateAmount sum_rebates, 
                     RebatesApplied n_rebates, COALESCE(se.special_event_entries,0) total_se_entries
                 from cte
                 left join rebate_group r On (cte.TicketNumber=r.TicketId)
                 left join special_event_entries se On (cte.Id_Parking=se.Id_Parking)
-                --group by cte.Id_Parking, cte.StationType --cte.Id_Location
-                order by Id_Parking, StationType""", self.db.get_bind())
+                --group by cte.Id_Parking, cte.location_sub_area --cte.Id_Location
+                order by Id_Parking, location_sub_area""", self.db.get_bind())
 
             created_count = 0
             failed_count = 0
@@ -820,6 +835,7 @@ class ETLProcessor:
                             source=record.source,
                             location_type=LocationType.GARAGE,
                             location_name=record.location_name,
+                            location_sub_area=record.location_sub_area,
                             device_terminal_id=record.device_terminal_id,
                             payment_type=PaymentType.CASH,
                             reference_number=record.reference_number,

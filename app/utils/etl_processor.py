@@ -285,12 +285,9 @@ class ETLProcessor:
                 WindcaveStaging.processed_to_final == False,
                 WindcaveStaging.voided == 0
             )
-            #qry = text("SELECT * FROM app.windcave_staging WHERE processed_to_final = :processed_to_final AND voided = 0")
-            #records = pd.read_sql(qry, self.db.get_bind(), params={'processed_to_final':0})
             
             if file_id:
                 query = query.filter(WindcaveStaging.source_file_id == file_id)
-                #records = records[records['source_file_id']==file_id]
             
             # Query to get the records
             records = query.all()
@@ -299,16 +296,6 @@ class ETLProcessor:
             for record in records:
                 if len(record.device_id) > 3:
                     record.device_id = record.txnref.split('-')[0]
-            #records['txnref'] = records['txnref'].apply(lambda x: x.split('-')[0])
-
-            # Merge on device_id to HousingID to get ChargeCode
-            #records.merge(self.org_lookup_tbl[['HousingID', 'ChargeCode']], left_on='device_id', right_on='HousingID', how='left')
-
-            # Sometimes device_id has a weird value. In this case, use txnref
-            #records.merge(self.org_lookup_tbl[['HousingID', 'ChargeCode']], left_on='txnref', right_on='HousingID', how='left', suffixes=['','_y'])
-            
-            # Fill missing ChargeCode from second merge
-            #records.fillna({'ChargeCode':records['ChargeCode_y']},inplace=True)
 
             created_count = 0
             failed_count = 0
@@ -394,7 +381,7 @@ class ETLProcessor:
             # the sale hasn't been processed and is not voided (for Sales only).
             filters = [
                 PaymentsInsiderSalesStaging.processed_to_final == False,
-                PaymentsInsiderSalesStaging.mid != '8031494050'
+                PaymentsInsiderSalesStaging.mid == '8016090345'
             ]
             
             # Only filter void_ind if processing Sales data (Payments data doesn't have this field)

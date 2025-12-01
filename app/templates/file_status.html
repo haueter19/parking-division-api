@@ -432,6 +432,19 @@
         </div>
     </div>
 
+    <!-- ETL Progress Modal -->
+    <div id="etlProgressModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>ETL Progress</h2>
+                <button class="close-modal" onclick="closeETLModal()">&times;</button>
+            </div>
+            <div style="max-height: 60vh; overflow-y: auto;">
+                <pre id="etlProgressContent" style="font-size:0.9rem; color:#2d3748; white-space:pre-wrap;"></pre>
+            </div>
+        </div>
+    </div>
+
     <script>
         const token = localStorage.getItem('access_token');
         if (!token) {
@@ -627,26 +640,93 @@
         async function processETL(fileId) {
             if (!confirm('Process this file through ETL pipeline?')) return;
 
+            // Open modal to show streaming progress
+            document.getElementById('etlProgressContent').textContent = '';
+            document.getElementById('etlProgressModal').classList.add('show');
+
             try {
-                const response = await fetch(`/api/v1/files/${fileId}/process-etl`, {
-                    method: 'POST',
-                    headers: { 
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
+                const resp = await fetch(`/api/v1/files/${fileId}/process-etl/stream`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
 
-                const data = await response.json();
-                
-                if (response.ok) {
-                    showMessage(data.message, 'success');
-                    loadFiles(currentPage);
-                } else {
-                    showMessage(data.detail || 'Error processing ETL', 'error');
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    appendETLLine(`Error starting ETL: ${err}`);
+                    return;
                 }
+
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+
+                    // SSE payloads are separated by double newlines
+                    let parts = buffer.split('\n\n');
+                    // Keep last partial segment in buffer
+                    buffer = parts.pop();
+
+                    for (const part of parts) {
+                        const line = part.trim();
+                        if (!line) continue;
+                        // Expect lines like: data: {json}
+                        const prefix = 'data:';
+                        let payload = line;
+                        if (payload.startsWith(prefix)) {
+                            payload = payload.slice(prefix.length).trim();
+                        }
+                        try {
+                            const obj = JSON.parse(payload);
+                            if (obj.event === 'error') {
+                                appendETLLine(`ERROR: ${obj.message || JSON.stringify(obj)}`);
+                            } else if (obj.event === 'done') {
+                                appendETLLine(`Done: ${JSON.stringify(obj.result || {})}`);
+                            } else if (obj.event === 'complete') {
+                                appendETLLine('ETL complete');
+                            } else {
+                                // generic progress payload
+                                appendETLLine(JSON.stringify(obj));
+                            }
+                        } catch (e) {
+                            appendETLLine(payload);
+                        }
+                    }
+                }
+
+                // If any remaining buffer, try to parse
+                if (buffer.trim()) {
+                    const payload = buffer.replace(/^data:\s*/, '').trim();
+                    try {
+                        const obj = JSON.parse(payload);
+                        appendETLLine(JSON.stringify(obj));
+                    } catch (e) {
+                        appendETLLine(payload);
+                    }
+                }
+
+                appendETLLine('ETL stream closed.');
+                // Reload table to show updated status
+                loadFiles(currentPage);
+
             } catch (error) {
-                showMessage('Error processing ETL', 'error');
+                appendETLLine('Error processing ETL: ' + (error.message || error));
             }
+        }
+
+        function appendETLLine(text) {
+            const el = document.getElementById('etlProgressContent');
+            const time = new Date().toLocaleTimeString();
+            el.textContent += `[${time}] ${text}\n`;
+            // Auto-scroll
+            el.parentElement.scrollTop = el.parentElement.scrollHeight;
+        }
+
+        function closeETLModal() {
+            document.getElementById('etlProgressModal').classList.remove('show');
         }
 
         async function showDetails(fileId) {

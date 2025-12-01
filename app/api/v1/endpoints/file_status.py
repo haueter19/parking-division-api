@@ -1,8 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func, case
 from typing import Optional, List
 from datetime import datetime
+import threading
+import queue
+import asyncio
+import json
+from starlette.responses import StreamingResponse
 
 from app.db.session import get_db
 from app.api.dependencies import get_current_active_user
@@ -15,16 +20,130 @@ from app.models.schemas import (
 )
 from app.utils.etl_processor import ETLProcessor, DataLoader
 from app.utils import etl_cache
+from db_manager import ConnectionManager
 
 router = APIRouter()
+
+
+@router.get("/{file_id}/process-etl/stream")
+async def stream_process_etl(
+    request: Request,
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Run ETL for a file and stream progress updates as server-sent events.
+
+    Uses a background thread to run the synchronous ETLProcessor while
+    streaming JSON payloads as SSE to the client.
+    """
+    if current_user.role not in [UserRole.MANAGER, UserRole.ADMIN]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+
+    # Validate file exists and has been loaded to staging
+    file_record = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+    if not file_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"File {file_id} not found")
+
+    if not file_record.is_processed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File must be loaded to staging before ETL processing")
+
+    # Ensure not already running
+    active_log = db.query(ETLProcessingLog).filter(
+        ETLProcessingLog.source_file_id == file_id,
+        ETLProcessingLog.status == 'running'
+    ).first()
+    if active_log:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="ETL processing is already running for this file")
+
+    # Use startup cache
+    org_code_cache = etl_cache.get_org_code_cache()
+    location_cache = etl_cache.get_location_from_charge_code()
+
+    q = queue.Queue()
+
+    def progress_cb(payload: dict):
+        try:
+            q.put_nowait(payload)
+        except Exception:
+            pass
+
+    def run_etl():
+        try:
+            processor = ETLProcessor(db, org_code_cache=org_code_cache, location_from_charge_code=location_cache, progress_callback=progress_cb)
+            
+            source_table_map = {
+                DataSourceType.WINDCAVE: "windcave",
+                DataSourceType.PAYMENTS_INSIDER_SALES: "payments_insider",
+                DataSourceType.PAYMENTS_INSIDER_PAYMENTS: "payments_insider",
+                DataSourceType.IPS_CC: "ips_cc",
+                DataSourceType.IPS_MOBILE: "ips_mobile",
+                DataSourceType.IPS_CASH: "ips_cash"
+            }
+            source_table = source_table_map.get(file_record.data_source_type)
+            if not source_table:
+                q.put({"event": "error", "message": f"No ETL processor available for: {file_record.data_source_type}"})
+                return
+
+            # Call the right processor
+            if source_table == "windcave":
+                result = processor.process_windcave(file_id)
+            elif source_table == "payments_insider":
+                result = processor.process_payments_insider(file_id)
+            elif source_table == "ips_cc":
+                result = processor.process_ips_cc(file_id)
+            elif source_table == "ips_mobile":
+                result = processor.process_ips_mobile(file_id)
+            elif source_table == "ips_cash":
+                result = processor.process_ips_cash(file_id)
+            else:
+                q.put({"event": "error", "message": f"Unknown source table: {source_table}"})
+                return
+
+            q.put({"event": "done", "result": result})
+
+        except Exception as e:
+            try:
+                q.put({"event": "error", "message": str(e)})
+            except Exception:
+                pass
+
+    thread = threading.Thread(target=run_etl, daemon=True)
+    thread.start()
+
+    async def event_generator():
+        # Stream queue items as SSE
+        while thread.is_alive() or not q.empty():
+            try:
+                item = q.get(timeout=0.25)
+            except queue.Empty:
+                # If client disconnects, stop
+                if await request.is_disconnected():
+                    break
+                await asyncio.sleep(0.1)
+                continue
+
+            # Format as SSE data event (JSON payload)
+            try:
+                data = json.dumps(item)
+            except Exception:
+                data = json.dumps({"event": "error", "message": "Failed to serialize progress payload"})
+
+            yield f"data: {data}\n\n"
+
+        # Ensure final event
+        yield f"data: {json.dumps({"event": "complete"})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/status", response_model=FileStatusListResponse)
 async def get_files_status(
     skip: int = 0,
     limit: int = 100,
-    data_source_type: Optional[DataSourceType] = None,
-    status_filter: Optional[str] = None,  # 'complete', 'not_complete', 'failed', 'not_started'
+    # Accept string here so UI can send either enum value (e.g. 'pi_sales') or enum NAME (e.g. 'PAYMENTS_INSIDER_SALES')
+    data_source_type: Optional[str] = None,
+    status_filter: Optional[str] = None,  # 'complete', 'incomplete', 'failed', 'not_started'
     sort_by: str = "id",  # Column to sort by
     sort_order: str = "desc",  # 'asc' or 'desc'
     db: Session = Depends(get_db),
@@ -43,23 +162,48 @@ async def get_files_status(
     # Build filter clauses first
     data_source_filter = ""
     if data_source_type:
-        data_source_filter = f"AND uf.data_source_type = '{data_source_type.value}'"
+        src = data_source_type.strip()
+
+        # Validate and map to known enum member if possible
+        matched = None
+        # First, check if matches enum NAME
+        if src in DataSourceType.__members__:
+            matched = DataSourceType[src]
+        else:
+            # Then check if matches enum value
+            for member in DataSourceType:
+                if member.value == src:
+                    matched = member
+                    break
+
+        if not matched:
+            # Reject unknown data source to avoid malformed SQL
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown data_source_type: {data_source_type}")
+
+        # Build SQL that matches either stored enum NAME or VALUE in DB to handle both storage formats
+        data_source_filter = f"AND (uf.data_source_type = '{matched.value}' OR uf.data_source_type = '{matched.name}')"
     
-    status_filter_clause = ""
+    # Separate WHERE (non-aggregate) and HAVING (aggregate) clauses
+    where_clauses = []
+    having_clauses = []
     if status_filter:
         if status_filter == 'complete':
-            status_filter_clause = "AND MAX(CASE WHEN etl.status = 'completed' THEN 1 ELSE 0 END) = 1"
+            # aggregate check belongs in HAVING
+            having_clauses.append("MAX(CASE WHEN etl.status = 'completed' THEN 1 ELSE 0 END) = 1")
         elif status_filter == 'not_complete':
-            status_filter_clause = """
-            AND uf.records_processed IS NOT NULL 
-            AND MAX(CASE WHEN etl.status = 'completed' THEN 1 ELSE 0 END) = 0
-            """
+            # Needs both non-aggregate (records_processed not null) and aggregate (no completed runs)
+            where_clauses.append("uf.records_processed IS NOT NULL")
+            having_clauses.append("MAX(CASE WHEN etl.status = 'completed' THEN 1 ELSE 0 END) = 0")
         elif status_filter == 'failed':
-            status_filter_clause = "AND MAX(CASE WHEN etl.status = 'failed' THEN 1 ELSE 0 END) = 1"
+            having_clauses.append("MAX(CASE WHEN etl.status = 'failed' THEN 1 ELSE 0 END) = 1")
         elif status_filter == 'not_started':
-            status_filter_clause = "AND uf.records_processed IS NULL"
+            where_clauses.append("uf.records_processed IS NULL")
     
     # Build the complex query with formatted filter clauses
+    # build WHERE and HAVING clauses into query string
+    where_fragment = "\n        " + "\n        ".join([data_source_filter] + [f"AND {c}" for c in where_clauses]) if (data_source_filter or where_clauses) else ""
+    having_fragment = "\n    HAVING " + (" AND ".join(having_clauses)) if having_clauses else ""
+
     query_string = """
     SELECT
         uf.id,
@@ -98,17 +242,17 @@ async def get_files_status(
     FROM app.uploaded_files uf
     LEFT JOIN app.etl_processing_log etl ON (uf.id = etl.source_file_id)
     WHERE 1=1
-        {data_source_filter}
-        {status_filter}
+        {where_fragment}
     GROUP BY 
         uf.id, uf.original_filename, uf.file_size, uf.data_source_type,
         uf.upload_date, uf.processed_at, uf.records_processed, uf.description, uf.uploaded_by
+    {having_fragment}
     ORDER BY uf.{sort_col} {sort_dir}
     OFFSET :skip ROWS
     FETCH NEXT :limit ROWS ONLY
     """.format(
-        data_source_filter=data_source_filter,
-        status_filter=status_filter_clause,
+        where_fragment=where_fragment,
+        having_fragment=having_fragment,
         sort_col=sort_by,
         sort_dir=sort_order.upper()
     )
@@ -125,17 +269,29 @@ async def get_files_status(
     rows = result.fetchall()
     
     # Get total count for pagination
-    count_query_string = """
-    SELECT COUNT(DISTINCT uf.id)
-    FROM app.uploaded_files uf
-    LEFT JOIN app.etl_processing_log etl ON (uf.id = etl.source_file_id)
-    WHERE 1=1
-        {data_source_filter}
-        {status_filter}
-    """.format(
-        data_source_filter=data_source_filter,
-        status_filter=status_filter_clause
-    )
+    if having_clauses:
+        # Need to count rows after grouping+having; use a subquery
+        having_expr = ' AND '.join(having_clauses)
+        count_query_string = """
+        SELECT COUNT(*) FROM (
+            SELECT uf.id
+            FROM app.uploaded_files uf
+            LEFT JOIN app.etl_processing_log etl ON (uf.id = etl.source_file_id)
+            WHERE 1=1
+                {where_fragment}
+            GROUP BY uf.id
+            HAVING {having}
+        ) AS t
+        """.format(where_fragment=where_fragment, having=having_expr)
+    else:
+        count_query_string = """
+        SELECT 
+            COUNT(DISTINCT uf.id)
+        FROM app.uploaded_files uf
+        LEFT JOIN app.etl_processing_log etl ON (uf.id = etl.source_file_id)
+        WHERE 1=1
+            {where_fragment}
+        """.format(where_fragment=where_fragment)
 
     count_query = text(count_query_string)
     total = db.execute(count_query).scalar()
@@ -311,8 +467,11 @@ async def process_file_to_final(
         org_code_cache = etl_cache.get_org_code_cache()
         location_cache = etl_cache.get_location_cache()
         
+        cnxn = ConnectionManager()
+
         processor = ETLProcessor(
             db,
+            traffic_db=cnxn.get_engine('Traffic'),
             org_code_cache=org_code_cache,
             location_from_charge_code=location_cache
         )

@@ -127,9 +127,9 @@ async def upload_file(
             file_path=file_path,
             file_size=file_size,
             file_hash=file_hash,
-            data_source_type=data_source_type,
+            data_source_type=data_source_type.value,
             uploaded_by=current_user.id,
-            description=extract_date_from_filename(file.filename)+f" - {description}" if description else extract_date_from_filename(file.filename)
+            description=f"{extract_date_from_filename(file.filename)} - {description}" if description else extract_date_from_filename(file.filename)
         )
         
         db.add(uploaded_file_record)

@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
-from app.db.session import init_db, SessionLocalTraffic
+from app.db.session import init_db, SessionLocalTraffic, SessionLocal
 from app.config import settings
 from app.utils import etl_cache
 import os
@@ -60,10 +60,15 @@ async def startup_event():
     
     # Initialize ETL lookup caches
     try:
-        #get_traffic_db()
+        # Open primary and traffic DB sessions and provide them to cache initializer
         traffic_db = SessionLocalTraffic()
-        success = etl_cache.initialize_etl_cache(None, traffic_db=traffic_db)
-        traffic_db.close()
+        primary_db = SessionLocal()
+        try:
+            success = etl_cache.initialize_etl_cache(primary_db, traffic_db=traffic_db)
+        finally:
+            # Ensure both sessions are closed
+            traffic_db.close()
+            primary_db.close()
         
         if success:
             print("ETL caches initialized successfully")
@@ -107,6 +112,18 @@ async def file_status_page(request: Request):
         request=request,
         name="file_status.html"
     )
+
+
+@app.get("/reports/settle", response_class=HTMLResponse)
+async def settle_report_page(request: Request):
+    """Serve the settlement report page - date-range selector and results"""
+    return templates.TemplateResponse(request=request, name="settle_report.html")
+
+
+@app.get("/reports/sources", response_class=HTMLResponse)
+async def settle_by_source_page(request: Request):
+    """Serve the pivoted settled-by-source report page"""
+    return templates.TemplateResponse(request=request, name="settle_by_source.html")
 
 if __name__ == "__main__":
     import uvicorn

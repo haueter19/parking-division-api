@@ -29,4 +29,4 @@ def extract_date_from_filename(filename: str) -> datetime | None:
         except ValueError as e:
             print(f"Error converting {date_str}: {e}\n")
     
-    return None
+    return ''

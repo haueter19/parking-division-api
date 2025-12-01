@@ -43,6 +43,8 @@ def initialize_etl_cache(db: Session, traffic_db: Optional[Session] = None) -> b
         
         # Initialize org code cache
         org_code_df = _load_org_code_cache(traffic_db)
+        garage_from_station = _load_garage_cache(db)
+        
         if org_code_df is not None:
             _etl_cache['org_code_cache'] = org_code_df
             logger.info(f"Loaded org code cache with {len(org_code_df)} records")
@@ -74,7 +76,8 @@ def initialize_etl_cache(db: Session, traffic_db: Optional[Session] = None) -> b
             _etl_cache['charge_code_from_housing_id'] = charge_code_from_housing_id
             _etl_cache['charge_code_from_terminal_id'] = charge_code_from_terminal_id
             _etl_cache['location_from_charge_code'] = location_from_charge_code
-            _etl_cache['garage_from_station'] = _load_garage_cache(db)
+            _etl_cache['garage_from_station'] = garage_from_station
+            
             
             
         else:
@@ -204,8 +207,8 @@ def _load_garage_cache(db: Optional[Session]) -> Optional[Dict[str, str]]:
             SELECT 
                 Location.TxnT2StationAdddress as station,
                 pa.ParkingName as garage
-            FROM Location
-            INNER JOIN ParkingAdmin pa On (Location.Id_Parking=pa.Id_Parking)
+            FROM Opms.dbo.Location
+            INNER JOIN Opms.dbo.ParkingAdmin pa On (Location.Id_Parking=pa.Id_Parking)
         """
         df = pd.read_sql(query, db.get_bind())
         if df.empty:

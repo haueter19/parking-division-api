@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Settlement Report - Parking Division</title>
+    <style>
+        body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial; background: #f3f4f6; padding: 24px; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); max-width: 1200px; margin: 0 auto; }
+        h1 { margin-bottom: 6px; }
+        .controls { display:flex; gap: 12px; align-items:center; margin-bottom:16px; }
+        label { font-weight: 600; font-size: 0.9rem; color: #374151; }
+        input[type=date] { padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 6px; }
+        button { padding: 10px 14px; border-radius: 6px; border: none; background:#2563eb; color:white; font-weight:700; cursor:pointer }
+        .results { margin-top: 18px; }
+        table { width:100%; border-collapse: collapse; }
+        th, td { padding: 8px 10px; text-align:left; border-bottom: 1px solid #e5e7eb; }
+        thead th { background: #f8fafc; font-weight:700; }
+        .kpi { display:inline-block; padding: 6px 10px; border-radius: 8px; background:#eef2ff; margin-right: 8px; font-weight:700; }
+        .note { color:#6b7280; font-size:0.9rem }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>Settlement Summary by Location / Org / Payment Type</h1>
+    <div class="note">Select a date range (settle_date) to aggregate settled transactions.</div>
+
+    <div style="height:12px"></div>
+
+    <div class="controls">
+        <div>
+            <label for="startDate">Start date</label><br>
+            <input id="startDate" type="date" />
+        </div>
+        <div>
+            <label for="endDate">End date</label><br>
+            <input id="endDate" type="date" />
+        </div>
+        <div>
+            <label>&nbsp;</label><br>
+            <button onclick="loadReport()">Generate Report</button>
+        </div>
+        <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+            <span id="loading" style="display:none">Loading...</span>
+            <a href="/reports/sources">View by Source</a>
+        </div>
+    </div>
+
+    <div class="results">
+        <div id="summaryKPIs" style="margin-bottom: 12px;"></div>
+        <div id="reportTableContainer"></div>
+    </div>
+</div>
+
+<script>
+    const token = localStorage.getItem('access_token');
+    if (!token) { window.location.href = '/'; }
+
+    (function setDefaultDates(){
+      const today = new Date();
+      const end = new Date(today);
+      end.setDate(end.getDate() - 1);
+      const start = new Date(today);
+      start.setDate(start.getDate() - 1);
+
+      // Format YYYY-MM-DD
+      const asDate = d => d.toISOString().split('T')[0];
+      document.getElementById('startDate').value = asDate(start);
+      document.getElementById('endDate').value = asDate(end);
+    })();
+
+    async function loadReport() {
+        const s = document.getElementById('startDate').value;
+        const e = document.getElementById('endDate').value;
+        if (!s || !e) { alert('Please select both start and end dates'); return; }
+
+        document.getElementById('loading').style.display = 'inline';
+        document.getElementById('reportTableContainer').innerHTML = '';
+        document.getElementById('summaryKPIs').innerHTML = '';
+
+        try {
+            const resp = await fetch(`/api/v1/reports/settle?start_date=${encodeURIComponent(s)}&end_date=${encodeURIComponent(e)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!resp.ok) {
+                const text = await resp.text();
+                alert('Error: ' + text);
+                document.getElementById('loading').style.display = 'none';
+                return;
+            }
+
+            const data = await resp.json();
+            renderReport(data);
+
+        } catch (err) {
+            alert('Error loading report: ' + (err.message || err));
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+        }
+    }
+
+    function renderReport(payload) {
+        // payload: { totals: {...}, groups: [{location_type, org_code, payment_type, count, total_settled}] }
+        const kpiEl = document.getElementById('summaryKPIs');
+        kpiEl.innerHTML = `
+            <span class="kpi">Groups: ${payload.groups.length}</span>
+            <span class="kpi">Total Txns: ${payload.totals.total_transactions}</span>
+            <span class="kpi">Total Settled: $${(payload.totals.total_settled || 0).toFixed(2)}</span>
+        `;
+
+        const rows = payload.groups.map(g => `
+            <tr>
+                <td>${g.location_type}</td>
+                <td>${g.source}</td>
+                <td>${g.location_name ?? ''}</td>
+                <td>${g.org_code ?? ''}</td>
+                <td>${g.count}</td>
+                <td>$${(g.total_settled || 0).toFixed(2)}</td>
+            </tr>
+        `).join('');
+
+        const html = `
+            <table>
+                <thead><tr><th>Location Type</th><th>Source</th><th>Location</th><th>Org Code</th><th>Count</th><th>Total Settled</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        `;
+
+        document.getElementById('reportTableContainer').innerHTML = html;
+    }
+</script>
+</body>
+</html>

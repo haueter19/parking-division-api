@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Settled Transactions by Source</title>
+  <style>
+    body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial; background:#f3f4f6; padding:24px }
+    .card{ background:white; padding:18px; border-radius:12px; max-width:1200px; margin:0 auto; box-shadow:0 6px 18px rgba(0,0,0,0.08)}
+    table{ width:100%; border-collapse:collapse; margin-top:12px }
+    th,td{ padding:8px 10px; border-bottom:1px solid #e6edf2; text-align:center }
+    thead th{ background:#f8fafc; font-weight:700 }
+    .cell-0{ background:#fee2e2; color:#9b1c1c; } /* red tint for zero */
+    .cell-pos{ background:#d1fae5; color:#065f46; } /* green tint for >0 */
+    .controls{ display:flex; gap:12px; align-items:center }
+    input[type=date]{ padding:8px; border-radius:6px; border:1px solid #e5e7eb }
+    button{ background:#2563eb; color:white; padding:8px 12px; border-radius:6px; border:none; cursor:pointer }
+    .note{ color:#6b7280 }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Settled Transactions by Source</h2>
+    <div class="note">Daily counts of settled transactions pivoted by source.</div>
+
+    <div style="height:12px"></div>
+
+    <div class="controls">
+      <div>
+        <label>Start</label><br>
+        <input id="startDate" type="date" />
+      </div>
+      <div>
+        <label>End</label><br>
+        <input id="endDate" type="date" />
+      </div>
+      <div>
+        <label>&nbsp;</label><br>
+        <button id="run">Run</button>
+      </div>
+      <div style="margin-left:auto"><a href="/reports/settle">Settle</a> <span id="status" style="color:#6b7280"></span></div>
+    </div>
+
+    <div id="tableContainer"></div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('access_token');
+    if (!token) window.location.href = '/';
+
+    // Default start/end dates: start = 30 days ago, end = yesterday
+    (function setDefaultDates(){
+      const today = new Date();
+      const end = new Date(today);
+      end.setDate(end.getDate() - 1);
+      const start = new Date(today);
+      start.setDate(start.getDate() - 30);
+
+      // Format YYYY-MM-DD
+      const asDate = d => d.toISOString().split('T')[0];
+      document.getElementById('startDate').value = asDate(start);
+      document.getElementById('endDate').value = asDate(end);
+    })();
+
+    document.getElementById('run').addEventListener('click', async () => {
+      const s = document.getElementById('startDate').value;
+      const e = document.getElementById('endDate').value;
+      if (!s || !e) { alert('Select start and end dates'); return; }
+
+      document.getElementById('status').textContent = 'Loading...';
+      const resp = await fetch(`/api/v1/reports/verify?start_date=${encodeURIComponent(s)}&end_date=${encodeURIComponent(e)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        alert('Error: ' + text);
+        document.getElementById('status').textContent = '';
+        return;
+      }
+
+      const data = await resp.json();
+      renderTable(data);
+      document.getElementById('status').textContent = `Rows: ${data.rows.length}`;
+    });
+
+    function renderTable(payload) {
+      // payload.rows is an array of objects: { settle_date, WINDCAVE, PAYMENTS_INSIDER_SALES, IPS_CC, IPS_MOBILE, IPS_CASH }
+      if (!payload.rows || payload.rows.length === 0) {
+        document.getElementById('tableContainer').innerHTML = '<div style="padding:18px;color:#6b7280">No rows returned</div>';
+        return;
+      }
+
+      const cols = Object.keys(payload.rows[0]);
+      const head = `<thead><tr>${cols.map(c => `<th>${/date/i.test(c) ? 'Settle Date' : c}</th>`).join('')}</tr></thead>`;
+      const body = payload.rows.map(r => `<tr>${cols.map(c => {
+        // Treat any column containing 'date' as a date string (not numeric)
+        if (/date/i.test(c)) {
+          const v = r[c] || '';
+          return `<td>${v}</td>`;
+        }
+
+        const vnum = r[c] == null ? 0 : Number(r[c]);
+        const cls = vnum > 0 ? 'cell-pos' : 'cell-0';
+        return `<td class="${cls}">${vnum}</td>`
+      }).join('')}</tr>`).join('');
+
+      document.getElementById('tableContainer').innerHTML = `<table>${head}<tbody>${body}</tbody></table>`;
+    }
+
+  </script>
+</body>
+</html>

@@ -306,6 +306,8 @@ class ETLProcessor:
                     record.location_sub_area = 'Cashiered'
                 if record.device_id[0] == 'K':
                     record.location_sub_area = 'POF'
+                else:
+                    record.location_sub_area = None
 
             created_count = 0
             failed_count = 0
@@ -769,13 +771,14 @@ class ETLProcessor:
                             ELSE 'Unknown'
                         END As location_sub_area,
                         l.TxnT2StationAdddress station, p.ParkhouseNumber, p.Amount, p.Amount/100. Amount2, p.Date, p.Time,
-                        CONVERT(DATETIME, CONVERT(VARCHAR, CAST(p.Date AS DATE), 120) + ' ' + p.Time) transactin_datetime
+                        CONVERT(DATETIME, CONVERT(VARCHAR, CAST(p.Date AS DATE), 120) + ' ' + p.Time) transaction_datetime
                     from Opms.dbo.Payments p
                     left join Opms.dbo.Location l On (p.Id_Parking=l.Id_Parking AND p.Id_Location=l.Id_Location)
                     left join Opms.dbo.ParkingAdmin pa On (p.Id_Parking=pa.Id_Parking)
                     where 
                         Date = @dt
                         AND PayMethod = 0
+                        AND l.TxnT2StationAdddress NOT LIKE 'A%'
                 ),-- select * from cte
                 -- Pull rebates from the same date. Group by TicketID to get the sum of any rebates used.
                 rebate_group As (
@@ -785,22 +788,10 @@ class ETLProcessor:
                     where 
                         Date = @dt
                     GROUP BY TicketId
-                ), 
-                -- 
-                special_event_entries As (
-                    select 
-                        Id_Parking, count(*) special_event_entries
-                    from Opms.dbo.Transactions
-                    where
-                        TransactionDateStamp = @dt
-                        AND Parking IN (52, 16, 72, 92, 32, 42)
-                        AND TransactionType = 20
-                        AND PaymentMethod = 0
-                    group by Id_Parking
                 )
                 select
-                    cte.transactin_datetime transaction_date, Amount/100 - COALESCE(sumRebateAmount,0) transaction_amount, 
-                    CONVERT(VARCHAR, CAST(cte.transactin_datetime AS DATE), 120) settle_date, Amount/100 - COALESCE(sumRebateAmount,0) settle_amount, 
+                    cte.transaction_datetime transaction_date, Amount/100 - COALESCE(sumRebateAmount,0) settle_amount, 
+                    CONVERT(VARCHAR, CAST(cte.transaction_datetime AS DATE), 120) settle_date, Amount/100 - COALESCE(sumRebateAmount,0) settle_amount, 
                     'zms_cash_regular' source, 'GARAGE' location_type, ParkingName as location_name, station device_terminal_id, 'CASH' as payment_type, cte.TicketNumber reference_number,
                     CASE
                         WHEN station LIKE '_1_' THEN 82002
@@ -814,12 +805,10 @@ class ETLProcessor:
                     END As org_code,
                     'zms_cash_regular' staging_table, cte.TicketNumber staging_record_id,
                     cte.location_sub_area, Name LocationName, cte.ParkhouseNumber, cte.Id_Parking, 
-                    Amount/100 total_cash, sumRebateAmount sum_rebates, 
-                    RebatesApplied n_rebates, COALESCE(se.special_event_entries,0) total_se_entries
+                    Amount/100 transaction_amount, COALESCE(sumRebateAmount, 0) sum_rebates, 
+                    COALESCE(RebatesApplied, 0) n_rebates
                 from cte
                 left join rebate_group r On (cte.TicketNumber=r.TicketId)
-                left join special_event_entries se On (cte.Id_Parking=se.Id_Parking)
-                --group by cte.Id_Parking, cte.location_sub_area --cte.Id_Location
                 order by Id_Parking, location_sub_area""", self.db.get_bind())
 
             created_count = 0

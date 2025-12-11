@@ -1038,6 +1038,9 @@ class DataLoader:
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
         
+        # --- Remove transactions from other agencies ---
+        df = df[df['group_account'].isin(['CityofMadison_Att', 'CityofMadison_Unatt'])]
+
         # --- Remove voided transactions ---
         df = df[df['voided'] == 0]
 

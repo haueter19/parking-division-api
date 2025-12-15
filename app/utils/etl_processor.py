@@ -291,6 +291,7 @@ class ETLProcessor:
             
             # Query to get the records
             records = query.all()
+            total_records = len(records)
 
             # For any device_id with len > 3, use the first part of txnref
             for record in records:
@@ -298,19 +299,22 @@ class ETLProcessor:
                     record.device_id = record.txnref.split('-')[0]
 
             for record in records:
-                if record.device_id[0] == 'A':
+                if record.device_id[0].lower() == 'a':
                     record.location_sub_area = 'Exit'
-                if record.device_id[0] == 'E':
+                if record.device_id[0].lower() == 'e':
                     record.location_sub_area = 'Entry'
-                if record.device_id[0] == 'H':
+                if record.device_id[0].lower() == 'h':
                     record.location_sub_area = 'Cashiered'
-                if record.device_id[0] == 'K':
+                if record.device_id[0].lower() == 'k':
                     record.location_sub_area = 'POF'
-                else:
+                if record.device_id[0].lower() not in ['a', 'e', 'h', 'k']:
                     record.location_sub_area = None
 
             created_count = 0
             failed_count = 0
+
+            # Track record-transaction pairs for the current batch
+            batch_pairs = []
             
             # Create transaction records
             for idx, record in enumerate(records):
@@ -333,16 +337,34 @@ class ETLProcessor:
                     )
                     
                     self.db.add(transaction)
-                    #self.db.flush()
                     
-                    # Update staging record
+                    # Mark as processed
                     record.processed_to_final = True
-                    record.transaction_id = transaction.id
+                    
+                    # Keep track of this pair for later
+                    batch_pairs.append((record, transaction))
+                    
+                    # Increment created count
                     created_count += 1
                 
+                    # Batch commit
                     if (idx +1) % self.BATCH_SIZE == 0:
+                        # Flush to get all transaction IDs for this batch
                         self.db.flush()
+
+                        # Now link all staging records to their transactions
+                        for staging_record, txn in batch_pairs:
+                            staging_record.transaction_id = txn.id
+                    
+                        # Clear the batch tracker
+                        batch_pairs = []
+                        
+                        # Report progress to etl_processing_table
+                        self._update_log(log_entry, idx+1, created_count, 0, failed_count)
+
+                        # Commit batch
                         self.db.commit()
+
                         # Report progress after each batch
                         self._report_progress({
                             "source": "windcave",
@@ -357,8 +379,19 @@ class ETLProcessor:
                     failed_count += 1
                     print(f"Error processing Windcave record {record.id}: {e}")
             
-            self.db.flush()
-            self.db.commit()
+            # Final commit for any remaining records (not a full batch)
+            if batch_pairs:  # If there are unpaired records
+                self.db.flush()
+            
+                # Link remaining records to transactions
+                for staging_record, txn in batch_pairs:
+                    staging_record.transaction_id = txn.id
+                
+                self._update_log(log_entry, len(records), created_count, 0, failed_count)
+                self.db.commit()
+                print(f"Committed final batch: {len(records)} of {total_records} records processed")
+            
+            # Mark as complete
             self._complete_log(log_entry, len(records), created_count, 0, failed_count)
             
             return {
@@ -937,8 +970,28 @@ class ETLProcessor:
         self.db.flush()
         return log_entry
     
-    def _complete_log(self, log_entry: ETLProcessingLog, processed: int, 
-                     created: int, updated: int, failed: int):
+    def _update_log(self, log_entry: ETLProcessingLog, processed: int, created: int, updated: int, failed: int):
+        """
+        Update log entry with current progress during batch processing.
+        Updates running totals without changing status from 'running'.
+        
+        Args:
+            log_entry: The ETLProcessingLog entry being updated
+            processed: Total records processed so far
+            created: Total records successfully created so far
+            failed: Total records that failed so far
+        """
+        log_entry.records_processed = processed
+        log_entry.records_created = created
+        log_entry.records_updated = updated
+        log_entry.records_failed = failed
+        # Status stays "running" - will be updated by _complete_log() or _fail_log()
+        
+        # Commit the log update in the same transaction as the batch
+        # This ensures consistency between data and log
+        self.db.flush()
+    
+    def _complete_log(self, log_entry: ETLProcessingLog, processed: int, created: int, updated: int, failed: int):
         """Complete a processing log entry with status based on record counts"""
         log_entry.end_time = datetime.now()
         log_entry.records_processed = processed
@@ -1192,6 +1245,9 @@ class DataLoader:
                 
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
+
+        # --- Remove .0 from Pole Ser No if present ---
+        df['pole'] = df['pole'].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
         
         # --- Convert to list of dictionaries ---
         records = df.to_dict(orient="records")
@@ -1254,6 +1310,9 @@ class DataLoader:
                 
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
+
+        # --- Remove .0 from Pole Ser No if present ---
+        df['pole'] = df['pole'].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
         
         # --- Convert to list of dictionaries ---
         records = df.to_dict(orient="records")
@@ -1316,6 +1375,9 @@ class DataLoader:
                 
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
+
+        # --- Remove .0 from Pole Ser No if present ---
+        df['pole_ser_no'] = df['pole_ser_no'].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
         
         # --- Convert to list of dictionaries ---
         records = df.to_dict(orient="records")

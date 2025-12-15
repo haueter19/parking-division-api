@@ -602,7 +602,7 @@
             }
             
             // Process ETL button
-            if (file.needs_etl) {
+            if (file.needs_etl && file.data_source_type !== 'pi_payments') {
                 actions += `<button class="action-btn btn-process" onclick="processETL(${file.id})">Process ETL</button>`;
             }
             

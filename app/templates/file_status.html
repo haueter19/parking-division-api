@@ -558,7 +558,7 @@
                             ${formatDataSource(file.data_source_type)}
                         </span>
                     </td>
-                    <td>${new Date(file.upload_date).toLocaleString()}</td>
+                    <td>${new Date(file.upload_date)}</td>
                     <td>
                         <span class="status-badge status-${file.status}">
                             ${formatStatus(file.status)}
@@ -602,7 +602,7 @@
             }
             
             // Process ETL button
-            if (file.can_process && file.needs_etl) {
+            if (file.needs_etl) {
                 actions += `<button class="action-btn btn-process" onclick="processETL(${file.id})">Process ETL</button>`;
             }
             

@@ -150,8 +150,8 @@ def _load_org_code_cache(traffic_db: Optional[Session]) -> Optional[pd.DataFrame
             FROM cc_terminals
             ORDER BY TerminalID
             """, traffic_db.get_bind())
-        return org_lookup_tbl if not org_lookup_tbl.empty else None
         
+        return org_lookup_tbl if not org_lookup_tbl.empty else None        
     except Exception as e:
         logger.error(f"Error loading org code cache: {e}")
         return None

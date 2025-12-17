@@ -452,11 +452,16 @@ class ETLProcessor:
             created_count = 0
             failed_count = 0
             
+            print( f"Processing {len(records)} Payments Insider records...")
             for idx, (sales_record, payment_record) in enumerate(records):
                 # Look up charge code from terminal ID and transaction date
-                charge_code = self.org_code_cache[(self.org_code_cache['TerminalID']==sales_record.terminal_id) &
+                try:
+                    charge_code = self.org_code_cache[(self.org_code_cache['TerminalID']==sales_record.terminal_id) &
                                     (self.org_code_cache['DateAssigned'] <= sales_record.transaction_datetime) &
                                     (self.org_code_cache['DateRemoved'] > sales_record.transaction_datetime)]['ChargeCode'].iloc[0]
+                except Exception:
+                    print(idx, sales_record.terminal_id, sales_record.transaction_datetime)
+                    raise
                 
                 try:
                     transaction = Transaction(
@@ -1154,10 +1159,15 @@ class DataLoader:
         
         for col in int_columns:
             if col in df.columns:
-                # Convert to nullable integer type or replace NaN with None
+                # Create a mask for non-null values
+                mask = df[col].notna()
+                
+                # Only process if there are non-null values
+                if mask.any():
+                    df.loc[mask, col] = df.loc[mask, col].astype(int)
+                
+                # Replace NaN with None after conversion
                 df[col] = df[col].replace({pd.NA: None, np.nan: None})
-                # Convert to int where not None
-                df.loc[df[col].notna(), col] = df[col].loc[df[col].notna()].astype(int)
         
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})

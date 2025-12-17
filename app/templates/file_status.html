@@ -246,6 +246,17 @@
             transition: width 0.3s ease;
         }
 
+        .progress-fill.processing {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #667eea 100%);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -100% 0; }
+            100% { background-position: 100% 0; }
+        }
+
         .error-message {
             color: #dc2626;
             font-size: 0.85rem;
@@ -436,11 +447,11 @@
     <div id="etlProgressModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>ETL Progress</h2>
+                <h2>ETL Processing Log</h2>
                 <button class="close-modal" onclick="closeETLModal()">&times;</button>
             </div>
-            <div style="max-height: 80vh; overflow-y: auto;">
-                <pre id="etlProgressContent" style="font-size:0.9rem; color:#2d3748; white-space:pre-wrap;"></pre>
+            <div style="max-height: 60vh; overflow-y: auto;">
+                <pre id="etlProgressContent" style="font-size:0.85rem; color:#2d3748; white-space:pre-wrap;"></pre>
             </div>
         </div>
     </div>
@@ -602,7 +613,7 @@
             }
             
             // Process ETL button
-            if (file.needs_etl && file.data_source_type !== 'pi_payments') {
+            if (file.needs_etl) {
                 actions += `<button class="action-btn btn-process" onclick="processETL(${file.id})">Process ETL</button>`;
             }
             
@@ -637,10 +648,41 @@
             }
         }
 
+        function findRowElements(fileId) {
+            /**
+             * Find the table row and its cells for a given file ID
+             * Returns: { row, progressCell, progressBar } or null if not found
+             */
+            const rows = document.querySelectorAll('#filesTable tr');
+            
+            for (const row of rows) {
+                const firstCell = row.querySelector('td:first-child');
+                if (firstCell && firstCell.textContent.trim() == fileId) {
+                    const progressCell = row.querySelectorAll('td')[6]; // 7th column (0-indexed)
+                    const progressBar = progressCell ? progressCell.querySelector('.progress-fill') : null;
+                    
+                    return { row, progressCell, progressBar };
+                }
+            }
+            return null;
+        }
+
         async function processETL(fileId) {
             if (!confirm('Process this file through ETL pipeline?')) return;
 
-            // Open modal to show streaming progress
+            // Find and disable the button
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = 'Processing...';
+            btn.disabled = true;
+
+            // Add processing animation to progress bar
+            const elements = findRowElements(fileId);
+            if (elements && elements.progressBar) {
+                elements.progressBar.classList.add('processing');
+            }
+
+            // Open modal to show log
             document.getElementById('etlProgressContent').textContent = '';
             document.getElementById('etlProgressModal').classList.add('show');
 
@@ -681,15 +723,34 @@
                         }
                         try {
                             const obj = JSON.parse(payload);
+                            
+                            // Update main table progress bar if this is a progress payload
+                            if (obj.processed !== undefined && obj.total !== undefined) {
+                                updateRowProgress(fileId, obj.processed, obj.total, obj.created || 0, obj.failed || 0);
+                            }
+                            
                             if (obj.event === 'error') {
                                 appendETLLine(`ERROR: ${obj.message || JSON.stringify(obj)}`);
                             } else if (obj.event === 'done') {
-                                appendETLLine(`Done: ${JSON.stringify(obj.result || {})}`);
+                                const result = obj.result || {};
+                                appendETLLine(`✓ Complete: ${result.records_created || 0} created, ${result.records_failed || 0} failed`);
+                                // Update progress to 100% on completion
+                                if (result.records_processed) {
+                                    updateRowProgress(
+                                        fileId,
+                                        result.records_processed, 
+                                        result.records_processed,
+                                        result.records_created || 0,
+                                        result.records_failed || 0
+                                    );
+                                }
                             } else if (obj.event === 'complete') {
-                                appendETLLine('ETL complete');
+                                appendETLLine('ETL stream complete');
                             } else {
-                                // generic progress payload
-                                appendETLLine(JSON.stringify(obj));
+                                // generic progress payload - just show the source being processed
+                                if (obj.source) {
+                                    appendETLLine(`Processing ${obj.source}...`);
+                                }
                             }
                         } catch (e) {
                             appendETLLine(payload);
@@ -709,11 +770,40 @@
                 }
 
                 appendETLLine('ETL stream closed.');
-                // Reload table to show updated status
+                // Reload table to show final updated status
                 loadFiles(currentPage);
 
             } catch (error) {
                 appendETLLine('Error processing ETL: ' + (error.message || error));
+            } finally {
+                // Remove processing animation
+                const elements = findRowElements(fileId);
+                if (elements && elements.progressBar) {
+                    elements.progressBar.classList.remove('processing');
+                }
+                
+                // Re-enable button
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        function updateRowProgress(fileId, processed, total, created, failed) {
+            // Use helper function to find the row
+            const elements = findRowElements(fileId);
+            
+            if (elements && elements.progressCell) {
+                const percent = total > 0 ? (processed / total * 100) : 0;
+                
+                // Update the progress bar HTML
+                elements.progressCell.innerHTML = `
+                    <div class="progress-bar">
+                        <div class="progress-fill processing" style="width: ${percent}%"></div>
+                    </div>
+                    <small style="color: #6b7280; display: block; margin-top: 4px;">
+                        ${created} / ${total} records (${percent.toFixed(1)}%)
+                    </small>
+                `;
             }
         }
 

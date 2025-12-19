@@ -222,8 +222,8 @@ async def get_files_status(
             WHEN MAX(CASE WHEN etl.status = 'failed' THEN 1 ELSE 0 END) = 1 THEN 'failed'
             ELSE 'not_complete'
         END AS status,
-        MAX(etl.records_created) AS records_created,
-        MAX(etl.records_failed) AS records_failed,
+        SUM(etl.records_created) AS records_created,
+        SUM(etl.records_failed) AS records_failed,
         MAX(etl.error_message) AS error_message,
         CASE 
             WHEN uf.records_processed > 0 AND SUM(etl.records_created) > 0 
@@ -232,7 +232,7 @@ async def get_files_status(
         END AS percent_complete,
         -- Computed flags
         CASE 
-            WHEN uf.records_processed > 0 AND COALESCE(MAX(etl.records_created), 0) < uf.records_processed 
+            WHEN uf.records_processed > 0 AND COALESCE(SUM(etl.records_created), 0) < uf.records_processed 
             THEN 1 ELSE 0 
         END AS needs_etl,
         CASE
@@ -552,8 +552,8 @@ async def get_file_status(
             WHEN MAX(CASE WHEN etl.status = 'failed' THEN 1 ELSE 0 END) = 1 THEN 'failed'
             ELSE 'not_complete'
         END AS status,
-        MAX(etl.records_created) AS records_created,
-        MAX(etl.records_failed) AS records_failed,
+        SUM(etl.records_created) AS records_created,
+        SUM(etl.records_failed) AS records_failed,
         MAX(etl.error_message) AS error_message,
         CASE 
             WHEN uf.records_processed > 0 AND SUM(etl.records_created) > 0 

@@ -216,6 +216,7 @@ async def get_files_status(
         uf.description,
         uf.uploaded_by,
         CASE 
+            WHEN MAX(CAST(uf.is_processed As INT)) = 1 AND max(uf.records_processed) = 0 THEN 'complete'
             WHEN uf.records_processed IS NULL THEN 'not_started'
             WHEN MAX(CASE WHEN etl.status = 'completed' THEN 1 ELSE 0 END) = 1 THEN 'complete'
             WHEN MAX(CASE WHEN etl.status = 'running' THEN 1 ELSE 0 END) = 1 THEN 'in_progress'
@@ -224,7 +225,10 @@ async def get_files_status(
         END AS status,
         SUM(etl.records_created) AS records_created,
         SUM(etl.records_failed) AS records_failed,
-        MAX(etl.error_message) AS error_message,
+        CASE
+            WHEN SUM(etl.records_created) = sum(etl.records_processed) THEN ''
+            ELSE MAX(etl.error_message) 
+        END As error_message,
         CASE 
             WHEN uf.records_processed > 0 AND SUM(etl.records_created) > 0 
             THEN (CAST(SUM(etl.records_created) AS FLOAT) / CAST(uf.records_processed AS FLOAT)) * 100.0
@@ -546,6 +550,7 @@ async def get_file_status(
         uf.records_processed,
         uf.description,
         CASE 
+            WHEN MAX(CAST(uf.is_processed As INT)) = 1 AND max(uf.records_processed) = 0 THEN 'complete'
             WHEN uf.records_processed IS NULL THEN 'not_started'
             WHEN MAX(CASE WHEN etl.status = 'completed' THEN 1 ELSE 0 END) = 1 THEN 'complete'
             WHEN MAX(CASE WHEN etl.status = 'running' THEN 1 ELSE 0 END) = 1 THEN 'in_progress'
@@ -554,14 +559,17 @@ async def get_file_status(
         END AS status,
         SUM(etl.records_created) AS records_created,
         SUM(etl.records_failed) AS records_failed,
-        MAX(etl.error_message) AS error_message,
+        CASE
+            WHEN SUM(etl.records_created) = sum(etl.records_processed) THEN ''
+            ELSE MAX(etl.error_message) 
+        END As error_message,
         CASE 
             WHEN uf.records_processed > 0 AND SUM(etl.records_created) > 0 
             THEN (CAST(SUM(etl.records_created) AS FLOAT) / CAST(uf.records_processed AS FLOAT)) * 100.0
             ELSE NULL
         END AS percent_complete,
         CASE 
-            WHEN uf.records_processed > 0 AND COALESCE(MAX(etl.records_created), 0) < uf.records_processed 
+            WHEN uf.records_processed > 0 AND COALESCE(SUM(etl.records_created), 0) < uf.records_processed 
             THEN 1 ELSE 0 
         END AS needs_etl,
         CASE

@@ -271,8 +271,141 @@ class ETLProcessor:
             return PaymentType.OTHER
     
         
+    def process_windcave(self, file_id: int) -> Dict[str, Any]:
+        """Process Windcave staging records to final transactions"""
+        log = self._start_log("windcave_staging", file_id)
+        
+        try:
+            # Query unprocessed records
+            self.db.execute(
+                text("""
+                    INSERT INTO app.fact_transaction (
+                        transaction_date,
+                        transaction_amount,
+                        settle_date,
+                        settle_amount,
+                        staging_table,
+                        source_file_id,
+                        staging_record_id,
+                        payment_method_id,
+                        device_id,
+                        settlement_system_id,
+                        location_id,
+                        program_id,
+                        charge_code_id,
+                        reference_number
+                    )
+                    SELECT
+                        s.time,
+                        s.amount,
+                        s.settlement_date,
+                        s.amount,
+                        'windcave_staging',
+                        s.source_file_id,
+                        s.id,
+                        pm.payment_method_id,
+                        d.device_id,
+                        2, -- settlement_system_id hardcoded to 2 for Windcave transactions
+                        da.location_id,
+                        1, -- program_id hardcoded to 1 for Windcave transactions
+                        cc.charge_code_id,
+                        s.dpstxnref
+                    FROM app.windcave_staging s
+                    INNER JOIN app.dim_device d ON (d.device_terminal_id = s.device_id)
+                    INNER JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND s.time >= da.assign_date AND s.time < COALESCE(da.end_date, '9999-12-31'))
+                    INNER JOIN app.dim_payment_method pm ON (pm.payment_method_brand = s.card_type)
+                    INNER JOIN app.dim_charge_code cc ON (cc.location_id = da.location_id AND cc.program_type_id = 1)
+                    WHERE 
+                        s.processed_to_final = 0
+                        AND s.voided = 0
+                        AND s.source_file_id = :file_id;
+                     """,
+                     {"file_id": file_id}
+                     )
+            )
 
-    def process_windcave(self, file_id: Optional[int] = None) -> Dict[str, Any]:
+            # Query for records that won't process
+            self.db.exceucte(
+                text("""
+                    INSERT INTO app.fact_transaction_reject (
+                        staging_table,
+                        staging_record_id,
+                        source_file_id,
+                        reject_reason_code,
+                        reject_detail_desc,
+                        rejected_at,
+                        source_device_terminal_id,
+                        payment_method_id,
+                        device_id,
+                        settlement_system_id,
+                        location_id,
+                        charge_code_id
+                    )
+                    SELECT
+                        'windcave_staging',
+                        s.id,
+                        s.source_file_id,
+                        'NO_DEVICE_ASSIGNMENT',
+                        'No active device assignment for transaction time',
+                        SYSUTCDATETIME(),
+                        s.device_id,
+                        pm.payment_method_id,
+                        d.device_id,
+                        2 As settlement_system_id,
+                        da.location_id,
+                        cc.charge_code_id
+                    FROM app.windcave_staging s
+                    LEFT JOIN app.dim_device d ON (d.device_terminal_id = s.device_id)
+                    LEFT JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND s.time >= da.assign_date AND s.time <COALESCE(da.end_date, '9999-12-31'))
+                    LEFT JOIN app.dim_payment_method pm On (s.card_type=pm.payment_method_brand)
+                    LEFT JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND 1=cc.program_type_id)
+                    WHERE 
+                        da.device_id IS NULL
+                        AND s.processed_to_final = 0
+                        AND s.source_file_id = :file_id;
+                    """), 
+                    {"file_id": file_id}
+            )
+
+            # Mark all processed staging records as processed
+            self.db.execute(
+                text("""
+                    UPDATE s
+                    SET
+                        processed_to_final = 1,
+                        loaded_at = SYSUTCDATETIME()
+                    FROM app.windcave_staging s
+                    WHERE s.id IN (
+                        SELECT staging_record_id
+                        FROM app.fact_transaction
+                        WHERE 
+                            staging_table = 'windcave_staging'
+                            AND source_file_id = :file_id
+                    );
+                    """, {"file_id": file_id}
+                )
+            )
+            
+            total_records = self.db.execute(text("SELECT count(*) FROM app.windcave_staging WHERE source_file_id = :file_id"), {"file_id": file_id}).scalar()
+            created_count = self.db.execute(text("SELECT count(*) FROM app.fact_transaction WHERE staging_table = 'windcave_staging' AND source_file_id = :file_id"), {"file_id": file_id}).scalar()
+
+            self.db.commit()
+            self._complete_log(log, processed=total_records, created=created_count, updated=0, failed=total_records - created_count)
+            
+            return {
+                "success": True,
+                "records_processed": total_records,
+                "records_created": created_count,
+                "records_failed": total_records - created_count
+            }
+        except Exception as e:
+            self.db.rollback()
+            self._fail_log(log, str(e))
+            raise
+
+
+
+    def process_windcave_old(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """Process Windcave staging records to final transactions"""
         log_entry = self._start_log("windcave_staging", file_id)
         
@@ -456,11 +589,12 @@ class ETLProcessor:
             for idx, (sales_record, payment_record) in enumerate(records):
                 # Look up charge code from terminal ID and transaction date
                 try:
-                    charge_code = self.org_code_cache[(self.org_code_cache['TerminalID']==sales_record.terminal_id) &
+                    charge_code = int(self.org_code_cache[(self.org_code_cache['TerminalID']==sales_record.terminal_id) &
                                     (self.org_code_cache['DateAssigned'] <= sales_record.transaction_datetime) &
-                                    (self.org_code_cache['DateRemoved'] > sales_record.transaction_datetime)]['ChargeCode'].iloc[0]
+                                    (self.org_code_cache['DateRemoved'] > sales_record.transaction_datetime)]['ChargeCode'].iloc[0])
                 except Exception:
                     print(idx, sales_record.terminal_id, sales_record.transaction_datetime)
+                    charge_code = None
                     raise
                 
                 try:
@@ -476,7 +610,7 @@ class ETLProcessor:
                         device_terminal_id=sales_record.terminal_id,
                         payment_type=self.map_payment_type(sales_record.card_brand),
                         reference_number=payment_record.card_number.replace('*','')+payment_record.authorization_code if payment_record else sales_record.card_number.replace('*','')+sales_record.authorization_code, # probably use invoice if including IPS
-                        org_code=int(charge_code),
+                        org_code=charge_code,
                         staging_table="payments_insider_sales_staging",
                         staging_record_id=sales_record.id
                     )

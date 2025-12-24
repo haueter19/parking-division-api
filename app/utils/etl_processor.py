@@ -539,7 +539,16 @@ class ETLProcessor:
             self._fail_log(log_entry, str(e))
             raise
     
-    def process_payments_insider(self, file_id: Optional[int] = None) -> Dict[str, Any]:
+    def process_payments_insider(self, file_id: int) -> Dict[str, Any]:
+        """
+        Process Payments Insider staging records to final transactions
+        Note: PI requires matching Sales and Payments reports
+        Handles both PAYMENTS_INSIDER_SALES and PAYMENTS_INSIDER_PAYMENTS data types
+        """
+        log = self._start_log("windcave_staging", file_id)
+
+
+    def _process_payments_insider(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Process Payments Insider staging records to final transactions
         Note: PI requires matching Sales and Payments reports
@@ -915,7 +924,83 @@ class ETLProcessor:
             raise
     
 
-    def process_zms_cash(self, process_date: Optional[str] = None) -> Dict[str, Any]:
+    def process_zms_cash(self, process_date: str = datetime.strftime(datetime.now() - timedelta(1), '%Y-%m-%d')) -> Dict[str, Any]:
+        """Process ZMS Cash records to final transactions. Skips staging table."""
+        
+        try:
+            self.db.execute(
+                text("""
+                    DECLARE @dt datetime
+                    SET @dt = :process_date;
+                    
+                    with cte As (
+                        -- Pull cash payment data from a particular date from ZMS table
+                        select 
+                            CASE
+                                WHEN p.Id_Parking = 12 THEN 2
+                                ELSE p.Id_Parking
+                            END Id_Parking,
+                            pa.ParkingName, p.Id_Location, l.Name, l.ShortName, TicketNumber,
+                            CASE
+                                WHEN l.TxnT2StationAdddress LIKE 'A%' THEN 'Exit'
+                                WHEN l.TxnT2StationAdddress LIKE 'E%' THEN 'Entry'
+                                WHEN l.TxnT2StationAdddress LIKE 'H%' THEN 'Cashier'
+                                WHEN l.TxnT2StationAdddress LIKE 'K%' THEN 'POF'
+                                ELSE 'Unknown'
+                            END As location_sub_area,
+                            l.TxnT2StationAdddress station, p.ParkhouseNumber, p.Amount, p.Amount/100. Amount2, p.Date, p.Time,
+                            CONVERT(DATETIME, CONVERT(VARCHAR, CAST(p.Date AS DATE), 120) + ' ' + p.Time) transaction_datetime
+                        from Opms.dbo.Payments p
+                        left join Opms.dbo.Location l On (p.Id_Parking=l.Id_Parking AND p.Id_Location=l.Id_Location)
+                        left join Opms.dbo.ParkingAdmin pa On (p.Id_Parking=pa.Id_Parking)
+                        where 
+                            Date = @dt
+                            AND PayMethod = 0
+                            AND l.TxnT2StationAdddress NOT LIKE 'A%'
+                    ),-- select * from cte
+                    -- Pull rebates from the same date. Group by TicketID to get the sum of any rebates used.
+                    rebate_group As (
+                        select 
+                            max(Id_Parking) Id_Parking, max(Id_Location) Id_Location, max(Id_Equipment) Id_Equipment, max(Date) Date, max(Time) Time, TicketId, count(RebateNumber) RebatesApplied, sum(RebateAmount) sumRebateAmount 
+                        from Opms.dbo.Rebates 
+                        where 
+                            Date = @dt
+                        GROUP BY TicketId
+                    ), penultimate_step As (
+                        SELECT
+                            cte.transaction_datetime transaction_date, Amount/100 transaction_amount, 
+                            CONVERT(VARCHAR, CAST(cte.transaction_datetime AS DATE), 120) settle_date, Amount/100 - COALESCE(sumRebateAmount,0) settle_amount, 
+                            'zms_cash_regular' staging_table, NULL source_file_id, cte.TicketNumber staging_record_id, 
+                            1 as payment_method_id, d.device_id, 1 As settlement_system_id, l.location_id, 1 As program_id, cc.charge_code_id, cte.TicketNumber reference_number
+                            --, cte.location_sub_area, Name LocationName, cte.ParkhouseNumber, cte.Id_Parking, 
+                            --Amount/100 total_cash, COALESCE(sumRebateAmount, 0) sum_rebates, 
+                            --COALESCE(RebatesApplied, 0) n_rebates
+                        FROM cte
+                        LEFT JOIN rebate_group r On (cte.TicketNumber=r.TicketId)
+                        INNER JOIN PUReporting.app.dim_device d ON (d.device_terminal_id = cte.station)
+                        INNER JOIN PUReporting.app.fact_device_assignment da ON (da.device_id = d.device_id AND cte.transaction_datetime >= da.assign_date AND cte.transaction_datetime < COALESCE(da.end_date, '9999-12-31'))
+                        inner join PUReporting.app.dim_location l On (cte.Id_Parking=l.facility_id and l.space_id IS NULL)
+                        INNER JOIN PUReporting.app.dim_charge_code cc On (cc.program_type_id=1 and cc.location_id=l.location_id)
+                        )
+                    INSERT INTO PUReporting.app.fact_transaction (transaction_date, transaction_amount, settle_date, settle_amount, staging_table, source_file_id, staging_record_id, payment_method_id, device_id, settlement_system_id, location_id, program_id, charge_code_id, reference_number)
+                    SELECT * FROM penultimate_step
+                    ORDER BY cte.Id_Parking, cte.transaction_datetime
+                    """), {"process_date": process_date})
+            
+            self.db.commit()
+
+            return {
+                "success": True,
+                "records_processed": self.db.execute(text("SELECT count(*) FROM PUReporting.app.fact_transaction WHERE staging_table = 'zms_cash_regular' AND transaction_date = :process_date"), {"process_date": process_date}).scalar(),
+                "records_created": self.db.execute(text("SELECT count(*) FROM PUReporting.app.fact_transaction WHERE staging_table = 'zms_cash_regular' AND transaction_date = :process_date"), {"process_date": process_date}).scalar(),
+                "records_failed": 0
+            }
+        
+        except Exception as e:
+            self.db.rollback()
+            raise  
+
+    def _process_zms_cash(self, process_date: Optional[str] = None) -> Dict[str, Any]:
         """Process ZMS Cash records to final transactions. Skips staging table."""
         
         # If no date provided, defaults to previous day

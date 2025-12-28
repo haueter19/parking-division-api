@@ -398,6 +398,7 @@ class ETLProcessor:
                 "records_created": created_count,
                 "records_failed": total_records - created_count
             }
+        
         except Exception as e:
             self.db.rollback()
             self._fail_log(log, str(e))
@@ -670,7 +671,80 @@ class ETLProcessor:
             raise
     
     
-    def process_ips_cc(self, file_id: Optional[int] = None) -> Dict[str, Any]:
+    def process_ips_cc(self, file_id: int) -> Dict[str, Any]:
+        """Process IPS credit card staging records to final transactions"""
+        log = self._start_log("ips_cc_staging", file_id)
+
+        try:
+            self.db.execute(
+                text("""
+                     SELECT
+                        s.transaction_date_time transaction_date, 
+                        s.amount transaction_amount, 
+                        s.transaction_date_time settle_date, 
+                        s.amount settle_amount, 
+                        'ips_cc_staging' staging_table, 
+                        s.source_file_id, 
+                        s.id As staging_record_id,
+                        pm.payment_method_id, 
+                        d.device_id, 
+                        4 As settlement_system_id, 
+                        da.location_id, 
+                        1 as program_id, 
+                        ss.settlement_system_id, 
+                        cc.charge_code_id, 
+                        s.transaction_reference reference_number
+                    FROM app.ips_cc_staging s
+                    INNER JOIN app.dim_device d ON (d.device_terminal_id = s.pole)
+                    INNER JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND s.transaction_date_time >= da.assign_date AND s.transaction_date_time < COALESCE(da.end_date, '9999-12-31'))
+                    INNER JOIN app.dim_payment_method pm On (s.card_type=pm.payment_method_brand)
+                    INNER JOIN app.dim_location l On (l.location_id=da.location_id)
+                    INNER JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND 1=cc.program_type_id)
+                    INNER JOIN app.dim_settlement_system ss On (ss.system_name='IPS')
+                    WHERE
+                        s.source_file_id = :file_id
+                        AND s.processed_to_final = 0
+                    """, {"file_id": file_id})
+            )
+
+            # Mark all processed staging records as processed
+            self.db.execute(
+                text("""
+                    UPDATE s
+                    SET
+                        processed_to_final = 1,
+                        loaded_at = SYSUTCDATETIME()
+                    FROM app.ips_cc_staging s
+                    WHERE s.id IN (
+                        SELECT staging_record_id
+                        FROM app.fact_transaction
+                        WHERE 
+                            staging_table = 'ips_cc_staging'
+                            AND source_file_id = :file_id
+                    );
+                    """, {"file_id": file_id}
+                )
+            )
+            
+            total_records = self.db.execute(text("SELECT count(*) FROM app.ips_cc_staging WHERE source_file_id = :file_id"), {"file_id": file_id}).scalar()
+            created_count = self.db.execute(text("SELECT count(*) FROM app.fact_transaction WHERE staging_table = 'ips_cc_staging' AND source_file_id = :file_id"), {"file_id": file_id}).scalar()
+
+            self.db.commit()
+            self._complete_log(log, processed=total_records, created=created_count, updated=0, failed=total_records - created_count)
+            
+            return {
+                "success": True,
+                "records_processed": total_records,
+                "records_created": created_count,
+                "records_failed": total_records - created_count
+            }
+
+        except Exception as e:
+            self.db.rollback()
+            self._fail_log(log, str(e))
+            raise
+
+    def _process_ips_cc(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """Process IPS credit card staging records to final transactions"""
         log_entry = self._start_log("ips_cc_staging", file_id)
         self.BATCH_SIZE = 500
@@ -759,8 +833,100 @@ class ETLProcessor:
             self._fail_log(log_entry, str(e))
             raise
 
+    
+    def process_ips_mobile(self, file_id: int) -> Dict[str, Any]:
+        """Process IPS mobile staging records to final transactions"""
+        log = self._start_log("ips_mobile_staging", file_id)
 
-    def process_ips_mobile(self, file_id: Optional[int] = None) -> Dict[str, Any]:
+        try:
+
+            # Query unprocessed records
+            self.db.execute(
+                text("""
+                    INSERT INTO app.fact_transaction (
+                        transaction_date,
+                        transaction_amount,
+                        settle_date,
+                        settle_amount,
+                        staging_table,
+                        source_file_id,
+                        staging_record_id,
+                        payment_method_id,
+                        device_id,
+                        settlement_system_id,
+                        location_id,
+                        program_id,
+                        charge_code_id,
+                        reference_number
+                    )
+                    SELECT
+                        s.received_date_time transaction_date,
+                        s.paid transaction_amount,
+                        s.received_date_time settle_date,
+                        s.paid + s.convenience_fee settle_amount,
+                        'ips_mobile_staging' staging_table,
+                        s.source_file_id,
+                        s.id staging_record_id, 
+                        pm.payment_method_id,
+                        d.device_id, 
+                        ss.settlement_system_id, 
+                        da.location_id, 
+                        1 as program_id,
+                        cc.charge_code_id,
+                        s.prid reference_number
+                    FROM app.ips_mobile_staging s
+                    INNER JOIN app.dim_device d ON (d.device_terminal_id = s.space_name)
+                    INNER JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND s.received_date_time >= da.assign_date AND s.received_date_time < COALESCE(da.end_date, '9999-12-31'))
+                    INNER JOIN app.dim_payment_method pm On (s.partner_name=pm.payment_method_brand)
+                    INNER JOIN app.dim_location l On (l.location_id=da.location_id)
+                    INNER JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND 1=cc.program_type_id)
+                    INNER JOIN app.dim_settlement_system ss On (ss.system_name='IPS')
+                    WHERE
+                        s.source_file_id = :file_id
+                        AND s.processed_to_final = 0
+                """, {'file_id': file_id})
+            )
+            
+            # Mark all processed staging records as processed
+            self.db.execute(
+                text("""
+                    UPDATE s
+                    SET
+                        processed_to_final = 1,
+                        loaded_at = SYSUTCDATETIME()
+                    FROM app.ips_mobile_staging s
+                    WHERE s.id IN (
+                        SELECT staging_record_id
+                        FROM app.fact_transaction
+                        WHERE 
+                            staging_table = 'ips_mobile_staging'
+                            AND source_file_id = :file_id
+                    );
+                    """, {"file_id": file_id}
+                )
+            )
+            
+            total_records = self.db.execute(text("SELECT count(*) FROM app.ips_mobile_staging WHERE source_file_id = :file_id"), {"file_id": file_id}).scalar()
+            created_count = self.db.execute(text("SELECT count(*) FROM app.fact_transaction WHERE staging_table = 'ips_mobile_staging' AND source_file_id = :file_id"), {"file_id": file_id}).scalar()
+
+            self.db.commit()
+            self._complete_log(log, processed=total_records, created=created_count, updated=0, failed=total_records - created_count)
+            
+            return {
+                "success": True,
+                "records_processed": total_records,
+                "records_created": created_count,
+                "records_failed": total_records - created_count
+            }
+        
+        except Exception as e:
+            self.db.rollback()
+            self._fail_log(log, str(e))
+            raise
+
+
+
+    def _process_ips_mobile(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """Process IPS mobile staging records to final transactions"""
         log_entry = self._start_log("ips_mobile_staging", file_id)
 
@@ -838,8 +1004,75 @@ class ETLProcessor:
             self._fail_log(log_entry, str(e))
             raise
 
+    def process_ips_cash(self, file_id: int) -> Dict[str, Any]:
+        """Process IPS Cash staging records to final transactions"""
+        log = self._start_log("ips_cash_staging", file_id)
+        
+        try:
+            # Query unprocessed records
+            self.db.execute(
+                text("""
+                     SELECT
+                        CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.collection_date AS DATE), 120) + ' ' + s.collection_time) transaction_date,
+                        s.coin_revenue transaction_amount,
+                        CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.collection_date AS DATE), 120) + ' ' + s.collection_time) settle_date,
+                        s.coin_revenue settle_amount,
+                        'ips_cash_staging' staging_table,
+                        s.source_file_id,
+                        s.id staging_record_id, 
+                        1 As payment_method_id,
+                        d.device_id, 
+                        ss.settlement_system_id, 
+                        da.location_id, 
+                        1 as program_id,
+                        cc.charge_code_id,
+                        CAST(s.id As VARCHAR) reference_number
+                    FROM app.ips_cash_staging s
+                    INNER JOIN app.dim_device d ON (d.device_terminal_id = s.pole_ser_no)
+                    INNER JOIN app.fact_device_assignment da ON (da.device_id = d.device_id 
+                                                                AND CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.collection_date AS DATE), 120) + ' ' + s.collection_time) >= da.assign_date 
+                                                                AND CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.collection_date AS DATE), 120) + ' ' + s.collection_time) < COALESCE(da.end_date, '9999-12-31'))
+                    --INNER JOIN app.dim_payment_method pm On (s.partner_name=pm.payment_method_brand)
+                    INNER JOIN app.dim_location l On (l.location_id=da.location_id)
+                    INNER JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND 1=cc.program_type_id)
+                    INNER JOIN app.dim_settlement_system ss On (ss.system_name='IPS')
+                    WHERE
+                        s.source_file_id = :file_id
+                        AND s.processed_to_final = 0
+                """, {'file_id': file_id})
+            )
 
-    def process_ips_cash(self, file_id: Optional[int] = None) -> Dict[str, Any]:
+            # Mark all processed staging records as processed
+            self.db.execute(
+                text("""
+                    UPDATE s
+                    SET
+                        processed_to_final = 1,
+                        loaded_at = SYSUTCDATETIME()
+                    FROM app.ips_cash_staging s
+                    WHERE s.id IN (
+                        SELECT staging_record_id
+                        FROM app.fact_transaction
+                        WHERE 
+                            staging_table = 'ips_cash_staging'
+                            AND source_file_id = :file_id
+                    );
+                    """, {"file_id": file_id}
+                )
+            )
+            
+            total_records = self.db.execute(text("SELECT count(*) FROM app.ips_cash_staging WHERE source_file_id = :file_id"), {"file_id": file_id}).scalar()
+            created_count = self.db.execute(text("SELECT count(*) FROM app.fact_transaction WHERE staging_table = 'ips_cash_staging' AND source_file_id = :file_id"), {"file_id": file_id}).scalar()
+
+            self.db.commit()
+            self._complete_log(log, processed=total_records, created=created_count, updated=0, failed=total_records - created_count)
+
+        except Exception as e:
+            self.db.rollback()
+            self._fail_log(log, str(e))
+            raise
+
+    def _process_ips_cash(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """Process IPS Cash staging records to final transactions"""
         log_entry = self._start_log("ips_cash_staging", file_id)
         

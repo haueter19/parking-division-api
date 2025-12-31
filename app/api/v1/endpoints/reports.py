@@ -46,7 +46,7 @@ async def settlement_report(
             --payment_type,
             COUNT(*) AS count,
             SUM(COALESCE(settle_amount, transaction_amount)) AS total_settled
-        FROM app.transactions
+        FROM app.fact_transaction
         WHERE settle_date IS NOT NULL
             AND settle_date >= :start_dt
             AND settle_date <= :end_dt
@@ -75,7 +75,7 @@ async def settlement_report(
         SELECT
             COUNT(*) as total_transactions,
             SUM(COALESCE(settle_amount, transaction_amount)) as total_settled
-        FROM app.transactions
+        FROM app.fact_transaction
         WHERE settle_date IS NOT NULL
           AND settle_date >= :start_dt
           AND settle_date <= :end_dt
@@ -117,15 +117,15 @@ async def settle_by_source(
         """
         SELECT *
         FROM (
-            SELECT CONVERT(CHAR(10), settle_date, 120) AS settle_date, source
-            FROM app.transactions
+            SELECT CONVERT(CHAR(10), settle_date, 120) AS settle_date, staging_table
+            FROM app.fact_transaction t
             WHERE settle_date IS NOT NULL
               AND settle_date >= :start_dt
               AND settle_date <= :end_dt
         ) AS SourceTable
         PIVOT (
-            COUNT(source)
-            FOR source IN ([WINDCAVE], [PAYMENTS_INSIDER_SALES], [IPS_CC], [IPS_MOBILE], [IPS_CASH], [ZMS_CASH_REGULAR], [ZMS_CASH_SPECIAL_EVENT])
+            COUNT(staging_table)
+            FOR staging_table IN ([windcave_staging], [payments_insider_sales_staging], [ips_cc_staging], [ips_mobile_staging], [ips_cash_staging], [zms_cash_regular])
         ) AS PivotTable
         ORDER BY settle_date DESC
         """
@@ -133,7 +133,7 @@ async def settle_by_source(
 
     rows = db.execute(pivot_sql, {"start_dt": start_dt, "end_dt": end_dt}).fetchall()
 
-    pivot_cols = ['WINDCAVE', 'PAYMENTS_INSIDER_SALES', 'IPS_CC', 'IPS_MOBILE', 'IPS_CASH', 'ZMS_CASH_REGULAR', 'ZMS_CASH_SPECIAL_EVENT']
+    pivot_cols = ['windcave_staging', 'payments_insider_sales_staging', 'ips_cc_staging', 'ips_mobile_staging', 'ips_cash_staging', 'zms_cash_regular']
 
     mapping = {}
     for row in rows:

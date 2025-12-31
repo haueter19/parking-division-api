@@ -12,6 +12,8 @@ from sqlalchemy.ext.hybrid import hybrid_property
 import numpy as np
 import pandas as pd
 from app.utils import etl_cache
+from pathlib import Path
+import os
 from app.models.database import (
     Transaction, DataSourceType, LocationType, PaymentType,
     WindcaveStaging, PaymentsInsiderPaymentsStaging, PaymentsInsiderSalesStaging, 
@@ -44,65 +46,7 @@ class ETLProcessor:
         """
         self.db = db
         self.traffic_db = traffic_db
-        self.BATCH_SIZE = 500
-        # initialize lookup dicts to empty dicts so .get() is always safe
-        self.charge_code_from_housing_id = {}
-        self.charge_code_from_terminal_id = {}
-        self.garage_from_station = {}
-        self.org_code_from_area = {
-                "SSCO": 82007,
-                "OC": 82002,
-                "CSN": 82001,
-                "SLS": 82162,
-                "BLAIR": 82055,
-                "WINGRA": 82057,
-                "BUCKEYE": 82224,
-                "EVERGREEN": 82225,
-                "Spares": 82935,
-                "LAKE": 82005,
-                "FRANCES": 82005,
-                "TEST": 82935,
-                "WILSON": 82004
-            }
-        
-        # Use pre-initialized caches if provided, otherwise will initialize on-demand
-        self.org_code_cache = org_code_cache
-        self.location_from_charge_code = location_from_charge_code
-
-        # If org_code_cache was provided, derive the dict lookups used throughout the processor
-        if self.org_code_cache is not None:
-            print('Using provided org_code_cache for ETLProcessor')
-            #try:
-                #self.charge_code_from_housing_id = {a: b for a, b in zip(self.org_code_cache['Device_ID'], self.org_code_cache['ChargeCode']) if a is not None}
-            #except Exception:
-                #self.charge_code_from_housing_id = {}
-            self.charge_code_from_housing_id = etl_cache.get_charge_code_from_housing_id()
-            #try:
-                #self.charge_code_from_terminal_id = {a: b for a, b in zip(self.org_code_cache['TerminalID'], self.org_code_cache['ChargeCode']) if a is not None}
-            #except Exception:
-                #self.charge_code_from_terminal_id = {}
-            self.charge_code_from_terminal_id = etl_cache.get_charge_code_from_terminal_id()
-            # Fill location_from_charge_code from org_code_cache if not provided explicitly
-            self.location_from_charge_code = etl_cache.get_location_from_charge_code()
-            self.garage_from_station = etl_cache.get_garage_from_station()
-            if not self.location_from_charge_code:
-                print('location_from_charge_code not provided')
-                try:
-                    if 'Location' in self.org_code_cache.columns:
-                        self.location_from_charge_code = {a: b for a, b in zip(self.org_code_cache['ChargeCode'], self.org_code_cache['Location']) if a is not None}
-                except Exception:
-                    self.location_from_charge_code = {}
-
-        # If garage map missing, attempt to read from global etl_cache if available
-        if not self.garage_from_station:
-            try:
-                from app.utils import etl_cache as _etl_cache_mod
-                self.garage_from_station = _etl_cache_mod.get_garage_from_station() or {}
-            except Exception:
-                # keep empty dict as fallback
-                self.garage_from_station = {}
-        # Optional callback to report progress updates. Callable should accept a dict payload.
-        self.progress_callback = progress_callback
+        self.BATCH_SIZE = 500        
 
     def _report_progress(self, payload: Dict[str, Any]):
         """Invoke progress callback if provided. Swallow any exceptions from callback."""
@@ -277,7 +221,7 @@ class ETLProcessor:
         
         try:
             # Query unprocessed records
-            self.db.execute(
+            result = self.db.execute(
                 text("""
                     INSERT INTO app.fact_transaction (
                         transaction_date,
@@ -311,30 +255,29 @@ class ETLProcessor:
                         cc.charge_code_id,
                         s.dpstxnref
                     FROM app.windcave_staging s
-                    INNER JOIN app.dim_device d ON (d.device_terminal_id = s.device_id)
+                    INNER JOIN app.dim_device d ON (d.device_terminal_id = CASE WHEN s.device_id LIKE '[A-Z]%' THEN s.device_id ELSE LEFT(s.txnref,3) END)
                     INNER JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND s.time >= da.assign_date AND s.time < COALESCE(da.end_date, '9999-12-31'))
                     INNER JOIN app.dim_payment_method pm ON (pm.payment_method_brand = s.card_type)
                     INNER JOIN app.dim_charge_code cc ON (cc.location_id = da.location_id AND cc.program_type_id = 1)
                     WHERE 
-                        s.processed_to_final = 0
-                        AND s.voided = 0
-                        AND s.source_file_id = :file_id;
-                     """,
-                     {"file_id": file_id}
-                     )
-            )
+                        s.source_file_id = :file_id
+                        AND s.processed_to_final = 0
+                        AND s.voided = 0                        
+                     """), {"file_id": file_id})
+
 
             # Query for records that won't process
-            self.db.exceucte(
+            failed = self.db.execute(
                 text("""
                     INSERT INTO app.fact_transaction_reject (
                         staging_table,
                         staging_record_id,
                         source_file_id,
                         reject_reason_code,
-                        reject_detail_desc,
                         rejected_at,
                         source_device_terminal_id,
+                        transaction_datetime,
+                        transaction_amount,
                         payment_method_id,
                         device_id,
                         settlement_system_id,
@@ -345,24 +288,42 @@ class ETLProcessor:
                         'windcave_staging',
                         s.id,
                         s.source_file_id,
-                        'NO_DEVICE_ASSIGNMENT',
-                        'No active device assignment for transaction time',
-                        SYSUTCDATETIME(),
+                        CASE
+                            WHEN d.device_id IS NULL THEN 'DEVICE_NOT_FOUND'
+                            WHEN da.device_id IS NULL THEN 'NO_ACTIVE_DEVICE_ASSIGNMENT'
+                            WHEN da.location_id IS NULL THEN 'LOCATION_NOT_FOUND'
+                            WHEN cc.charge_code_id IS NULL THEN 'CHARGE_CODE_NOT_FOUND'
+                            WHEN pm.payment_method_id IS NULL THEN 'PAYMENT_METHOD_NOT_FOUND'
+                            WHEN ss.settlement_system_id IS NULL THEN 'SETTLEMENT_SYSTEM_NOT_FOUND'
+                            ELSE 'UNKNOWN_ERROR'
+                        END AS reject_reason_code,
+                        GETDATE(),
                         s.device_id,
-                        pm.payment_method_id,
-                        d.device_id,
-                        2 As settlement_system_id,
-                        da.location_id,
-                        cc.charge_code_id
+                        s.time,
+                        s.amount,
+                        COALESCE(CAST(pm.payment_method_id As VARCHAR(10)), 'NO_PAYMENT_METHOD') payment_method,
+                        COALESCE(CAST(d.device_id As VARCHAR(10)), 'DEVICE_NOT_FOUND') device_id,
+                        COALESCE(CAST(ss.settlement_system_id As VARCHAR(10)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
+                        COALESCE(CAST(da.location_id As VARCHAR(10)), 'LOCATION_NOT_FOUND') location_id,
+                        COALESCE(CAST(cc.charge_code_id As VARCHAR(10)), 'CHARGE_CODE_NOT_FOUND') charge_code_id
                     FROM app.windcave_staging s
-                    LEFT JOIN app.dim_device d ON (d.device_terminal_id = s.device_id)
+                    LEFT JOIN app.dim_device d ON (d.device_terminal_id = CASE WHEN s.device_id LIKE '[A-Z]%' THEN s.device_id ELSE LEFT(s.txnref,3) END)
                     LEFT JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND s.time >= da.assign_date AND s.time <COALESCE(da.end_date, '9999-12-31'))
                     LEFT JOIN app.dim_payment_method pm On (s.card_type=pm.payment_method_brand)
                     LEFT JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND 1=cc.program_type_id)
+                    LEFT JOIN app.dim_settlement_system ss On (ss.system_name='Windcave')
                     WHERE 
-                        da.device_id IS NULL
+                        s.source_file_id = :file_id
+                        AND (
+                            d.device_id IS NULL
+                            OR da.device_id IS NULL
+                            OR da.location_id IS NULL
+                            OR cc.charge_code_id IS NULL
+                            OR pm.payment_method_id IS NULL
+                            OR ss.settlement_system_id IS NULL
+                        )
                         AND s.processed_to_final = 0
-                        AND s.source_file_id = :file_id;
+                        AND s.voided = 0
                     """), 
                     {"file_id": file_id}
             )
@@ -373,7 +334,7 @@ class ETLProcessor:
                     UPDATE s
                     SET
                         processed_to_final = 1,
-                        loaded_at = SYSUTCDATETIME()
+                        loaded_at = GETDATE()
                     FROM app.windcave_staging s
                     WHERE s.id IN (
                         SELECT staging_record_id
@@ -382,21 +343,20 @@ class ETLProcessor:
                             staging_table = 'windcave_staging'
                             AND source_file_id = :file_id
                     );
-                    """, {"file_id": file_id}
+                    """), {"file_id": file_id}
                 )
-            )
             
             total_records = self.db.execute(text("SELECT count(*) FROM app.windcave_staging WHERE source_file_id = :file_id"), {"file_id": file_id}).scalar()
-            created_count = self.db.execute(text("SELECT count(*) FROM app.fact_transaction WHERE staging_table = 'windcave_staging' AND source_file_id = :file_id"), {"file_id": file_id}).scalar()
+            created_count = result.rowcount #self.db.execute(text("SELECT count(*) FROM app.fact_transaction WHERE staging_table = 'windcave_staging' AND source_file_id = :file_id"), {"file_id": file_id}).scalar()
 
             self.db.commit()
-            self._complete_log(log, processed=total_records, created=created_count, updated=0, failed=total_records - created_count)
+            self._complete_log(log, processed=total_records, created=created_count, updated=0, failed=failed.rowcount)
             
             return {
                 "success": True,
                 "records_processed": total_records,
                 "records_created": created_count,
-                "records_failed": total_records - created_count
+                "records_failed": failed.rowcount
             }
         
         except Exception as e:
@@ -405,8 +365,7 @@ class ETLProcessor:
             raise
 
 
-
-    def process_windcave_old(self, file_id: Optional[int] = None) -> Dict[str, Any]:
+    def _process_windcave(self, file_id: Optional[int] = None) -> Dict[str, Any]:
         """Process Windcave staging records to final transactions"""
         log_entry = self._start_log("windcave_staging", file_id)
         
@@ -546,7 +505,150 @@ class ETLProcessor:
         Note: PI requires matching Sales and Payments reports
         Handles both PAYMENTS_INSIDER_SALES and PAYMENTS_INSIDER_PAYMENTS data types
         """
-        log = self._start_log("windcave_staging", file_id)
+        log = self._start_log("payments_insider_sales_staging", file_id)
+
+        try:
+            # Query unprocessed records
+            self.db.execute(
+                text("""
+                    INSERT INTO app.fact_transaction (
+                        transaction_date,
+                        transaction_amount,
+                        settle_date,
+                        settle_amount,
+                        staging_table,
+                        source_file_id,
+                        staging_record_id,
+                        payment_method_id,
+                        device_id,
+                        settlement_system_id,
+                        location_id,
+                        program_id,
+                        charge_code_id,
+                        reference_number
+                    )
+                    SELECT 
+                        CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.transaction_date AS DATE), 120) + ' ' + s.transaction_time) transaction_date, 
+                        s.transaction_amount, 
+                        p.payment_date settle_date, 
+                        p.transaction_amount settle_amount, 
+                        'payments_insider_sales_staging' staging_table, 
+                        s.source_file_id, 
+                        s.id, 
+                        pm.payment_method_id, 
+                        d.device_id, 
+                        settlement_system_id, 
+                        da.location_id, 
+                        CASE WHEN d.device_type = 'Portable CC Reader' THEN 2 ELSE 1 END program_id,
+                        cc.charge_code_id,
+                        CONCAT(REPLACE(s.card_number, '*', ''),s.authorization_code) reference_number
+                    FROM app.payments_insider_sales_staging s 
+                    LEFT JOIN app.payments_insider_payments_staging p On (s.card_number=p.card_number and s.authorization_code=p.authorization_code)
+                    INNER JOIN app.dim_payment_method pm On (s.card_brand=pm.payment_method_brand)
+                    INNER JOIN app.dim_device d ON (d.terminal_id = s.terminal_id)
+                    INNER JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.transaction_date AS DATE), 120) + ' ' + s.transaction_time) >= da.assign_date AND CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.transaction_date AS DATE), 120) + ' ' + s.transaction_time) < COALESCE(da.end_date, '9999-12-31'))
+                    INNER JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND cc.program_type_id=CASE WHEN d.device_type = 'Portable CC Reader' THEN 2 ELSE 1 END)
+                    INNER JOIN app.dim_settlement_system ss On (ss.system_name='PI')
+                    WHERE 
+                        s.source_file_id = :file_id
+                        AND s.processed_to_final = 0
+                        """), {"file_id": file_id})
+
+            # Query for records that won't process
+            self.db.execute(
+                text("""
+                    INSERT INTO app.fact_transaction_reject (
+                        staging_table,
+                        staging_record_id,
+                        source_file_id,
+                        reject_reason_code,
+                        rejected_at,
+                        source_device_terminal_id,
+                        transaction_datetime,
+                        transaction_amount,
+                        payment_method_id,
+                        device_id,
+                        settlement_system_id,
+                        location_id,
+                        charge_code_id
+                    )
+                     SELECT 
+                        'payments_insider_sales_staging',
+                        s.id,
+                        s.source_file_id,
+                        CASE
+                            WHEN d.device_id IS NULL THEN 'DEVICE_NOT_FOUND'
+                            WHEN da.device_id IS NULL THEN 'NO_ACTIVE_DEVICE_ASSIGNMENT'
+                            WHEN da.location_id IS NULL THEN 'LOCATION_NOT_FOUND'
+                            WHEN cc.charge_code_id IS NULL THEN 'CHARGE_CODE_NOT_FOUND'
+                            WHEN pm.payment_method_id IS NULL THEN 'PAYMENT_METHOD_NOT_FOUND'
+                            WHEN ss.settlement_system_id IS NULL THEN 'SETTLEMENT_SYSTEM_NOT_FOUND'
+                            ELSE 'UNKNOWN_ERROR'
+                        END AS reject_reason_code,
+                        GETDATE(),
+                        s.terminal_id,
+                        CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.transaction_date AS DATE), 120) + ' ' + s.transaction_time) transaction_date, 
+                        s.transaction_amount, 
+                        COALESCE(CAST(pm.payment_method_id As VARCHAR(10)), 'NO_PAYMENT_METHOD') payment_method,
+                        COALESCE(CAST(d.device_id As VARCHAR(10)), 'DEVICE_NOT_FOUND') device_id,
+                        COALESCE(CAST(ss.settlement_system_id As VARCHAR(10)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
+                        COALESCE(CAST(da.location_id As VARCHAR(10)), 'LOCATION_NOT_FOUND') location_id,
+                        COALESCE(CAST(cc.charge_code_id As VARCHAR(10)), 'CHARGE_CODE_NOT_FOUND') charge_code_id
+                    FROM app.payments_insider_sales_staging s 
+                    LEFT JOIN app.payments_insider_payments_staging p On (s.card_number=p.card_number and s.authorization_code=p.authorization_code)
+                    LEFT JOIN app.dim_payment_method pm On (s.card_brand=pm.payment_method_brand)
+                    LEFT JOIN app.dim_device d ON (d.terminal_id = s.terminal_id)
+                    LEFT JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.transaction_date AS DATE), 120) + ' ' + s.transaction_time) >= da.assign_date AND CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.transaction_date AS DATE), 120) + ' ' + s.transaction_time) < COALESCE(da.end_date, '9999-12-31'))
+                    LEFT JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND cc.program_type_id=CASE WHEN d.device_type = 'Portable CC Reader' THEN 2 ELSE 1 END)
+                    LEFT JOIN app.dim_settlement_system ss On (ss.system_name='PI')
+                    WHERE 
+                        s.source_file_id = :file_id
+                        AND (
+                            d.device_id IS NULL
+                            OR da.device_id IS NULL
+                            OR da.location_id IS NULL
+                            OR cc.charge_code_id IS NULL
+                            OR pm.payment_method_id IS NULL
+                            OR ss.settlement_system_id IS NULL
+                        )
+                        AND s.processed_to_final = 0                     
+                    """), {"file_id": file_id}
+            )
+
+            # Mark all processed staging records as processed
+            self.db.execute(
+                text("""
+                    UPDATE s
+                    SET
+                        processed_to_final = 1,
+                        loaded_at = GETDATE()
+                    FROM app.payments_insider_sales_staging s
+                    WHERE s.id IN (
+                        SELECT staging_record_id
+                        FROM app.fact_transaction
+                        WHERE 
+                            staging_table = 'payments_insider_sales_staging'
+                            AND source_file_id = :file_id
+                    );
+                    """), {"file_id": file_id}
+            )
+
+            total_records = self.db.execute(text("SELECT count(*) FROM app.payments_insider_sales_staging WHERE source_file_id = :file_id"), {"file_id": file_id}).scalar()
+            created_count = self.db.execute(text("SELECT count(*) FROM app.fact_transaction WHERE staging_table = 'payments_insider_sales_staging' AND source_file_id = :file_id"), {"file_id": file_id}).scalar()
+
+            self.db.commit()
+            self._complete_log(log, processed=total_records, created=created_count, updated=0, failed=total_records - created_count)
+            
+            return {
+                "success": True,
+                "records_processed": total_records,
+                "records_created": created_count,
+                "records_failed": total_records - created_count
+            }
+        except Exception as e:
+            self.db.rollback()
+            self._fail_log(log, str(e))
+            raise
 
 
     def _process_payments_insider(self, file_id: Optional[int] = None) -> Dict[str, Any]:
@@ -704,8 +806,67 @@ class ETLProcessor:
                     WHERE
                         s.source_file_id = :file_id
                         AND s.processed_to_final = 0
-                    """, {"file_id": file_id})
-            )
+                    """), {"file_id": file_id})
+
+            # Query for records that won't process
+            self.db.execute(
+                text("""
+                    INSERT INTO app.fact_transaction_reject (
+                        staging_table,
+                        staging_record_id,
+                        source_file_id,
+                        reject_reason_code,
+                        rejected_at,
+                        source_device_terminal_id,
+                        transaction_datetime,
+                        transaction_amount,
+                        payment_method_id,
+                        device_id,
+                        settlement_system_id,
+                        location_id,
+                        charge_code_id
+                    )
+                    SELECT
+                        'ips_cc_staging',
+                        s.id,
+                        s.source_file_id,
+                        CASE
+                            WHEN da.device_id IS NULL THEN 'NO_ACTIVE_DEVICE_ASSIGNMENT'
+                            WHEN d.device_id IS NULL THEN 'DEVICE_NOT_FOUND'
+                            WHEN da.location_id IS NULL THEN 'LOCATION_NOT_FOUND'
+                            WHEN cc.charge_code_id IS NULL THEN 'CHARGE_CODE_NOT_FOUND'
+                            WHEN pm.payment_method_id IS NULL THEN 'PAYMENT_METHOD_NOT_FOUND'
+                            WHEN ss.settlement_system_id IS NULL THEN 'SETTLEMENT_SYSTEM_NOT_FOUND'
+                            ELSE 'UNKNOWN_ERROR'
+                        END AS reject_reason_code,
+                        GETDATE() rejected_at,
+                        s.pole,
+                        s.collection_date,
+                        s.paid,
+                        COALESCE(pm.payment_method_id, 'NO_PAYMENT_METHOD') payment_method,
+                        COALESCE(d.device_id, 'DEVICE_NOT_FOUND') device_id,
+                        COALESCE(ss.settlement_system_id, 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
+                        COALESCE(da.location_id, 'LOCATION_NOT_FOUND') location_id,
+                        COALESCE(cc.charge_code_id, 'CHARGE_CODE_NOT_FOUND') charge_code_id
+                    FROM app.ips_cc_staging s
+                    LEFT JOIN app.dim_device d ON (d.device_terminal_id = s.pole)
+                    LEFT JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND s.transaction_date_time >= da.assign_date AND s.transaction_date_time < COALESCE(da.end_date, '9999-12-31'))
+                    LEFT JOIN app.dim_payment_method pm On (s.card_type=pm.payment_method_brand)
+                    LEFT JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND 1=cc.program_type_id)
+                    LEFT JOIN app.dim_settlement_system ss On (ss.system_name='IPS')
+                    WHERE 
+                        s.source_file_id = :file_id
+                        AND (
+                            d.device_id IS NULL
+                            OR da.device_id IS NULL
+                            OR da.location_id IS NULL
+                            OR cc.charge_code_id IS NULL
+                            OR pm.payment_method_id IS NULL
+                            OR ss.settlement_system_id IS NULL
+                        )
+                        AND s.processed_to_final = 0
+                     """), {"file_id": file_id})
+    
 
             # Mark all processed staging records as processed
             self.db.execute(
@@ -713,7 +874,7 @@ class ETLProcessor:
                     UPDATE s
                     SET
                         processed_to_final = 1,
-                        loaded_at = SYSUTCDATETIME()
+                        loaded_at = GETDATE()
                     FROM app.ips_cc_staging s
                     WHERE s.id IN (
                         SELECT staging_record_id
@@ -722,9 +883,8 @@ class ETLProcessor:
                             staging_table = 'ips_cc_staging'
                             AND source_file_id = :file_id
                     );
-                    """, {"file_id": file_id}
-                )
-            )
+                    """), {"file_id": file_id})
+
             
             total_records = self.db.execute(text("SELECT count(*) FROM app.ips_cc_staging WHERE source_file_id = :file_id"), {"file_id": file_id}).scalar()
             created_count = self.db.execute(text("SELECT count(*) FROM app.fact_transaction WHERE staging_table = 'ips_cc_staging' AND source_file_id = :file_id"), {"file_id": file_id}).scalar()
@@ -884,8 +1044,67 @@ class ETLProcessor:
                     WHERE
                         s.source_file_id = :file_id
                         AND s.processed_to_final = 0
-                """, {'file_id': file_id})
-            )
+                """), {'file_id': file_id})
+
+
+            self.db.execute(
+                text("""
+                    INSERT INTO app.fact_transaction_reject (
+                        staging_table,
+                        staging_record_id,
+                        source_file_id,
+                        reject_reason_code,
+                        rejected_at,
+                        source_device_terminal_id,
+                        transaction_datetime,
+                        transaction_amount,
+                        payment_method_id,
+                        device_id,
+                        settlement_system_id,
+                        location_id,
+                        charge_code_id
+                    )
+                    SELECT
+                        'ips_mobile_staging',
+                        s.id,
+                        s.source_file_id,
+                        CASE
+                            WHEN da.device_id IS NULL THEN 'NO_ACTIVE_DEVICE_ASSIGNMENT'
+                            WHEN d.device_id IS NULL THEN 'DEVICE_NOT_FOUND'
+                            WHEN da.location_id IS NULL THEN 'LOCATION_NOT_FOUND'
+                            WHEN cc.charge_code_id IS NULL THEN 'CHARGE_CODE_NOT_FOUND'
+                            WHEN pm.payment_method_id IS NULL THEN 'PAYMENT_METHOD_NOT_FOUND'
+                            WHEN ss.settlement_system_id IS NULL THEN 'SETTLEMENT_SYSTEM_NOT_FOUND'
+                            ELSE 'UNKNOWN_ERROR'
+                        END AS reject_reason_code,
+                        GETDATE() rejected_at,
+                        s.space_name,
+                        s.received_date_time,
+                        s.paid,
+                        COALESCE(CAST(pm.payment_method_id As VARCHAR(10)), 'NO_PAYMENT_METHOD') payment_method,
+                        COALESCE(CAST(d.device_id As VARCHAR(10)), 'DEVICE_NOT_FOUND') device_id,
+                        COALESCE(CAST(ss.settlement_system_id As VARCHAR(10)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
+                        COALESCE(CAST(da.location_id As VARCHAR(10)), 'LOCATION_NOT_FOUND') location_id,
+                        COALESCE(CAST(cc.charge_code_id As VARCHAR(10)), 'CHARGE_CODE_NOT_FOUND') charge_code_id
+                    FROM app.ips_mobile_staging s
+                    LEFT JOIN app.dim_device d ON (d.device_terminal_id = s.space_name)
+                    LEFT JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND s.received_date_time >= da.assign_date AND s.received_date_time < COALESCE(da.end_date, '9999-12-31'))
+                    LEFT JOIN app.dim_payment_method pm On (s.partner_name=pm.payment_method_brand)
+                    LEFT JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND 1=cc.program_type_id)
+                    LEFT JOIN app.dim_settlement_system ss On (ss.system_name='IPS')
+                    WHERE 
+                        s.source_file_id = :file_id
+                        AND (
+                            d.device_id IS NULL
+                            OR da.device_id IS NULL
+                            OR da.location_id IS NULL
+                            OR cc.charge_code_id IS NULL
+                            OR pm.payment_method_id IS NULL
+                            OR ss.settlement_system_id IS NULL
+                        )
+                        --AND s.processed_to_final = 0
+                    """), {"file_id": file_id})
+
             
             # Mark all processed staging records as processed
             self.db.execute(
@@ -893,7 +1112,7 @@ class ETLProcessor:
                     UPDATE s
                     SET
                         processed_to_final = 1,
-                        loaded_at = SYSUTCDATETIME()
+                        loaded_at = GETDATE()
                     FROM app.ips_mobile_staging s
                     WHERE s.id IN (
                         SELECT staging_record_id
@@ -902,9 +1121,8 @@ class ETLProcessor:
                             staging_table = 'ips_mobile_staging'
                             AND source_file_id = :file_id
                     );
-                    """, {"file_id": file_id}
+                    """), {"file_id": file_id}
                 )
-            )
             
             total_records = self.db.execute(text("SELECT count(*) FROM app.ips_mobile_staging WHERE source_file_id = :file_id"), {"file_id": file_id}).scalar()
             created_count = self.db.execute(text("SELECT count(*) FROM app.fact_transaction WHERE staging_table = 'ips_mobile_staging' AND source_file_id = :file_id"), {"file_id": file_id}).scalar()
@@ -1039,8 +1257,69 @@ class ETLProcessor:
                     WHERE
                         s.source_file_id = :file_id
                         AND s.processed_to_final = 0
-                """, {'file_id': file_id})
-            )
+                """), {'file_id': file_id})
+
+
+            self.db.execute(
+                text("""
+                    INSERT INTO app.fact_transaction_reject (
+                        staging_table,
+                        staging_record_id,
+                        source_file_id,
+                        reject_reason_code,
+                        rejected_at,
+                        source_device_terminal_id,
+                        transaction_datetime,
+                        transaction_amount,
+                        payment_method_id,
+                        device_id,
+                        settlement_system_id,
+                        location_id,
+                        charge_code_id
+                    )
+                    SELECT
+                        'ips_cash_staging',
+                        s.id,
+                        s.source_file_id,
+                        CASE
+                            WHEN da.device_id IS NULL THEN 'NO_ACTIVE_DEVICE_ASSIGNMENT'
+                            WHEN d.device_id IS NULL THEN 'DEVICE_NOT_FOUND'
+                            WHEN da.location_id IS NULL THEN 'LOCATION_NOT_FOUND'
+                            WHEN cc.charge_code_id IS NULL THEN 'CHARGE_CODE_NOT_FOUND'
+                            WHEN pm.payment_method_id IS NULL THEN 'PAYMENT_METHOD_NOT_FOUND'
+                            WHEN ss.settlement_system_id IS NULL THEN 'SETTLEMENT_SYSTEM_NOT_FOUND'
+                            ELSE 'UNKNOWN_ERROR'
+                        END AS reject_reason_code,
+                        GETDATE() rejected_at,
+                        s.pole_ser_no,
+                        CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.collection_date AS DATE), 120) + ' ' + s.collection_time) transaction_datetime,
+                        s.coin_revenue,
+                        COALESCE(CAST(pm.payment_method_id As VARCHAR(10)), 'NO_PAYMENT_METHOD') payment_method,
+                        COALESCE(CAST(d.device_id As VARCHAR(10)), 'DEVICE_NOT_FOUND') device_id,
+                        COALESCE(CAST(ss.settlement_system_id As VARCHAR(10)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
+                        COALESCE(CAST(da.location_id As VARCHAR(10)), 'LOCATION_NOT_FOUND') location_id,
+                        COALESCE(CAST(cc.charge_code_id As VARCHAR(10)), 'CHARGE_CODE_NOT_FOUND') charge_code_id
+                    FROM app.ips_cash_staging s
+                    LEFT JOIN app.dim_device d ON (d.device_terminal_id = s.pole_ser_no)
+                    LEFT JOIN app.fact_device_assignment da ON (da.device_id = d.device_id 
+                                                                AND CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.collection_date AS DATE), 120) + ' ' + s.collection_time) >= da.assign_date 
+                                                                AND CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.collection_date AS DATE), 120) + ' ' + s.collection_time) < COALESCE(da.end_date, '9999-12-31'))
+                    LEFT JOIN app.dim_payment_method pm On ('Cash'=pm.payment_method_brand)
+                    LEFT JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND 1=cc.program_type_id)
+                    LEFT JOIN app.dim_settlement_system ss On (ss.system_name='IPS')
+                    WHERE 
+                        s.source_file_id = :file_id
+                        AND (
+                            d.device_id IS NULL
+                            OR da.device_id IS NULL
+                            OR da.location_id IS NULL
+                            OR cc.charge_code_id IS NULL
+                            OR pm.payment_method_id IS NULL
+                            OR ss.settlement_system_id IS NULL
+                        )
+                        --AND s.processed_to_final = 0
+                     """), {"file_id": file_id})
+            
 
             # Mark all processed staging records as processed
             self.db.execute(
@@ -1048,7 +1327,7 @@ class ETLProcessor:
                     UPDATE s
                     SET
                         processed_to_final = 1,
-                        loaded_at = SYSUTCDATETIME()
+                        loaded_at = GETDATE()
                     FROM app.ips_cash_staging s
                     WHERE s.id IN (
                         SELECT staging_record_id
@@ -1057,10 +1336,8 @@ class ETLProcessor:
                             staging_table = 'ips_cash_staging'
                             AND source_file_id = :file_id
                     );
-                    """, {"file_id": file_id}
-                )
-            )
-            
+                    """), {"file_id": file_id})
+
             total_records = self.db.execute(text("SELECT count(*) FROM app.ips_cash_staging WHERE source_file_id = :file_id"), {"file_id": file_id}).scalar()
             created_count = self.db.execute(text("SELECT count(*) FROM app.fact_transaction WHERE staging_table = 'ips_cash_staging' AND source_file_id = :file_id"), {"file_id": file_id}).scalar()
 
@@ -1140,7 +1417,7 @@ class ETLProcessor:
                 "total": len(records),
                 "created": created_count,
                 "failed": failed_count,
-                "status": "completed"
+                "status": "complete"
             })
             self._complete_log(log_entry, len(records), created_count, 0, failed_count)
             
@@ -1233,151 +1510,6 @@ class ETLProcessor:
             self.db.rollback()
             raise  
 
-    def _process_zms_cash(self, process_date: Optional[str] = None) -> Dict[str, Any]:
-        """Process ZMS Cash records to final transactions. Skips staging table."""
-        
-        # If no date provided, defaults to previous day
-        if process_date is None:    
-            process_date = datetime.strftime(datetime.now() - timedelta(days=1), ("%Y-%m-%d"))
-        
-        try:
-            records = pd.read_sql(f"""
-                DECLARE @dt datetime
-                SET @dt = '{process_date}';
-                
-                with cte As (
-                    -- Pull cash payment data from a particular date from ZMS table
-                    select 
-                        CASE
-                            WHEN p.Id_Parking = 12 THEN 2
-                            ELSE p.Id_Parking
-                        END Id_Parking,
-                        pa.ParkingName, p.Id_Location, l.Name, l.ShortName, TicketNumber,
-                        CASE
-                            WHEN l.TxnT2StationAdddress LIKE 'A%' THEN 'Exit'
-                            WHEN l.TxnT2StationAdddress LIKE 'E%' THEN 'Entry'
-                            WHEN l.TxnT2StationAdddress LIKE 'H%' THEN 'Cashiered'
-                            WHEN l.TxnT2StationAdddress LIKE 'K%' THEN 'POF'
-                            ELSE 'Unknown'
-                        END As location_sub_area,
-                        l.TxnT2StationAdddress station, p.ParkhouseNumber, p.Amount, p.Amount/100. Amount2, p.Date, p.Time,
-                        CONVERT(DATETIME, CONVERT(VARCHAR, CAST(p.Date AS DATE), 120) + ' ' + p.Time) transaction_datetime
-                    from Opms.dbo.Payments p
-                    left join Opms.dbo.Location l On (p.Id_Parking=l.Id_Parking AND p.Id_Location=l.Id_Location)
-                    left join Opms.dbo.ParkingAdmin pa On (p.Id_Parking=pa.Id_Parking)
-                    where 
-                        Date = @dt
-                        AND PayMethod = 0
-                        AND l.TxnT2StationAdddress NOT LIKE 'A%'
-                ),-- select * from cte
-                -- Pull rebates from the same date. Group by TicketID to get the sum of any rebates used.
-                rebate_group As (
-                    select 
-                        max(Id_Parking) Id_Parking, max(Id_Location) Id_Location, max(Id_Equipment) Id_Equipment, max(Date) Date, max(Time) Time, TicketId, count(RebateNumber) RebatesApplied, sum(RebateAmount) sumRebateAmount 
-                    from Opms.dbo.Rebates 
-                    where 
-                        Date = @dt
-                    GROUP BY TicketId
-                )
-                select
-                    cte.transaction_datetime transaction_date, Amount/100 - COALESCE(sumRebateAmount,0) settle_amount, 
-                    CONVERT(VARCHAR, CAST(cte.transaction_datetime AS DATE), 120) settle_date, Amount/100 - COALESCE(sumRebateAmount,0) settle_amount, 
-                    'zms_cash_regular' source, 'GARAGE' location_type, ParkingName as location_name, station device_terminal_id, 'CASH' as payment_type, cte.TicketNumber reference_number,
-                    CASE
-                        WHEN station LIKE '_1_' THEN 82002
-                        WHEN station LIKE '_2_' THEN 82007
-                        WHEN station LIKE '_4_' THEN 82005
-                        WHEN station LIKE '_5_' THEN 82005
-                        WHEN station LIKE '_6_' THEN 82001
-                        WHEN station LIKE '_7_' THEN 82004
-                        WHEN station LIKE '_8_' THEN 82162
-                        ELSE 82172
-                    END As org_code,
-                    'zms_cash_regular' staging_table, cte.TicketNumber staging_record_id,
-                    cte.location_sub_area, Name LocationName, cte.ParkhouseNumber, cte.Id_Parking, 
-                    Amount/100 transaction_amount, COALESCE(sumRebateAmount, 0) sum_rebates, 
-                    COALESCE(RebatesApplied, 0) n_rebates
-                from cte
-                left join rebate_group r On (cte.TicketNumber=r.TicketId)
-                order by Id_Parking, location_sub_area""", self.db.get_bind())
-
-            created_count = 0
-            failed_count = 0
-
-            for idx, record in records.iterrows():
-                try:
-                    transaction = Transaction(
-                            transaction_date=record.transaction_date,
-                            transaction_amount=record.transaction_amount,
-                            settle_date=record.settle_date,
-                            settle_amount=record.settle_amount,
-                            source=record.source,
-                            location_type=LocationType.GARAGE,
-                            location_name=record.location_name,
-                            location_sub_area=record.location_sub_area,
-                            device_terminal_id=record.device_terminal_id,
-                            payment_type=PaymentType.CASH,
-                            reference_number=record.reference_number,
-                            org_code=record.org_code,
-                            staging_table=record.staging_table,
-                            staging_record_id=record.staging_record_id
-                        )
-                    self.db.add(transaction)                
-                
-                    #record.processed_to_final = True
-                    #record.transaction_id = transaction.id
-                    created_count += 1
-
-                    if (idx + 1) % 500 == 0:
-                        self.db.flush()
-                        self.db.commit()
-                        print(f"Committed batch: {idx + 1} of {len(records)} records processed")
-                
-                except Exception as e:
-                    failed_count += 1
-                    print(f"Error processing ZMS Cash Regular record {record.id}: {e}")
-                    raise
-
-            self.db.flush()
-            self.db.commit()
-            print(f"Committed batch: {idx + 1} of {len(records)} records processed")
-
-            return {
-                "success": True,
-                "records_processed": len(records),
-                "records_created": created_count,
-                "records_failed": failed_count
-            }
-        
-        except Exception as e:
-            self.db.rollback()
-            raise        
-
-
-    def process_all_staging_tables(self, file_id: Optional[int] = None) -> Dict[str, Any]:
-        """Process all staging tables to final transactions"""
-        results = {}
-        
-        # Process each staging table
-        processors = [
-            ("windcave", self.process_windcave),
-            ("payments_insider", self.process_payments_insider),
-            ("ips_cc", self.process_ips_cc),
-            ("ips_mobile", self.process_ips_mobile),
-            ("ips_cash", self.process_ips_cash),
-            # Add other processors as needed
-        ]
-        
-        for name, processor in processors:
-            try:
-                results[name] = processor(file_id)
-            except Exception as e:
-                results[name] = {
-                    "success": False,
-                    "error": str(e)
-                }
-        
-        return results
     
     def _lookup_charge_code(self, id: str) -> str:
         charge_code = None
@@ -1461,7 +1593,7 @@ class ETLProcessor:
         
         if failed == 0 and total_records > 0:
             # All records processed successfully
-            log_entry.status = "completed"
+            log_entry.status = "complete"
         elif failed > 0 and (created > 0 or updated > 0):
             # Some records succeeded, some failed
             log_entry.status = "incomplete"
@@ -1470,7 +1602,7 @@ class ETLProcessor:
             log_entry.status = "failed"
         else:
             # No records processed at all
-            log_entry.status = "completed"
+            log_entry.status = "complete"
         
         self.db.commit()
     
@@ -1481,6 +1613,150 @@ class ETLProcessor:
         log_entry.error_message = error_message
         self.db.commit()
 
+      # --- Generic SQL-template based processing helpers -----------------
+    def _load_sql_template(self, source_key: str, kind: str) -> Optional[str]:
+        """Load SQL template file for a given source and kind (main|failed|update).
+
+        Files are expected under app/utils/sql_templates and named
+        `{source_key}_{kind}.sql` (e.g. `windcave_main.sql`). Returns None
+        if the file is missing or empty.
+        """
+        templates_dir = Path(__file__).resolve().parent / "sql_templates"
+        fname = f"{source_key}_{kind}.sql"
+        path = templates_dir / fname
+        try:
+            if not path.exists():
+                return None
+            content = path.read_text(encoding="utf-8").strip()
+            return content if content else None
+        except Exception:
+            return None
+    
+
+    def process_file(self, file_id: int, source_key: Optional[str] = None, staging_table: Optional[str] = None) -> Dict[str, Any]:
+        """Generic processing entry point for an uploaded file using SQL templates.
+        
+        Follows the pattern of process_windcave. Uses pure SQL (no ORM).
+        1. Determine data source type from uploaded_files record
+        2. Load SQL templates (main, failed, update)
+        3. Start logging
+        4. Execute main transaction INSERT (from template)
+        5. Execute failed transaction INSERT (from template)
+        6. Update staging table processed_to_final flags (from template or default)
+        7. Commit and log completion
+        """
+        if source_key and staging_table:
+            # If both provided, use them directly
+            pass
+        else:
+            # If not provided, look up from file record
+            # Look up the file record to determine source type (pure SQL)
+            file_record_result = self.db.execute(
+                text("SELECT data_source_type FROM app.uploaded_files WHERE id = :file_id"),
+                {"file_id": file_id}
+            ).first()
+            
+            if not file_record_result:
+                raise ValueError(f"UploadedFile not found: {file_id}")
+            
+            data_source_type_str = file_record_result[0]
+            data_source_type = DataSourceType[data_source_type_str]
+            
+            source_key, staging_table = self._get_source_key_and_staging_table(data_source_type)
+        
+        if not staging_table:
+            raise ValueError(f"No staging table mapped for source type: {data_source_type}")
+        
+        print(f"Processing file {file_id} for source '{source_key}' using staging table '{staging_table}'")
+
+        # Start processing log
+        log = self._start_log(staging_table, file_id)
+        
+        try:
+            # Load SQL templates
+            main_sql = self._load_sql_template(source_key, "main")
+            failed_sql = self._load_sql_template(source_key, "failed")
+            #update_sql = self._load_sql_template(source_key, "update")
+            
+            if not main_sql:
+                raise ValueError(f"No main SQL template found for {source_key}")
+            
+            # Execute main SQL: insert successful records into fact_transaction
+            result = self.db.execute(text(main_sql), {"file_id": file_id})
+            created_count = result.rowcount
+            
+            # Execute failed SQL: insert rejected records into fact_transaction_reject
+            failed_count = 0
+            if failed_sql:
+                failed_result = self.db.execute(text(failed_sql), {"file_id": file_id})
+                failed_count = failed_result.rowcount
+            
+            # Update staging table processed flags
+            #if update_sql:
+                #self.db.execute(text(update_sql), {"file_id": file_id})
+            #else:
+            # Default: mark all records with created transactions as processed
+            if source_key == 'payments_insider_payments':
+                default_update = f"""
+                    UPDATE p
+                    SET p.processed_to_final = 1, p.loaded_at = GETDATE()
+                    FROM app.payments_insider_payments_staging p
+                    INNER JOIN app.payments_insider_sales_staging s On (p.card_number=s.card_number and p.authorization_code=s.authorization_code)
+                    WHERE 
+                        p.source_file_id = 342
+                        AND s.id IN (
+                            SELECT staging_record_id
+                            FROM app.fact_transaction
+                            WHERE staging_table = 'payments_insider_sales_staging' AND source_file_id = s.source_file_id
+                            );
+                """
+            else:
+                default_update = f"""
+                    UPDATE s
+                    SET processed_to_final = 1, loaded_at = GETDATE()
+                    FROM app.{staging_table} s
+                    WHERE s.id IN (
+                        SELECT staging_record_id
+                        FROM app.fact_transaction
+                        WHERE staging_table = :staging_table AND source_file_id = :file_id
+                    );
+                """
+            self.db.execute(text(default_update), {"staging_table": staging_table, "file_id": file_id})
+            
+            # Get total record count
+            total_count = self.db.execute(
+                text(f"SELECT COUNT(*) FROM app.{staging_table} WHERE source_file_id = :file_id"),
+                {"file_id": file_id}
+            ).scalar()
+            
+            self.db.commit()
+            self._complete_log(log, processed=total_count, created=created_count, updated=0, failed=failed_count)
+            
+            return {
+                "success": True,
+                "records_processed": total_count,
+                "records_created": created_count,
+                "records_failed": failed_count
+            }
+        
+        except Exception as e:
+            self.db.rollback()
+            self._fail_log(log, str(e))
+            raise
+
+
+    def _get_source_key_and_staging_table(self, data_source_type: DataSourceType) -> tuple:
+        """Map DataSourceType to a short source key and staging table name."""
+        mapping = {
+            DataSourceType.WINDCAVE: ("windcave", "windcave_staging"),
+            DataSourceType.PAYMENTS_INSIDER_PAYMENTS: ("payments_insider_payments", "payments_insider_payments_staging"),
+            DataSourceType.PAYMENTS_INSIDER_SALES: ("payments_insider_sales", "payments_insider_sales_staging"),
+            DataSourceType.IPS_CC: ("ips_cc", "ips_cc_staging"),
+            DataSourceType.IPS_MOBILE: ("ips_mobile", "ips_mobile_staging"),
+            DataSourceType.IPS_CASH: ("ips_cash", "ips_cash_staging"),
+            # Add other mappings if/when needed
+        }
+        return mapping.get(data_source_type, ("unknown", ""))
 
 class DataLoader:
     """Load data from files to staging tables"""
@@ -1850,6 +2126,78 @@ class DataLoader:
 
         # --- Update file as processed ---
         file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+        if file_record:
+            file_record.is_processed = True
+            file_record.processed_at = datetime.now()
+            file_record.records_processed = len(records)
+            self.db.commit()
+        
+        return len(records)
+
+
+    def load_ips_cash_multi_space(self, file_path: str, file_id: int) -> int:
+        """ Load cash transactions from multi-space IPS meters """
+
+        # Determine if Excel or CSV
+        if file_path.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(file_path, dtype={'Terminal':'str'})
+        else:
+            df = pd.read_csv(file_path, dtype={'Terminal':'str'})
+
+        # --- Check for a sum or total at the bottom of the report and remove it ---
+        df = df[df['Date'].notna()]
+        
+        # --- Normalize column names ---
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
+        df.rename(columns=({'total_($)':'total_revenue', 'coins_($)':'coin_revenue', 'card_($)':'card_revenue', 'bills_($)':'bill_revenue', 'card_#':'card_number'}), inplace=True)
+
+        # --- Make sure these columns are floats
+        for col in ['coin_revenue', 'card_revenue', 'total_revenue', 'bill_revenue']:
+            df[col] = df[col].astype(float)
+        
+        # --- Add metadata columns ---
+        df["source_file_id"] = file_id
+        df["processed_to_final"] = False
+
+        # --- Create transaction_date_time column ---
+        df['transaction_date_time'] = df.apply(lambda row: pd.to_datetime(row['date']+' '+row['time']), axis=1)
+
+        # --- Convert datetimes where possible ---
+        for col in df.columns:
+            if "date" in col:
+                try:
+                    df[col] = pd.to_datetime(df[col], errors="coerce")
+                except Exception:
+                    pass
+                    
+        # --- Handle integer columns - replace NaN with None ---
+        int_columns = []
+        
+        if len(int_columns) > 0:
+            for col in int_columns:
+                if col in df.columns:
+                    # Convert to nullable integer type or replace NaN with None
+                    df[col] = df[col].replace({pd.NA: None, np.nan: None})
+                    # Convert to int where not None
+                    df.loc[df[col].notna(), col] = df[col].loc[df[col].notna()].astype(int)
+                
+        # --- Convert pandas NaN to None for SQL ---
+        df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
+
+        # --- Remove .0 from Space Name and Terminal if present ---
+        df['space_name'] = df['space_name'].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
+        df['terminal'] = df['terminal'].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
+
+        # --- Convert to list of dictionaries ---
+        records = df.to_dict(orient="records")
+        
+        # --- Bulk insert using SQLAlchemy ---
+        self.db.execute(insert(IPSCashMSStaging), records)
+        self.db.commit()
+
+        # --- Update file as processed ---
+        file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+
         if file_record:
             file_record.is_processed = True
             file_record.processed_at = datetime.now()

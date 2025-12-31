@@ -71,35 +71,8 @@ async def stream_process_etl(
     def run_etl():
         try:
             processor = ETLProcessor(db, org_code_cache=org_code_cache, location_from_charge_code=location_cache, progress_callback=progress_cb)
-            
-            source_table_map = {
-                DataSourceType.WINDCAVE: "windcave",
-                DataSourceType.PAYMENTS_INSIDER_SALES: "payments_insider",
-                DataSourceType.PAYMENTS_INSIDER_PAYMENTS: "payments_insider",
-                DataSourceType.IPS_CC: "ips_cc",
-                DataSourceType.IPS_MOBILE: "ips_mobile",
-                DataSourceType.IPS_CASH: "ips_cash"
-            }
-            source_table = source_table_map.get(file_record.data_source_type)
-            if not source_table:
-                q.put({"event": "error", "message": f"No ETL processor available for: {file_record.data_source_type}"})
-                return
-
-            # Call the right processor
-            if source_table == "windcave":
-                result = processor.process_windcave(file_id)
-            elif source_table == "payments_insider":
-                result = processor.process_payments_insider(file_id)
-            elif source_table == "ips_cc":
-                result = processor.process_ips_cc(file_id)
-            elif source_table == "ips_mobile":
-                result = processor.process_ips_mobile(file_id)
-            elif source_table == "ips_cash":
-                result = processor.process_ips_cash(file_id)
-            else:
-                q.put({"event": "error", "message": f"Unknown source table: {source_table}"})
-                return
-
+            source_key, staging_table = processor._get_source_key_and_staging_table(file_record.data_source_type)
+            result = processor.process_file(file_id, source_key, staging_table)
             q.put({"event": "done", "result": result})
 
         except Exception as e:
@@ -191,9 +164,10 @@ async def get_files_status(
             # aggregate check belongs in HAVING
             having_clauses.append("MAX(CASE WHEN etl.status = 'completed' THEN 1 ELSE 0 END) = 1")
         elif status_filter == 'not_complete':
-            # Needs both non-aggregate (records_processed not null) and aggregate (no completed runs)
+            # Needs both non-aggregate (records_processed not null) and aggregate (not 100% complete)
             where_clauses.append("uf.records_processed IS NOT NULL")
-            having_clauses.append("MAX(CASE WHEN etl.status = 'completed' THEN 1 ELSE 0 END) = 0")
+            # A file is 'not_complete' if records_created < records_processed (or no etl records yet)
+            having_clauses.append("COALESCE(SUM(etl.records_created), 0) < MAX(uf.records_processed)")
         elif status_filter == 'failed':
             having_clauses.append("MAX(CASE WHEN etl.status = 'failed' THEN 1 ELSE 0 END) = 1")
         elif status_filter == 'not_started':
@@ -218,7 +192,7 @@ async def get_files_status(
         CASE 
             WHEN MAX(CAST(uf.is_processed As INT)) = 1 AND max(uf.records_processed) = 0 THEN 'complete'
             WHEN uf.records_processed IS NULL THEN 'not_started'
-            WHEN MAX(CASE WHEN etl.status = 'completed' THEN 1 ELSE 0 END) = 1 THEN 'complete'
+            WHEN MAX(CASE WHEN etl.status IN ('complete', 'completed') THEN 1 ELSE 0 END) = 1 THEN 'complete'
             WHEN MAX(CASE WHEN etl.status = 'running' THEN 1 ELSE 0 END) = 1 THEN 'in_progress'
             WHEN MAX(CASE WHEN etl.status = 'failed' THEN 1 ELSE 0 END) = 1 THEN 'failed'
             ELSE 'not_complete'
@@ -468,51 +442,27 @@ async def process_file_to_final(
     
     try:
         # Get cached lookups initialized at startup
-        org_code_cache = etl_cache.get_org_code_cache()
-        location_cache = etl_cache.get_location_cache()
+        #org_code_cache = etl_cache.get_org_code_cache()
+        #location_cache = etl_cache.get_location_cache()
         
-        cnxn = ConnectionManager()
+        #cnxn = ConnectionManager()
 
         processor = ETLProcessor(
             db,
-            traffic_db=cnxn.get_engine('Traffic'),
-            org_code_cache=org_code_cache,
-            location_from_charge_code=location_cache
+            #traffic_db=cnxn.get_engine('Traffic'),
+            #org_code_cache=org_code_cache,
+            #location_from_charge_code=location_cache
         )
         
-        # Determine which staging table to process based on data source type
-        source_table_map = {
-            DataSourceType.WINDCAVE: "windcave",
-            DataSourceType.PAYMENTS_INSIDER_SALES: "payments_insider",
-            DataSourceType.PAYMENTS_INSIDER_PAYMENTS: "payments_insider",
-            DataSourceType.IPS_CC: "ips_cc",
-            DataSourceType.IPS_MOBILE: "ips_mobile",
-            DataSourceType.IPS_CASH: "ips_cash"
-        }
-        
-        source_table = source_table_map.get(file_record.data_source_type)
-        if not source_table:
+        source_key, staging_table = processor._get_source_key_and_staging_table(file_record.data_source_type)
+
+        if not staging_table:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"No ETL processor available for: {file_record.data_source_type}"
             )
         
-        # Process based on source type
-        if source_table == "windcave":
-            result = processor.process_windcave(file_id)
-        elif source_table == "payments_insider":
-            result = processor.process_payments_insider(file_id)
-        elif source_table == "ips_cc":
-            result = processor.process_ips_cc(file_id)
-        elif source_table == "ips_mobile":
-            result = processor.process_ips_mobile(file_id)
-        elif source_table == "ips_cash":
-            result = processor.process_ips_cash(file_id)
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown source table: {source_table}"
-            )
+        result = processor.process_file(file_id, source_key, staging_table)
         
         return ProcessETLResponse(
             success=result.get("success", False),
@@ -552,7 +502,7 @@ async def get_file_status(
         CASE 
             WHEN MAX(CAST(uf.is_processed As INT)) = 1 AND max(uf.records_processed) = 0 THEN 'complete'
             WHEN uf.records_processed IS NULL THEN 'not_started'
-            WHEN MAX(CASE WHEN etl.status = 'completed' THEN 1 ELSE 0 END) = 1 THEN 'complete'
+            WHEN MAX(CASE WHEN etl.status IN ('complete', 'completed') THEN 1 ELSE 0 END) = 1 THEN 'complete'
             WHEN MAX(CASE WHEN etl.status = 'running' THEN 1 ELSE 0 END) = 1 THEN 'in_progress'
             WHEN MAX(CASE WHEN etl.status = 'failed' THEN 1 ELSE 0 END) = 1 THEN 'failed'
             ELSE 'not_complete'

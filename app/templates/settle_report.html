@@ -6,7 +6,7 @@
     <title>Settlement Report - Parking Division</title>
     <style>
         body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial; background: #f3f4f6; padding: 24px; }
-        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); max-width: 1200px; margin: 0 auto; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); max-width: 1600px; margin: 0 auto; }
         h1 { margin-bottom: 6px; }
         .controls { display:flex; gap: 12px; align-items:center; margin-bottom:16px; }
         label { font-weight: 600; font-size: 0.9rem; color: #374151; }
@@ -15,15 +15,62 @@
         .results { margin-top: 18px; }
         table { width:100%; border-collapse: collapse; }
         th, td { padding: 8px 10px; text-align:left; border-bottom: 1px solid #e5e7eb; }
-        thead th { background: #f8fafc; font-weight:700; }
+        thead th { background: #f8fafc; font-weight:700; position: sticky; top: 0; z-index: 10; }
         .kpi { display:inline-block; padding: 6px 10px; border-radius: 8px; background:#eef2ff; margin-right: 8px; font-weight:700; }
         .note { color:#6b7280; font-size:0.9rem }
+        
+        /* Hierarchy styles */
+        .row-grand-total { background: #1e293b; color: white; font-weight: 700; font-size: 1.1rem; }
+        .row-grand-total:hover { background: #334155; }
+        
+        .row-charge-code { background: #3b82f6; color: white; font-weight: 700; cursor: pointer; }
+        .row-charge-code:hover { background: #2563eb; }
+        
+        .row-facility { background: #60a5fa; color: white; font-weight: 600; cursor: pointer; }
+        .row-facility td:first-child { padding-left: 20px; }
+        .row-facility:hover { background: #3b82f6; }
+        
+        .row-payment-method { background: #93c5fd; color: #1e293b; font-weight: 600; cursor: pointer; }
+        .row-payment-method td:first-child { padding-left: 40px; }
+        .row-payment-method:hover { background: #60a5fa; }
+        
+        .row-device-type { background: #bfdbfe; color: #1e293b; font-weight: 600; cursor: pointer; }
+        .row-device-type td:first-child { padding-left: 60px; }
+        .row-device-type:hover { background: #93c5fd; }
+        
+        .row-device { background: #dbeafe; cursor: pointer; }
+        .row-device td:first-child { padding-left: 80px; }
+        .row-device:hover { background: #bfdbfe; }
+        
+        .row-detail { background: white; font-size: 0.9rem; }
+        .row-detail td:first-child { padding-left: 100px; }
+        .row-detail:hover { background: #f8fafc; }
+        
+        /* Mismatch highlighting */
+        .amount-mismatch { background: #fee2e2 !important; }
+        .amount-mismatch:hover { background: #fecaca !important; }
+        
+        .hidden { display: none; }
+        
+        .expand-icon { 
+            display: inline-block; 
+            width: 16px; 
+            transition: transform 0.2s; 
+            margin-right: 4px;
+        }
+        .expand-icon.collapsed::before { content: '▶'; }
+        .expand-icon.expanded::before { content: '▼'; }
+        
+        .amount { text-align: right; font-family: 'Courier New', monospace; }
+        .count { text-align: center; }
     </style>
 </head>
 <body>
 <div class="card">
-    <h1>Settlement Summary by Location / Org / Payment Type</h1>
-    <div class="note">Select a date range (settle_date) to aggregate settled transactions.</div>
+    <h1>Settlement Summary - Hierarchical Rollup</h1>
+    <div class="note">Click on any subtotal row to expand/collapse details. Shows charge code → facility → payment method type → device type → device hierarchy. 
+        <strong style="color: #dc2626;">Red rows indicate transaction amount ≠ settled amount.</strong>
+    </div>
 
     <div style="height:12px"></div>
 
@@ -41,6 +88,8 @@
             <button onclick="loadReport()">Generate Report</button>
         </div>
         <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+            <button onclick="expandAll()">Expand All</button>
+            <button onclick="collapseAll()">Collapse All</button>
             <span id="loading" style="display:none">Loading...</span>
             <a href="/reports/sources">View by Source</a>
         </div>
@@ -56,18 +105,21 @@
     const token = localStorage.getItem('access_token');
     if (!token) { window.location.href = '/'; }
 
+    // Set default dates to yesterday
     (function setDefaultDates(){
-      const today = new Date();
-      const end = new Date(today);
-      end.setDate(end.getDate() - 1);
-      const start = new Date(today);
-      start.setDate(start.getDate() - 1);
+        const today = new Date();
+        const end = new Date(today);
+        end.setDate(end.getDate() - 1);
+        const start = new Date(today);
+        start.setDate(start.getDate() - 1);
 
-      // Format YYYY-MM-DD
-      const asDate = d => d.toISOString().split('T')[0];
-      document.getElementById('startDate').value = asDate(start);
-      document.getElementById('endDate').value = asDate(end);
+        const asDate = d => d.toISOString().split('T')[0];
+        document.getElementById('startDate').value = asDate(start);
+        document.getElementById('endDate').value = asDate(end);
     })();
+
+    let reportData = [];
+    let expandedRows = new Set();
 
     async function loadReport() {
         const s = document.getElementById('startDate').value;
@@ -79,7 +131,7 @@
         document.getElementById('summaryKPIs').innerHTML = '';
 
         try {
-            const resp = await fetch(`/api/v1/reports/settle?start_date=${encodeURIComponent(s)}&end_date=${encodeURIComponent(e)}`, {
+            const resp = await fetch(`/api/v1/reports/settle-rollup?start_date=${encodeURIComponent(s)}&end_date=${encodeURIComponent(e)}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!resp.ok) {
@@ -90,7 +142,8 @@
             }
 
             const data = await resp.json();
-            renderReport(data);
+            reportData = data.rows || [];
+            renderReport();
 
         } catch (err) {
             alert('Error loading report: ' + (err.message || err));
@@ -99,34 +152,135 @@
         }
     }
 
-    function renderReport(payload) {
-        // payload: { totals: {...}, groups: [{location_type, org_code, payment_type, count, total_settled}] }
-        const kpiEl = document.getElementById('summaryKPIs');
-        kpiEl.innerHTML = `
-            <span class="kpi">Groups: ${payload.groups.length}</span>
-            <span class="kpi">Total Txns: ${payload.totals.total_transactions}</span>
-            <span class="kpi">Total Settled: $${(payload.totals.total_settled || 0).toFixed(2)}</span>
-        `;
+    function renderReport() {
+        if (reportData.length === 0) {
+            document.getElementById('reportTableContainer').innerHTML = '<p style="color:#6b7280; text-align:center;">No data found</p>';
+            return;
+        }
 
-        const rows = payload.groups.map(g => `
-            <tr>
-                <td>${g.location_type}</td>
-                <td>${g.source}</td>
-                <td>${g.location_name ?? ''}</td>
-                <td>${g.org_code ?? ''}</td>
-                <td>${g.count}</td>
-                <td>$${(g.total_settled || 0).toFixed(2)}</td>
-            </tr>
-        `).join('');
+        // Find grand total for KPIs
+        const grandTotal = reportData.find(r => r.grouping_level === 31);
+        if (grandTotal) {
+            document.getElementById('summaryKPIs').innerHTML = `
+                <span class="kpi">Total Transactions: ${grandTotal.transaction_count.toLocaleString()}</span>
+                <span class="kpi">Total Amount: $${(grandTotal.total_transaction_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                <span class="kpi">Total Settled: $${(grandTotal.total_settle_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+            `;
+        }
+
+        const rows = reportData.map((r, idx) => {
+            const level = r.grouping_level;
+            const rowClass = getRowClass(level);
+            const isVisible = shouldBeVisible(r, idx);
+            const hasChildren = hasChildRows(idx);
+            const isExpanded = expandedRows.has(idx);
+            const hasMismatch = Math.abs((r.total_transaction_amount || 0) - (r.total_settle_amount || 0)) > 0.01;
+            
+            return `
+                <tr class="${rowClass} ${isVisible ? '' : 'hidden'} ${hasMismatch ? 'amount-mismatch' : ''}" data-index="${idx}" data-level="${level}" ${hasChildren ? `onclick="toggleRow(${idx})"` : ''}>
+                    <td>
+                        ${hasChildren ? `<span class="expand-icon ${isExpanded ? 'expanded' : 'collapsed'}"></span>` : ''}
+                        ${formatValue(r.charge_code)}
+                    </td>
+                    <td>${formatValue(r.facility_name)}</td>
+                    <td>${formatValue(r.payment_method_type)}</td>
+                    <td>${formatValue(r.device_type)}</td>
+                    <td>${formatValue(r.device_terminal_id)}</td>
+                    <td class="count">${r.transaction_count.toLocaleString()}</td>
+                    <td class="amount">$${(r.total_transaction_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td class="amount">$${(r.total_settle_amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                </tr>
+            `;
+        }).join('');
 
         const html = `
             <table>
-                <thead><tr><th>Location Type</th><th>Source</th><th>Location</th><th>Org Code</th><th>Count</th><th>Total Settled</th></tr></thead>
+                <thead>
+                    <tr>
+                        <th>Charge Code</th>
+                        <th>Facility</th>
+                        <th>Payment Method Type</th>
+                        <th>Device Type</th>
+                        <th>Device Terminal ID</th>
+                        <th class="count">Count</th>
+                        <th class="amount">Transaction Amount</th>
+                        <th class="amount">Settled Amount</th>
+                    </tr>
+                </thead>
                 <tbody>${rows}</tbody>
             </table>
         `;
 
         document.getElementById('reportTableContainer').innerHTML = html;
+    }
+
+    function getRowClass(level) {
+        // grouping_level: 31=grand, 15=charge_code, 7=facility, 3=payment_method_type, 1=device_type, 0=detail
+        if (level === 31) return 'row-grand-total';
+        if (level === 15) return 'row-charge-code';
+        if (level === 7) return 'row-facility';
+        if (level === 3) return 'row-payment-method';
+        if (level === 1) return 'row-device-type';
+        return 'row-detail';
+    }
+
+    function formatValue(val) {
+        if (!val || val === 'Subtotal' || val.includes('*')) return '';
+        return val;
+    }
+
+    function shouldBeVisible(row, rowIndex) {
+        const level = row.grouping_level;
+        
+        // Grand total and charge code subtotals always visible
+        if (level === 31 || level === 15) return true;
+        
+        // Find parent row
+        for (let i = rowIndex - 1; i >= 0; i--) {
+            const parentLevel = reportData[i].grouping_level;
+            
+            // Found immediate parent
+            if (parentLevel > level) {
+                // Check if parent is expanded
+                return expandedRows.has(i) && shouldBeVisible(reportData[i], i);
+            }
+        }
+        
+        return false;
+    }
+
+    function hasChildRows(rowIndex) {
+        const thisLevel = reportData[rowIndex].grouping_level;
+        if (thisLevel === 0) return false; // Detail rows have no children
+        
+        // Check if next row is a child (lower grouping_level number)
+        if (rowIndex + 1 < reportData.length) {
+            return reportData[rowIndex + 1].grouping_level < thisLevel;
+        }
+        return false;
+    }
+
+    function toggleRow(rowIndex) {
+        if (expandedRows.has(rowIndex)) {
+            expandedRows.delete(rowIndex);
+        } else {
+            expandedRows.add(rowIndex);
+        }
+        renderReport();
+    }
+
+    function expandAll() {
+        reportData.forEach((row, idx) => {
+            if (hasChildRows(idx)) {
+                expandedRows.add(idx);
+            }
+        });
+        renderReport();
+    }
+
+    function collapseAll() {
+        expandedRows.clear();
+        renderReport();
     }
 </script>
 </body>

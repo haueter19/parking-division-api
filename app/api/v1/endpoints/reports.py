@@ -39,19 +39,47 @@ async def settlement_report(
     group_sql = text(
         """
         SELECT
-            location_type,
-            max(source) source, 
-            org_code,
-            max(location_name) AS location_name,
-            --payment_type,
-            COUNT(*) AS count,
-            SUM(COALESCE(settle_amount, transaction_amount)) AS total_settled
-        FROM app.fact_transaction
-        WHERE settle_date IS NOT NULL
-            AND settle_date >= :start_dt
-            AND settle_date <= :end_dt
-        GROUP BY location_type, source, org_code--, payment_type
-        ORDER BY location_type, source, org_code--, payment_type
+            COALESCE(CAST(cc.charge_code AS VARCHAR(20)), '*** GRAND TOTAL ***') AS charge_code,
+            COALESCE(f.facility_name, '** Subtotal **') AS facility_name,
+            COALESCE(CASE WHEN t.program_id = 1 THEN 'regular' ELSE 'special event' END, '* Subtotal *') AS program_type,
+            COALESCE(d.device_terminal_id, 'Subtotal') AS device_terminal_id,
+            COUNT(*) AS transaction_count,
+            SUM(t.transaction_amount) AS total_transaction_amount,
+            SUM(t.settle_amount) AS total_settle_amount,
+            MIN(t.transaction_date) AS earliest_transaction_date,
+            MAX(t.transaction_date) AS latest_transaction_date,
+            GROUPING(cc.charge_code) AS is_charge_code_total,
+            GROUPING(f.facility_name) AS is_facility_total,
+            GROUPING(CASE WHEN t.program_id = 1 THEN 'regular' ELSE 'special event' END) AS is_program_type_total,
+            GROUPING(d.device_terminal_id) AS is_device_total,
+            GROUPING_ID(cc.charge_code, f.facility_name, 
+                        CASE WHEN t.program_id = 1 THEN 'regular' ELSE 'special event' END,
+                        d.device_terminal_id) AS grouping_level
+        FROM app.fact_transaction t
+        INNER JOIN app.dim_charge_code cc ON (t.charge_code_id = cc.charge_code_id)
+        INNER JOIN app.dim_location l ON (t.location_id = l.location_id)
+        INNER JOIN app.dim_facility f ON (l.facility_id = f.facility_id)
+        INNER JOIN app.dim_settlement_system ss ON (t.settlement_system_id = ss.settlement_system_id)
+        INNER JOIN app.dim_payment_method pm ON (t.payment_method_id = pm.payment_method_id)
+        INNER JOIN app.dim_device d ON (t.device_id = d.device_id)
+        WHERE t.settle_date >= :start_dt
+          AND t.settle_date < :end_dt
+        GROUP BY 
+            ROLLUP(
+                cc.charge_code,
+                f.facility_name,
+                CASE WHEN t.program_id = 1 THEN 'regular' ELSE 'special event' END,
+                d.device_terminal_id
+            )
+        ORDER BY 
+            CASE WHEN cc.charge_code IS NULL THEN 0 ELSE 1 END,
+            cc.charge_code,
+            GROUPING(f.facility_name) DESC,
+            f.facility_name,
+            GROUPING(CASE WHEN t.program_id = 1 THEN 'regular' ELSE 'special event' END) DESC,
+            CASE WHEN t.program_id = 1 THEN 'regular' ELSE 'special event' END,
+            GROUPING(d.device_terminal_id) DESC,
+            d.device_terminal_id;
         """
     )
 
@@ -174,5 +202,108 @@ async def settle_by_source(
                 empty[c] = 0
             result_rows.append(empty)
         current = current - timedelta(days=1)
+
+    return {"rows": result_rows}
+
+
+
+@router.get('/settle-rollup')
+async def settle_rollup_report(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.MANAGER, UserRole.ADMIN]))
+):
+    """Return hierarchical settlement report using ROLLUP for drill-down display.
+
+    Returns all levels: grand total, charge code subtotals, facility subtotals,
+    payment method type subtotals, device type subtotals, device subtotals, and detail rows.
+
+    Query parameters:
+    - start_date: YYYY-MM-DD (inclusive)
+    - end_date: YYYY-MM-DD (inclusive)
+    """
+    if not start_date or not end_date:
+        raise HTTPException(status_code=400, detail="start_date and end_date are required (YYYY-MM-DD)")
+
+    try:
+        start_dt = datetime.fromisoformat(start_date + "T00:00:00")
+        end_dt = datetime.fromisoformat(end_date + "T23:59:59")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
+
+    rollup_sql = text("""
+        SELECT
+            COALESCE(CAST(cc.charge_code AS VARCHAR(10)), '*** GRAND TOTAL ***') AS charge_code,
+            COALESCE(f.facility_name, '** Subtotal **') AS facility_name,
+            COALESCE(pm.payment_method_type, '* Subtotal *') AS payment_method_type,
+            COALESCE(d.device_type, 'Subtotal') AS device_type,
+            COALESCE(d.device_terminal_id, 'Subtotal') AS device_terminal_id,
+            COUNT(*) AS transaction_count,
+            SUM(t.transaction_amount) AS total_transaction_amount,
+            SUM(t.settle_amount) AS total_settle_amount,
+            MIN(t.transaction_date) AS earliest_transaction_date,
+            MAX(t.transaction_date) AS latest_transaction_date,
+            GROUPING(cc.charge_code) AS is_charge_code_total,
+            GROUPING(f.facility_name) AS is_facility_total,
+            GROUPING(pm.payment_method_type) AS is_payment_method_type_total,
+            GROUPING(d.device_type) AS is_device_type_total,
+            GROUPING(d.device_terminal_id) AS is_device_total,
+            GROUPING_ID(cc.charge_code, f.facility_name, 
+                        pm.payment_method_type,
+                        d.device_type,
+                        d.device_terminal_id) AS grouping_level
+        FROM app.fact_transaction t
+        INNER JOIN app.dim_charge_code cc ON (t.charge_code_id = cc.charge_code_id)
+        INNER JOIN app.dim_location l ON (t.location_id = l.location_id)
+        INNER JOIN app.dim_facility f ON (l.facility_id = f.facility_id)
+        INNER JOIN app.dim_settlement_system ss ON (t.settlement_system_id = ss.settlement_system_id)
+        INNER JOIN app.dim_payment_method pm ON (t.payment_method_id = pm.payment_method_id)
+        INNER JOIN app.dim_device d ON (t.device_id = d.device_id)
+        WHERE t.settle_date >= :start_dt
+          AND t.settle_date <= :end_dt
+        GROUP BY 
+            ROLLUP(
+                cc.charge_code,
+                f.facility_name,
+                pm.payment_method_type,
+                d.device_type,
+                d.device_terminal_id
+            )
+        ORDER BY 
+            CASE WHEN cc.charge_code IS NULL THEN 0 ELSE 1 END,
+            cc.charge_code,
+            GROUPING(f.facility_name) DESC,
+            f.facility_name,
+            GROUPING(pm.payment_method_type) DESC,
+            pm.payment_method_type,
+            GROUPING(d.device_type) DESC,
+            d.device_type,
+            GROUPING(d.device_terminal_id) DESC,
+            d.device_terminal_id
+    """)
+
+    rows = db.execute(rollup_sql, {"start_dt": start_dt, "end_dt": end_dt}).fetchall()
+
+    result_rows = []
+    for row in rows:
+        result_rows.append({
+            "charge_code": row.charge_code,
+            "facility_name": row.facility_name,
+            "payment_method_type": row.payment_method_type,
+            "device_type": row.device_type,
+            "device_terminal_id": row.device_terminal_id,
+            "transaction_count": int(row.transaction_count),
+            "total_transaction_amount": float(row.total_transaction_amount or 0),
+            "total_settle_amount": float(row.total_settle_amount or 0),
+            "earliest_transaction_date": row.earliest_transaction_date.isoformat() if row.earliest_transaction_date else None,
+            "latest_transaction_date": row.latest_transaction_date.isoformat() if row.latest_transaction_date else None,
+            "is_charge_code_total": bool(row.is_charge_code_total),
+            "is_facility_total": bool(row.is_facility_total),
+            "is_payment_method_type_total": bool(row.is_payment_method_type_total),
+            "is_device_type_total": bool(row.is_device_type_total),
+            "is_device_total": bool(row.is_device_total),
+            "grouping_level": int(row.grouping_level)
+        })
 
     return {"rows": result_rows}

@@ -172,6 +172,70 @@ async def get_device(
     )
 
 
+@router.get("/metadata")
+async def admin_metadata(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN]))
+):
+    """Return devices, locations, facilities, and unique device types for frontend caching."""
+    # Devices
+    devices_q = text("""
+        SELECT device_id, device_terminal_id, device_type
+        FROM app.dim_device
+        ORDER BY device_terminal_id
+    """)
+    devices = [
+        {
+            "device_id": r.device_id,
+            "device_terminal_id": r.device_terminal_id,
+            "device_type": r.device_type
+        }
+        for r in db.execute(devices_q).fetchall()
+    ]
+
+    # Locations
+    locations_q = text("""
+        SELECT location_id, facility_id, space_id
+        FROM app.dim_location
+        ORDER BY facility_id
+    """)
+    locations = [
+        {
+            "location_id": r.location_id,
+            "facility_id": r.facility_id,
+            "space_id": r.space_id
+        }
+        for r in db.execute(locations_q).fetchall()
+    ]
+
+    # Facilities
+    facilities_q = text("""
+        SELECT facility_id, facility_name, facility_type
+        FROM app.dim_facility
+        ORDER BY facility_name
+    """)
+    facilities = [
+        {"facility_id": r.facility_id, "facility_name": r.facility_name, "facility_type": r.facility_type}
+        for r in db.execute(facilities_q).fetchall()
+    ]
+
+    # Unique device types
+    device_types_q = text("""
+        SELECT DISTINCT device_type
+        FROM app.dim_device
+        WHERE device_type IS NOT NULL
+        ORDER BY device_type
+    """)
+    device_types = [r.device_type for r in db.execute(device_types_q).fetchall()]
+
+    return {
+        "devices": devices,
+        "locations": locations,
+        "facilities": facilities,
+        "device_types": device_types
+    }
+
+
 # ============= Settlement System Management =============
 
 @router.post("/settlement-systems", response_model=SettlementSystemResponse)
@@ -722,7 +786,7 @@ async def list_device_assignments(
     location_id: Optional[int] = None,
     active_only: bool = False,
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 10000,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role([UserRole.ADMIN]))
 ):
@@ -745,11 +809,14 @@ async def list_device_assignments(
     where_clause = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
     
     query = text(f"""
-        SELECT assignment_id, device_id, location_id, assign_date, end_date,
-               assign_by_id, end_by_id, workorder_assign_id, workorder_remove_id, notes
-        FROM app.fact_device_assignment
+        SELECT 
+            da.assignment_id, da.device_id, da.location_id, da.assign_date, da.end_date,
+            da.assign_by_id, da.end_by_id, da.workorder_assign_id, da.workorder_remove_id, da.notes--,
+            --d.device_terminal_id, d.device_type
+        FROM app.fact_device_assignment da
+        --INNER JOIN app.dim_device d On da.device_id = d.device_id
         {where_clause}
-        ORDER BY assign_date DESC
+        ORDER BY da.assign_date DESC
         OFFSET :skip ROWS
         FETCH NEXT :limit ROWS ONLY
     """)

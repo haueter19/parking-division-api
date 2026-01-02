@@ -364,3 +364,145 @@ class MonthlySummary(BaseModel):
     transaction_count: int
     by_source: dict[str, float]
     by_org_code: dict[str, float]
+
+
+
+
+# ============= Admin Configuration Schemas =============
+
+class DeviceCreate(BaseModel):
+    """Schema for creating a device"""
+    device_terminal_id: str = Field(..., max_length=50)
+    device_type: str = Field(..., max_length=50)
+    supports_cash: bool = False
+    supports_card: bool = False
+    supports_mobile: bool = False
+    cwAssetID: Optional[str] = Field(None, max_length=24)
+    SerialNumber: Optional[str] = Field(None, max_length=50)
+    Brand: Optional[str] = Field(None, max_length=24)
+    Model: Optional[str] = Field(None, max_length=24)
+
+
+class DeviceResponse(DeviceCreate):
+    """Schema for device response"""
+    device_id: int
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SettlementSystemCreate(BaseModel):
+    """Schema for creating a settlement system"""
+    system_name: str = Field(..., max_length=50)
+    system_type: Optional[str] = Field(None, max_length=50)
+
+
+class SettlementSystemResponse(SettlementSystemCreate):
+    """Schema for settlement system response"""
+    settlement_system_id: int
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PaymentMethodCreate(BaseModel):
+    """Schema for creating a payment method"""
+    payment_method_brand: str = Field(..., max_length=50)
+    payment_method_type: str = Field(..., max_length=50)
+    is_cash: bool = False
+    is_card: bool = False
+    is_mobile: bool = False
+    is_check: bool = False
+
+
+class PaymentMethodResponse(PaymentMethodCreate):
+    """Schema for payment method response"""
+    payment_method_id: int
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DeviceAssignmentCreate(BaseModel):
+    """Schema for creating a device assignment"""
+    device_id: int
+    facility_id: int
+    space_id: Optional[int] = None
+    assign_date: datetime
+    end_date: Optional[datetime] = None
+    workorder_assign_id: Optional[int] = None
+    notes: Optional[str] = Field(None, max_length=200)
+    program_id: Optional[int] = Field(1, description="Program type (1=regular, 2=special event)")
+
+
+class DeviceAssignmentUpdate(BaseModel):
+    """Schema for updating a device assignment"""
+    location_id: Optional[int] = None
+    assign_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    assign_by_id: Optional[int] = None
+    end_by_id: Optional[int] = None
+    workorder_assign_id: Optional[int] = None
+    workorder_remove_id: Optional[int] = None
+    notes: Optional[str] = Field(None, max_length=200)
+
+
+class DeviceAssignmentResponse(BaseModel):
+    """Schema for device assignment response"""
+    assignment_id: int
+    device_id: int
+    location_id: int
+    assign_date: datetime
+    end_date: Optional[datetime]
+    assign_by_id: Optional[int]
+    end_by_id: Optional[int]
+    workorder_assign_id: Optional[int]
+    workorder_remove_id: Optional[int]
+    notes: Optional[str]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FacilityResponse(BaseModel):
+    """Schema for facility response"""
+    facility_id: int
+    facility_name: str
+    facility_nickname: Optional[str]
+    facility_type: str
+    on_off_street: str
+    street_area: Optional[str]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SpaceResponse(BaseModel):
+    """Schema for space response"""
+    space_id: int
+    space_number: Optional[str]
+    space_type: Optional[str]
+    facility_id: int
+    cwAssetID: Optional[str]
+    start_date: datetime
+    end_date: Optional[datetime]
+    space_status: Optional[str]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LocationResponse(BaseModel):
+    """Schema for location response with details"""
+    location_id: int
+    facility_id: int
+    space_id: Optional[int]
+    facility_name: str
+    space_number: Optional[str]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChargeCodeResponse(BaseModel):
+    """Schema for charge code response"""
+    charge_code_id: int
+    charge_code: int
+    description: Optional[str]
+    program_type: str
+    location_id: int
+    
+    model_config = ConfigDict(from_attributes=True)

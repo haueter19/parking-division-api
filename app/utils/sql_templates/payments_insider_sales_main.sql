@@ -1,5 +1,4 @@
--- Payments Insider main SQL (Sales->fact_transaction). Use :file_id parameter.
--- Example: INSERT INTO app.fact_transaction (...) SELECT ... FROM app.payments_insider_sales_staging s ... WHERE s.source_file_id = :file_id
+-- Payments Insider main SQL (Sales->fact_transaction). Use file_id parameter.
 INSERT INTO app.fact_transaction (
     transaction_date,
     transaction_amount,

@@ -1,5 +1,4 @@
--- IPS Cash main SQL. Use :file_id parameter.
--- Example: INSERT INTO app.fact_transaction (...) SELECT ... FROM app.ips_cash_staging s WHERE s.source_file_id = :file_id
+-- IPS Cash main SQL. Use file_id parameter.
 SELECT
     CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.collection_date AS DATE), 120) + ' ' + s.collection_time) transaction_date,
     s.coin_revenue transaction_amount,

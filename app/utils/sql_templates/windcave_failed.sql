@@ -1,5 +1,5 @@
 -- Paste the INSERT ... SELECT SQL that inserts rejected windcave rows into app.fact_transaction_reject
--- Use :file_id as the parameter placeholder.
+-- Use file_id as the parameter placeholder.
 INSERT INTO app.fact_transaction_reject (
     staging_table,
     staging_record_id,
@@ -32,11 +32,11 @@ SELECT
     s.device_id,
     s.time,
     s.amount,
-    COALESCE(CAST(pm.payment_method_id As VARCHAR(10)), 'NO_PAYMENT_METHOD') payment_method,
-    COALESCE(CAST(d.device_id As VARCHAR(10)), 'DEVICE_NOT_FOUND') device_id,
-    COALESCE(CAST(ss.settlement_system_id As VARCHAR(10)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
-    COALESCE(CAST(da.location_id As VARCHAR(10)), 'LOCATION_NOT_FOUND') location_id,
-    COALESCE(CAST(cc.charge_code_id As VARCHAR(10)), 'CHARGE_CODE_NOT_FOUND') charge_code_id
+    COALESCE(CAST(pm.payment_method_id As VARCHAR(50)), 'NO_PAYMENT_METHOD') payment_method,
+    COALESCE(CAST(d.device_id As VARCHAR(50)), 'DEVICE_NOT_FOUND') device_id,
+    COALESCE(CAST(ss.settlement_system_id As VARCHAR(50)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
+    COALESCE(CAST(da.location_id As VARCHAR(50)), 'LOCATION_NOT_FOUND') location_id,
+    COALESCE(CAST(cc.charge_code_id As VARCHAR(50)), 'CHARGE_CODE_NOT_FOUND') charge_code_id
 FROM app.windcave_staging s
 LEFT JOIN app.dim_device d ON (d.device_terminal_id = CASE WHEN s.device_id LIKE '[A-Z]%' THEN s.device_id ELSE LEFT(s.txnref,3) END)
 LEFT JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND s.time >= da.assign_date AND s.time <COALESCE(da.end_date, '9999-12-31'))

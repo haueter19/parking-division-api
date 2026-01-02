@@ -1,6 +1,4 @@
 -- Paste the main INSERT SELECT SQL used to move windcave staging into fact_transaction here.
--- Use :file_id as the parameter placeholder. Example:
--- INSERT INTO app.fact_transaction (...) SELECT ... FROM app.windcave_staging s WHERE s.source_file_id = :file_id AND s.processed_to_final = 0 AND s.voided = 0
 INSERT INTO app.fact_transaction (
     transaction_date,
     transaction_amount,

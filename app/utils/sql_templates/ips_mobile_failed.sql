@@ -1,4 +1,4 @@
--- IPS Mobile failed-records SQL. Use :file_id parameter.
+-- IPS Mobile failed-records SQL. Use file_id parameter.
 INSERT INTO app.fact_transaction_reject (
     staging_table,
     staging_record_id,
@@ -31,13 +31,13 @@ SELECT
     s.space_name,
     s.received_date_time,
     s.paid,
-    COALESCE(CAST(pm.payment_method_id As VARCHAR(10)), 'NO_PAYMENT_METHOD') payment_method,
-    COALESCE(CAST(d.device_id As VARCHAR(10)), 'DEVICE_NOT_FOUND') device_id,
-    COALESCE(CAST(ss.settlement_system_id As VARCHAR(10)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
-    COALESCE(CAST(da.location_id As VARCHAR(10)), 'LOCATION_NOT_FOUND') location_id,
-    COALESCE(CAST(cc.charge_code_id As VARCHAR(10)), 'CHARGE_CODE_NOT_FOUND') charge_code_id
+    COALESCE(CAST(pm.payment_method_id As VARCHAR(50)), 'NO_PAYMENT_METHOD') payment_method,
+    COALESCE(CAST(d.device_id As VARCHAR(50)), 'DEVICE_NOT_FOUND') device_id,
+    COALESCE(CAST(ss.settlement_system_id As VARCHAR(50)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
+    COALESCE(CAST(da.location_id As VARCHAR(50)), 'LOCATION_NOT_FOUND') location_id,
+    COALESCE(CAST(cc.charge_code_id As VARCHAR(50)), 'CHARGE_CODE_NOT_FOUND') charge_code_id
 FROM app.ips_mobile_staging s
-LEFT JOIN app.dim_device d ON (d.device_terminal_id = s.space_name)
+LEFT JOIN app.dim_device d ON (d.device_terminal_id = COALESCE(s.space_name, s.pole))
 LEFT JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND s.received_date_time >= da.assign_date AND s.received_date_time < COALESCE(da.end_date, '9999-12-31'))
 LEFT JOIN app.dim_payment_method pm On (s.partner_name=pm.payment_method_brand)
 LEFT JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND 1=cc.program_type_id)
@@ -52,4 +52,4 @@ WHERE
         OR pm.payment_method_id IS NULL
         OR ss.settlement_system_id IS NULL
     )
-    --AND s.processed_to_final = 0
+    AND s.processed_to_final = 0

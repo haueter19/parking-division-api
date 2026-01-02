@@ -1,4 +1,4 @@
--- IPS CC failed-records SQL. Use :file_id parameter.
+-- IPS CC failed-records SQL. Use file_id parameter.
 INSERT INTO app.fact_transaction_reject (
     staging_table,
     staging_record_id,
@@ -29,17 +29,17 @@ SELECT
     END AS reject_reason_code,
     GETDATE() rejected_at,
     s.pole,
-    s.collection_date,
-    s.paid,
-    COALESCE(pm.payment_method_id, 'NO_PAYMENT_METHOD') payment_method,
-    COALESCE(d.device_id, 'DEVICE_NOT_FOUND') device_id,
-    COALESCE(ss.settlement_system_id, 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
-    COALESCE(da.location_id, 'LOCATION_NOT_FOUND') location_id,
-    COALESCE(cc.charge_code_id, 'CHARGE_CODE_NOT_FOUND') charge_code_id
+    s.transaction_date_time,
+    s.amount,
+    COALESCE(CAST(pm.payment_method_id AS VARCHAR(50)), 'NO_PAYMENT_METHOD') payment_method,
+    COALESCE(CAST(d.device_id AS VARCHAR(50)), 'DEVICE_NOT_FOUND') device_id,
+    COALESCE(CAST(ss.settlement_system_id AS VARCHAR(50)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
+    COALESCE(CAST(da.location_id AS VARCHAR(50)), 'LOCATION_NOT_FOUND') location_id,
+    COALESCE(CAST(cc.charge_code_id AS VARCHAR(50)), 'CHARGE_CODE_NOT_FOUND') charge_code_id
 FROM app.ips_cc_staging s
 LEFT JOIN app.dim_device d ON (d.device_terminal_id = s.pole)
 LEFT JOIN app.fact_device_assignment da ON (da.device_id = d.device_id AND s.transaction_date_time >= da.assign_date AND s.transaction_date_time < COALESCE(da.end_date, '9999-12-31'))
-LEFT JOIN app.dim_payment_method pm On (s.card_type=pm.payment_method_brand)
+LEFT JOIN app.dim_payment_method pm On (CASE WHEN s.card_type = 'VISA' THEN 'Visa' WHEN s.card_type = 'MC' THEN 'Mastercard' WHEN s.card_type = 'DISC' THEN 'Discover' ELSE s.card_type END=pm.payment_method_brand)
 LEFT JOIN app.dim_charge_code cc On (da.location_id=cc.location_id AND 1=cc.program_type_id)
 LEFT JOIN app.dim_settlement_system ss On (ss.system_name='IPS')
 WHERE 

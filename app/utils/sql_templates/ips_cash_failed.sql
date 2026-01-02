@@ -1,4 +1,4 @@
--- IPS Cash failed-records SQL. Use :file_id parameter.
+-- IPS Cash failed-records SQL. Use file_id parameter.
 INSERT INTO app.fact_transaction_reject (
     staging_table,
     staging_record_id,
@@ -31,11 +31,11 @@ SELECT
     s.pole_ser_no,
     CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.collection_date AS DATE), 120) + ' ' + s.collection_time) transaction_datetime,
     s.coin_revenue,
-    COALESCE(CAST(pm.payment_method_id As VARCHAR(10)), 'NO_PAYMENT_METHOD') payment_method,
-    COALESCE(CAST(d.device_id As VARCHAR(10)), 'DEVICE_NOT_FOUND') device_id,
-    COALESCE(CAST(ss.settlement_system_id As VARCHAR(10)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
-    COALESCE(CAST(da.location_id As VARCHAR(10)), 'LOCATION_NOT_FOUND') location_id,
-    COALESCE(CAST(cc.charge_code_id As VARCHAR(10)), 'CHARGE_CODE_NOT_FOUND') charge_code_id
+    COALESCE(CAST(pm.payment_method_id As VARCHAR(50)), 'NO_PAYMENT_METHOD') payment_method,
+    COALESCE(CAST(d.device_id As VARCHAR(50)), 'DEVICE_NOT_FOUND') device_id,
+    COALESCE(CAST(ss.settlement_system_id As VARCHAR(50)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,
+    COALESCE(CAST(da.location_id As VARCHAR(50)), 'LOCATION_NOT_FOUND') location_id,
+    COALESCE(CAST(cc.charge_code_id As VARCHAR(50)), 'CHARGE_CODE_NOT_FOUND') charge_code_id
 FROM app.ips_cash_staging s
 LEFT JOIN app.dim_device d ON (d.device_terminal_id = s.pole_ser_no)
 LEFT JOIN app.fact_device_assignment da ON (da.device_id = d.device_id 

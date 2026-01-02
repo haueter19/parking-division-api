@@ -494,6 +494,55 @@
 
         <!-- Device Assignments Tab -->
         <div id="assignments-tab" class="tab-content">
+            <!-- Filter Section -->
+            <div class="form-section" style="background: #e6f2ff; border-left: 4px solid #667eea;">
+                <h3>🔍 Filter Assignments</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Device</label>
+                        <select id="filterDeviceSelect" onchange="applyAssignmentFilters()">
+                            <option value="">All Devices</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Device Type</label>
+                        <select id="filterDeviceTypeSelect" onchange="applyAssignmentFilters()">
+                            <option value="">All Types</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Facility</label>
+                        <select id="filterFacilitySelect" onchange="applyAssignmentFilters()">
+                            <option value="">All Facilities</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Location</label>
+                        <select id="filterLocationSelect" onchange="applyAssignmentFilters()">
+                            <option value="">All Locations</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="filterStatusSelect" onchange="applyAssignmentFilters()">
+                            <option value="active">Active Only</option>
+                            <option value="closed">Closed Only</option>
+                            <option value="all">All Assignments</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="button" class="btn-secondary" onclick="clearAssignmentFilters()" style="margin-top: 22px;">
+                            Clear Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
             <div class="form-section">
                 <h3>Create Device Assignment</h3>
                 <form id="assignmentForm">
@@ -555,13 +604,17 @@
                 </form>
             </div>
 
-            <h3>Active Device Assignments</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+                <h3>Device Assignments <span id="assignmentFilterStatus" style="color: #667eea; font-size: 0.9rem;"></span></h3>
+                <div id="assignmentCount" style="color: #6b7280; font-size: 0.9rem;"></div>
+            </div>
             <div class="loading" id="assignmentsLoading">Loading assignments...</div>
             <table id="assignmentsTable" style="display: none;">
                 <thead>
                     <tr>
-                        <th>Device</th>
-                        <th>Location</th>
+                        <th>Device Terminal ID</th>
+                        <th>Device Type</th>
+                        <th>Location (and space)</th>
                         <th>Assigned</th>
                         <th>End Date</th>
                         <th>Status</th>

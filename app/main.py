@@ -125,6 +125,15 @@ async def settle_by_source_page(request: Request):
     """Serve the pivoted settled-by-source report page"""
     return templates.TemplateResponse(request=request, name="settle_by_source.html")
 
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    """Serve the admin configuration page"""
+    return templates.TemplateResponse(
+        request=request,
+        name="admin.html"
+    )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001, reload=True)

@@ -44,6 +44,25 @@ function showTab(tabName) {
     }
 }
 
+// Admin metadata cache (devices, locations, facilities, device_types)
+let adminMetadata = null;
+
+async function loadAdminMetadata() {
+    if (adminMetadata) return adminMetadata;
+    try {
+        const resp = await fetch('/api/v1/admin/metadata', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (resp.ok) {
+            adminMetadata = await resp.json();
+            return adminMetadata;
+        }
+    } catch (err) {
+        console.error('Error loading admin metadata', err);
+    }
+    // Fallback to empty structures
+    adminMetadata = { devices: [], locations: [], facilities: [], device_types: [] };
+    return adminMetadata;
+}
+
 // ============= User Info =============
 
 async function loadUserInfo() {
@@ -176,6 +195,55 @@ function viewDeviceDetails(deviceId) {
 
 // ============= Device Assignment Management =============
 
+// Filter state for assignments
+const assignmentFilters = {
+    device_id: null,
+    location_id: null,
+    device_type: null,
+    facility_id: null,
+    active_only: true
+};
+
+function applyAssignmentFilters() {
+    const deviceId = document.getElementById('filterDeviceSelect').value;
+    const locationId = document.getElementById('filterLocationSelect').value;
+    const deviceType = document.getElementById('filterDeviceTypeSelect') ? document.getElementById('filterDeviceTypeSelect').value : '';
+    const facilityId = document.getElementById('filterFacilitySelect') ? document.getElementById('filterFacilitySelect').value : '';
+    const status = document.getElementById('filterStatusSelect').value;
+    
+    assignmentFilters.device_id = deviceId ? parseInt(deviceId) : null;
+    assignmentFilters.location_id = locationId ? parseInt(locationId) : null;
+    assignmentFilters.device_type = deviceType || null;
+    assignmentFilters.facility_id = facilityId ? parseInt(facilityId) : null;
+    
+    // Handle status filter
+    if (status === 'active') {
+        assignmentFilters.active_only = true;
+    } else if (status === 'closed') {
+        assignmentFilters.active_only = false;
+    } else {
+        assignmentFilters.active_only = null;
+    }
+    
+    loadAssignments();
+}
+
+function clearAssignmentFilters() {
+    document.getElementById('filterDeviceSelect').value = '';
+    document.getElementById('filterLocationSelect').value = '';
+    document.getElementById('filterStatusSelect').value = 'active';
+    if (document.getElementById('filterDeviceTypeSelect')) document.getElementById('filterDeviceTypeSelect').value = '';
+    if (document.getElementById('filterFacilitySelect')) document.getElementById('filterFacilitySelect').value = '';
+    
+    assignmentFilters.device_id = null;
+    assignmentFilters.location_id = null;
+    assignmentFilters.device_type = null;
+    assignmentFilters.facility_id = null;
+    assignmentFilters.active_only = true;
+    
+    loadAssignments();
+}
+
 document.getElementById('assignmentForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -223,38 +291,110 @@ async function loadAssignments() {
     const loading = document.getElementById('assignmentsLoading');
     const table = document.getElementById('assignmentsTable');
     const tbody = document.getElementById('assignmentsTableBody');
+    const filterStatus = document.getElementById('assignmentFilterStatus');
+    const countDisplay = document.getElementById('assignmentCount');
     
     loading.classList.add('show');
     table.style.display = 'none';
     
+    // Build query parameters
+    const params = new URLSearchParams({
+        limit: '1000'
+    });
+    
+    if (assignmentFilters.device_id) {
+        params.append('device_id', assignmentFilters.device_id);
+    }
+    
+    if (assignmentFilters.location_id) {
+        params.append('location_id', assignmentFilters.location_id);
+    }
+    
+    if (assignmentFilters.active_only !== null) {
+        params.append('active_only', assignmentFilters.active_only);
+    }
+    
     try {
-        const response = await fetch('/api/v1/admin/device-assignments?active_only=true&limit=50', {
+        const response = await fetch(`/api/v1/admin/device-assignments?${params.toString()}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         
         if (response.ok) {
-            const assignments = await response.json();
+            let assignments = await response.json();
+            // Handle response wrapping (could be array or {data: array})
+            if (!Array.isArray(assignments)) {
+                assignments = assignments.data || [];
+            }
             
-            // Get device and location details
-            const devicesResp = await fetch('/api/v1/admin/devices', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const devices = await devicesResp.json();
+            // Load admin metadata (devices, locations, facilities, device types)
+            const meta = await loadAdminMetadata();
+            const devices = meta.devices || [];
+            const locations = meta.locations || [];
             const deviceMap = Object.fromEntries(devices.map(d => [d.device_id, d]));
-            
-            const locationsResp = await fetch('/api/v1/admin/locations', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const locations = await locationsResp.json();
             const locationMap = Object.fromEntries(locations.map(l => [l.location_id, l]));
+
+            // Populate filter dropdowns if not already done
+            await populateAssignmentFilterDropdowns(devices, locations, meta.device_types, meta.facilities);
             
-            tbody.innerHTML = assignments.map(assignment => {
+            // Update filter status message
+            let filterMessage = '';
+            const activeFilters = [];
+            
+            if (assignmentFilters.device_id) {
+                const device = deviceMap[assignmentFilters.device_id];
+                activeFilters.push(`Device: ${device?.device_terminal_id}`);
+            }
+            
+            if (assignmentFilters.location_id) {
+                const location = locationMap[assignmentFilters.location_id];
+                activeFilters.push(`Location: ${location?.facility_name}`);
+            }
+            
+            if (assignmentFilters.active_only === true) {
+                activeFilters.push('Status: Active');
+            } else if (assignmentFilters.active_only === false) {
+                activeFilters.push('Status: Closed');
+            }
+            
+            if (activeFilters.length > 0) {
+                filterMessage = `(Filtered: ${activeFilters.join(', ')})`;
+            }
+            
+            // Client-side filtering: fetch assignments (unfiltered) then apply filters locally
+            let fetched = assignments;
+            // apply assignmentFilters
+            const filtered = fetched.filter(a => {
+                // device_id filter
+                if (assignmentFilters.device_id && a.device_id !== assignmentFilters.device_id) return false;
+                // location_id filter
+                if (assignmentFilters.location_id && a.location_id !== assignmentFilters.location_id) return false;
+                // device_type filter
+                if (assignmentFilters.device_type) {
+                    const dv = deviceMap[a.device_id];
+                    if (!dv || dv.device_type !== assignmentFilters.device_type) return false;
+                }
+                // facility filter
+                if (assignmentFilters.facility_id) {
+                    const loc = locationMap[a.location_id];
+                    if (!loc || loc.facility_id !== assignmentFilters.facility_id) return false;
+                }
+                // status filter
+                if (assignmentFilters.active_only === true && a.end_date) return false;
+                if (assignmentFilters.active_only === false && !a.end_date) return false;
+                return true;
+            });
+
+            filterStatus.textContent = filterMessage;
+            countDisplay.textContent = `Showing ${filtered.length} assignment${filtered.length !== 1 ? 's' : ''}`;
+
+            tbody.innerHTML = filtered.map(assignment => {
                 const device = deviceMap[assignment.device_id];
                 const location = locationMap[assignment.location_id];
-                
+
                 return `
                     <tr>
                         <td><strong>${device ? device.device_terminal_id : assignment.device_id}</strong></td>
+                        <td>${device ? device.device_type : 'N/A'}</td>
                         <td>${location ? `${location.facility_name}${location.space_number ? ` - Space ${location.space_number}` : ''}` : assignment.location_id}</td>
                         <td>${new Date(assignment.assign_date).toLocaleDateString()}</td>
                         <td>${assignment.end_date ? new Date(assignment.end_date).toLocaleDateString() : 'Active'}</td>
@@ -268,7 +408,7 @@ async function loadAssignments() {
                     </tr>
                 `;
             }).join('');
-            
+
             table.style.display = 'table';
         }
     } catch (error) {
@@ -278,19 +418,47 @@ async function loadAssignments() {
     }
 }
 
+async function populateAssignmentFilterDropdowns(devices, locations, deviceTypes = [], facilities = []) {
+    // Devices dropdown
+    const deviceSelect = document.getElementById('filterDeviceSelect');
+    if (deviceSelect && deviceSelect.options.length <= 1) {
+        const deviceOptions = devices
+            .map(d => `<option value="${d.device_id}">${d.device_terminal_id} (${d.device_type})</option>`)
+            .join('');
+        deviceSelect.innerHTML = '<option value="">All Devices</option>' + deviceOptions;
+    }
+
+    // Device type dropdown
+    const deviceTypeSelect = document.getElementById('filterDeviceTypeSelect');
+    if (deviceTypeSelect && deviceTypeSelect.options.length <= 1) {
+        const typeOptions = deviceTypes.map(t => `<option value="${t}">${t}</option>`).join('');
+        deviceTypeSelect.innerHTML = '<option value="">All Types</option>' + typeOptions;
+    }
+
+    // Facility dropdown
+    const facilitySelect = document.getElementById('filterFacilitySelect');
+    if (facilitySelect && facilitySelect.options.length <= 1) {
+        const facOptions = facilities.map(f => `<option value="${f.facility_id}">${f.facility_name}</option>`).join('');
+        facilitySelect.innerHTML = '<option value="">All Facilities</option>' + facOptions;
+    }
+
+    // Locations dropdown
+    const locationSelect = document.getElementById('filterLocationSelect');
+    if (locationSelect && locationSelect.options.length <= 1) {
+        const locationOptions = locations
+            .map(l => `<option value="${l.location_id}">${l.facility_name}${l.space_number ? ` - Space ${l.space_number}` : ''}</option>`)
+            .join('');
+        locationSelect.innerHTML = '<option value="">All Locations</option>' + locationOptions;
+    }
+}
+
 async function loadDevicesForDropdown() {
     try {
-        const response = await fetch('/api/v1/admin/devices', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-            const devices = await response.json();
-            const select = document.getElementById('assignDeviceSelect');
-            
-            select.innerHTML = '<option value="">Select device...</option>' +
-                devices.map(d => `<option value="${d.device_id}">${d.device_terminal_id} (${d.device_type})</option>`).join('');
-        }
+        const meta = await loadAdminMetadata();
+        const devices = meta.devices || [];
+        const select = document.getElementById('assignDeviceSelect');
+        select.innerHTML = '<option value="">Select device...</option>' +
+            devices.map(d => `<option value="${d.device_id}">${d.device_terminal_id} (${d.device_type})</option>`).join('');
     } catch (error) {
         console.error('Error loading devices:', error);
     }
@@ -298,17 +466,11 @@ async function loadDevicesForDropdown() {
 
 async function loadFacilitiesForDropdown() {
     try {
-        const response = await fetch('/api/v1/admin/facilities', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-            const facilities = await response.json();
-            const select = document.getElementById('assignFacilitySelect');
-            
-            select.innerHTML = '<option value="">Select facility...</option>' +
-                facilities.map(f => `<option value="${f.facility_id}">${f.facility_name}</option>`).join('');
-        }
+        const meta = await loadAdminMetadata();
+        const facilities = meta.facilities || [];
+        const select = document.getElementById('assignFacilitySelect');
+        select.innerHTML = '<option value="">Select facility...</option>' +
+            facilities.map(f => `<option value="${f.facility_id}">${f.facility_name}</option>`).join('');
     } catch (error) {
         console.error('Error loading facilities:', error);
     }

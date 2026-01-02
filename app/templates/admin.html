@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Configuration - Parking Division</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 { color: #2d3748; font-size: 1.5rem; }
+        
+        .header-nav {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .header-nav a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+        
+        .header-nav a:hover { background: #f0f4ff; }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .user-name {
+            color: #4a5568;
+            font-weight: 600;
+        }
+        
+        .logout-btn {
+            background: #f56565;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+        
+        .logout-btn:hover { background: #e53e3e; }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 30px;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            color: #4a5568;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .tab:hover { color: #667eea; }
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Forms */
+        .form-section {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .form-section h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+        
+        label {
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+        
+        label .required {
+            color: #f56565;
+            font-weight: 700;
+        }
+        
+        input, select, textarea {
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 0;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+        
+        .checkbox-group label {
+            cursor: pointer;
+            margin: 0;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+        
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+        
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        thead {
+            background: #f7fafc;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        th {
+            font-weight: 700;
+            color: #2d3748;
+        }
+        
+        tbody tr:hover {
+            background: #f7fafc;
+        }
+        
+        .action-btn {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            margin-right: 5px;
+        }
+        
+        /* Messages */
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .message.show { display: block; }
+        
+        .message.success {
+            background: #d1fae5;
+            color: #059669;
+            border-left: 4px solid #10b981;
+        }
+        
+        .message.error {
+            background: #fee2e2;
+            color: #dc2626;
+            border-left: 4px solid #f56565;
+        }
+        
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .badge-success {
+            background: #d1fae5;
+            color: #059669;
+        }
+        
+        .badge-warning {
+            background: #fef3c7;
+            color: #d97706;
+        }
+        
+        .badge-info {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+        
+        /* Loading */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #6b7280;
+        }
+        
+        .loading.show { display: block; }
+        
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal.show { display: flex; }
+        
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-header h2 {
+            color: #2d3748;
+        }
+        
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6b7280;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚙️ Admin Configuration</h1>
+        <div class="header-nav">
+            <a href="/upload">Upload Files</a>
+            <a href="/files/status">File Status</a>
+            <a href="/reports/settle">Reports</a>
+            <div class="user-info">
+                <span class="user-name" id="userName">Loading...</span>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="message" class="message"></div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('devices')">Devices</button>
+            <button class="tab" onclick="showTab('assignments')">Device Assignments</button>
+            <button class="tab" onclick="showTab('settlement')">Settlement Systems</button>
+            <button class="tab" onclick="showTab('payment')">Payment Methods</button>
+        </div>
+
+        <!-- Device Management Tab -->
+        <div id="devices-tab" class="tab-content active">
+            <div class="form-section">
+                <h3>Add New Device</h3>
+                <form id="deviceForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Device Terminal ID <span class="required">*</span></label>
+                            <input type="text" name="device_terminal_id" required placeholder="e.g., 1845, A91, K91">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Device Type <span class="required">*</span></label>
+                            <select name="device_type" required>
+                                <option value="">Select type...</option>
+                                <option value="Cashier">Cashier</option>
+                                <option value="Entrance">Entrance</option>
+                                <option value="Exit">Exit</option>
+                                <option value="POF">POF</option>
+                                <option value="Portable CC Reader">Portable CC Reader</option>
+                                <option value="MS1">MS1</option>
+                                <option value="MS3">MS3</option>
+                                <option value="MK5">MK5</option>
+                                <option value="Smart">Smart</option>
+                                <option value="Single-Space">Single-Space</option>
+                                <option value="Multi-Space">Multi-Space</option>
+                                <option value="Virtual">Virtual</option>
+                                <option value="Unknown">Unknown</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Cityworks Asset ID</label>
+                            <input type="text" name="cwAssetID" placeholder="Optional">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Serial Number</label>
+                            <input type="text" name="SerialNumber" placeholder="Optional">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Brand</label>
+                            <input type="text" name="Brand" placeholder="Optional">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Model</label>
+                            <input type="text" name="Model" placeholder="Optional">
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Payment Support</label>
+                            <div style="display: flex; gap: 20px; padding: 10px 0;">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" name="supports_cash" id="supports_cash">
+                                    <label for="supports_cash">Supports Cash</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" name="supports_card" id="supports_card">
+                                    <label for="supports_card">Supports Card</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" name="supports_mobile" id="supports_mobile">
+                                    <label for="supports_mobile">Supports Mobile</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="btn-group">
+                        <button type="submit" class="btn-primary">Create Device</button>
+                        <button type="reset" class="btn-secondary">Clear Form</button>
+                    </div>
+                </form>
+            </div>
+
+            <h3>Existing Devices</h3>
+            <div class="loading" id="devicesLoading">Loading devices...</div>
+            <table id="devicesTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Terminal ID</th>
+                        <th>Type</th>
+                        <th>Payment Support</th>
+                        <th>Brand/Model</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="devicesTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Device Assignments Tab -->
+        <div id="assignments-tab" class="tab-content">
+            <div class="form-section">
+                <h3>Create Device Assignment</h3>
+                <form id="assignmentForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Device <span class="required">*</span></label>
+                            <select name="device_id" id="assignDeviceSelect" required>
+                                <option value="">Select device...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Facility <span class="required">*</span></label>
+                            <select name="facility_id" id="assignFacilitySelect" required onchange="loadSpacesForFacility(this.value)">
+                                <option value="">Select facility...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Space (Optional)</label>
+                            <select name="space_id" id="assignSpaceSelect">
+                                <option value="">No space (facility only)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Program Type <span class="required">*</span></label>
+                            <select name="program_id" required>
+                                <option value="1" selected>Regular</option>
+                                <option value="2">Special Event</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Assign Date <span class="required">*</span></label>
+                            <input type="datetime-local" name="assign_date" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>End Date (Optional)</label>
+                            <input type="datetime-local" name="end_date">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Work Order ID (Assign)</label>
+                            <input type="number" name="workorder_assign_id" placeholder="Optional">
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Notes</label>
+                            <textarea name="notes" placeholder="Optional assignment notes"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="btn-group">
+                        <button type="submit" class="btn-primary">Create Assignment</button>
+                        <button type="reset" class="btn-secondary">Clear Form</button>
+                    </div>
+                </form>
+            </div>
+
+            <h3>Active Device Assignments</h3>
+            <div class="loading" id="assignmentsLoading">Loading assignments...</div>
+            <table id="assignmentsTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th>Location</th>
+                        <th>Assigned</th>
+                        <th>End Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="assignmentsTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Settlement Systems Tab -->
+        <div id="settlement-tab" class="tab-content">
+            <div class="form-section">
+                <h3>Add Settlement System</h3>
+                <form id="settlementForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>System Name <span class="required">*</span></label>
+                            <input type="text" name="system_name" required placeholder="e.g., IPS, Windcave, PI">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>System Type</label>
+                            <input type="text" name="system_type" placeholder="Optional description">
+                        </div>
+                    </div>
+                    
+                    <div class="btn-group">
+                        <button type="submit" class="btn-primary">Create Settlement System</button>
+                        <button type="reset" class="btn-secondary">Clear Form</button>
+                    </div>
+                </form>
+            </div>
+
+            <h3>Existing Settlement Systems</h3>
+            <div class="loading" id="settlementLoading">Loading systems...</div>
+            <table id="settlementTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>System Name</th>
+                        <th>System Type</th>
+                    </tr>
+                </thead>
+                <tbody id="settlementTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Payment Methods Tab -->
+        <div id="payment-tab" class="tab-content">
+            <div class="form-section">
+                <h3>Add Payment Method</h3>
+                <form id="paymentForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Payment Method Brand <span class="required">*</span></label>
+                            <input type="text" name="payment_method_brand" required placeholder="e.g., Visa, Cash, ParkSmarter">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Payment Method Type <span class="required">*</span></label>
+                            <input type="text" name="payment_method_type" required placeholder="e.g., Credit Card, Cash, Mobile">
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Payment Characteristics</label>
+                            <div style="display: flex; gap: 20px; padding: 10px 0;">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" name="is_cash" id="is_cash">
+                                    <label for="is_cash">Is Cash</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" name="is_card" id="is_card">
+                                    <label for="is_card">Is Card</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" name="is_mobile" id="is_mobile">
+                                    <label for="is_mobile">Is Mobile</label>
+                                </div>
+                                <div class="checkbox-group">
+                                    <input type="checkbox" name="is_check" id="is_check">
+                                    <label for="is_check">Is Check</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="btn-group">
+                        <button type="submit" class="btn-primary">Create Payment Method</button>
+                        <button type="reset" class="btn-secondary">Clear Form</button>
+                    </div>
+                </form>
+            </div>
+
+            <h3>Existing Payment Methods</h3>
+            <div class="loading" id="paymentLoading">Loading methods...</div>
+            <table id="paymentTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Brand</th>
+                        <th>Type</th>
+                        <th>Characteristics</th>
+                    </tr>
+                </thead>
+                <tbody id="paymentTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Edit Assignment Modal -->
+    <div id="editAssignmentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Device Assignment</h2>
+                <button class="close-modal" onclick="closeEditModal()">&times;</button>
+            </div>
+            <form id="editAssignmentForm">
+                <input type="hidden" name="assignment_id">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Location</label>
+                        <select name="location_id" id="editLocationSelect">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Assign Date</label>
+                        <input type="datetime-local" name="assign_date">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>End Date</label>
+                        <input type="datetime-local" name="end_date">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Work Order (Assign)</label>
+                        <input type="number" name="workorder_assign_id">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Work Order (Remove)</label>
+                        <input type="number" name="workorder_remove_id">
+                    </div>
+                    
+                    <div class="form-group full-width">
+                        <label>Notes</label>
+                        <textarea name="notes"></textarea>
+                    </div>
+                </div>
+                
+                <div class="btn-group">
+                    <button type="submit" class="btn-primary">Update Assignment</button>
+                    <button type="button" class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Close Assignment Modal -->
+    <div id="closeAssignmentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Close Device Assignment</h2>
+                <button class="close-modal" onclick="closeCloseModal()">&times;</button>
+            </div>
+            <form id="closeAssignmentForm">
+                <input type="hidden" name="assignment_id">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>End Date <span class="required">*</span></label>
+                        <input type="datetime-local" name="end_date" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Work Order (Remove)</label>
+                        <input type="number" name="workorder_remove_id">
+                    </div>
+                    
+                    <div class="form-group full-width">
+                        <label>Closing Notes</label>
+                        <textarea name="notes" placeholder="Reason for closing..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="btn-group">
+                    <button type="submit" class="btn-danger">Close Assignment</button>
+                    <button type="button" class="btn-secondary" onclick="closeCloseModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/admin.js"></script>
+</body>
+</html>

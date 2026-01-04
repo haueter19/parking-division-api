@@ -430,6 +430,45 @@
         .action-btn:hover {
             opacity: 0.8;
         }
+
+        /* Collapsible form sections */
+        .collapsible-header {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .collapsible-header:hover {
+            opacity: 0.7;
+        }
+
+        .toggle-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            background: #667eea;
+            color: white;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 18px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .collapsible-content {
+            display: none;
+            overflow: hidden;
+        }
+
+        .collapsible-content.expanded {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -499,78 +538,83 @@
             </div>
             <!-- Device List Section -->
             <div class="form-section">
-                <h3>Add New Device</h3>
-                <form id="deviceForm">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label>Device Terminal ID <span class="required">*</span></label>
-                            <input type="text" name="device_terminal_id" required placeholder="e.g., 1845, A91, K91">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Device Type <span class="required">*</span></label>
-                            <select name="device_type" required>
-                                <option value="">Select type...</option>
-                                <option value="Cashier">Cashier</option>
-                                <option value="Entrance">Entrance</option>
-                                <option value="Exit">Exit</option>
-                                <option value="POF">POF</option>
-                                <option value="Portable CC Reader">Portable CC Reader</option>
-                                <option value="MS1">MS1</option>
-                                <option value="MS3">MS3</option>
-                                <option value="MK5">MK5</option>
-                                <option value="Smart">Smart</option>
-                                <option value="Single-Space">Single-Space</option>
-                                <option value="Multi-Space">Multi-Space</option>
-                                <option value="Virtual">Virtual</option>
-                                <option value="Unknown">Unknown</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Cityworks Asset ID</label>
-                            <input type="text" name="cwAssetID" placeholder="Optional">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Serial Number</label>
-                            <input type="text" name="SerialNumber" placeholder="Optional">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Brand</label>
-                            <input type="text" name="Brand" placeholder="Optional">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Model</label>
-                            <input type="text" name="Model" placeholder="Optional">
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label>Payment Support</label>
-                            <div style="display: flex; gap: 20px; padding: 10px 0;">
-                                <div class="checkbox-group">
-                                    <input type="checkbox" name="supports_cash" id="supports_cash">
-                                    <label for="supports_cash">Supports Cash</label>
-                                </div>
-                                <div class="checkbox-group">
-                                    <input type="checkbox" name="supports_card" id="supports_card">
-                                    <label for="supports_card">Supports Card</label>
-                                </div>
-                                <div class="checkbox-group">
-                                    <input type="checkbox" name="supports_mobile" id="supports_mobile">
-                                    <label for="supports_mobile">Supports Mobile</label>
+                <h3 class="collapsible-header" onclick="toggleFormSection(this)">
+                    <span class="toggle-icon">+</span>
+                    Add New Device
+                </h3>
+                <div class="collapsible-content">
+                    <form id="deviceForm">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Device Terminal ID <span class="required">*</span></label>
+                                <input type="text" name="device_terminal_id" required placeholder="e.g., 1845, A91, K91">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Device Type <span class="required">*</span></label>
+                                <select name="device_type" required>
+                                    <option value="">Select type...</option>
+                                    <option value="Cashier">Cashier</option>
+                                    <option value="Entrance">Entrance</option>
+                                    <option value="Exit">Exit</option>
+                                    <option value="POF">POF</option>
+                                    <option value="Portable CC Reader">Portable CC Reader</option>
+                                    <option value="MS1">MS1</option>
+                                    <option value="MS3">MS3</option>
+                                    <option value="MK5">MK5</option>
+                                    <option value="Smart">Smart</option>
+                                    <option value="Single-Space">Single-Space</option>
+                                    <option value="Multi-Space">Multi-Space</option>
+                                    <option value="Virtual">Virtual</option>
+                                    <option value="Unknown">Unknown</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Cityworks Asset ID</label>
+                                <input type="text" name="cwAssetID" placeholder="Optional">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Serial Number</label>
+                                <input type="text" name="SerialNumber" placeholder="Optional">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Brand</label>
+                                <input type="text" name="Brand" placeholder="Optional">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Model</label>
+                                <input type="text" name="Model" placeholder="Optional">
+                            </div>
+                            
+                            <div class="form-group full-width">
+                                <label>Payment Support</label>
+                                <div style="display: flex; gap: 20px; padding: 10px 0;">
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" name="supports_cash" id="supports_cash">
+                                        <label for="supports_cash">Supports Cash</label>
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" name="supports_card" id="supports_card">
+                                        <label for="supports_card">Supports Card</label>
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <input type="checkbox" name="supports_mobile" id="supports_mobile">
+                                        <label for="supports_mobile">Supports Mobile</label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="btn-group">
-                        <button type="submit" class="btn-primary">Create Device</button>
-                        <button type="reset" class="btn-secondary">Clear Form</button>
-                    </div>
-                </form>
+                        
+                        <div class="btn-group">
+                            <button type="submit" class="btn-primary">Create Device</button>
+                            <button type="reset" class="btn-secondary">Clear Form</button>
+                        </div>
+                    </form>
+                </div>
             </div>
             <!-- Existing Devices Section -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
@@ -631,74 +675,80 @@
                         </button>
                     </div>
                 </div>
-            </div>  
+            </div>
+
             <div class="form-section">
-                <h3>Create Device Assignment</h3>
-                <form id="assignmentForm">
-                    <div class="form-grid">
-                        <!-- Device selection with datalist -->
-                        <div class="form-group">
-                            <label>Device Terminal ID <span class="required">*</span></label>
-                            <input 
-                                type="text" 
-                                id="assignDeviceInput" 
-                                list="assignDeviceDatalist" 
-                                placeholder="Type to search devices..." 
-                                required
-                                autocomplete="off"
-                            >
-                            <datalist id="assignDeviceDatalist">
-                                <!-- Options populated by JavaScript -->
-                            </datalist>
-                            <small style="color: #6b7280; margin-top: 4px; display: block;">
-                                Start typing device terminal ID to search
-                            </small>
+                <h3 class="collapsible-header" onclick="toggleFormSection(this)">
+                    <span class="toggle-icon">+</span>
+                    Create Device Assignment
+                </h3>
+                <div class="collapsible-content">
+                    <form id="assignmentForm">
+                        <div class="form-grid">
+                            <!-- Device selection with datalist -->
+                            <div class="form-group">
+                                <label>Device Terminal ID <span class="required">*</span></label>
+                                <input 
+                                    type="text" 
+                                    id="assignDeviceInput" 
+                                    list="assignDeviceDatalist" 
+                                    placeholder="Type to search devices..." 
+                                    required
+                                    autocomplete="off"
+                                >
+                                <datalist id="assignDeviceDatalist">
+                                    <!-- Options populated by JavaScript -->
+                                </datalist>
+                                <small style="color: #6b7280; margin-top: 4px; display: block;">
+                                    Start typing device terminal ID to search
+                                </small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Facility <span class="required">*</span></label>
+                                <select name="facility_id" id="assignFacilitySelect" required onchange="loadSpacesForFacility(this.value)">
+                                    <option value="">Select facility...</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Space (Optional)</label>
+                                <select name="space_id" id="assignSpaceSelect">
+                                    <option value="">No space (facility only)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Program Type <span class="required">*</span></label>
+                                <select name="program_type" required>
+                                    <option value="1">Regular</option>
+                                    <option value="2">Resident</option>
+                                    <option value="3">Reserved</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Assignment Date <span class="required">*</span></label>
+                                <input type="datetime-local" name="assign_date" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Work Order ID</label>
+                                <input type="number" name="workorder_assign_id" placeholder="Optional">
+                            </div>
+                            
+                            <div class="form-group full-width">
+                                <label>Notes</label>
+                                <textarea name="notes" rows="3" placeholder="Optional notes about this assignment"></textarea>
+                            </div>
                         </div>
                         
-                        <div class="form-group">
-                            <label>Facility <span class="required">*</span></label>
-                            <select name="facility_id" id="assignFacilitySelect" required onchange="loadSpacesForFacility(this.value)">
-                                <option value="">Select facility...</option>
-                            </select>
+                        <div class="btn-group">
+                            <button type="submit" class="btn-primary">Create Assignment</button>
+                            <button type="reset" class="btn-secondary">Clear Form</button>
                         </div>
-                        
-                        <div class="form-group">
-                            <label>Space (Optional)</label>
-                            <select name="space_id" id="assignSpaceSelect">
-                                <option value="">No space (facility only)</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Program Type <span class="required">*</span></label>
-                            <select name="program_type" required>
-                                <option value="1">Regular</option>
-                                <option value="2">Resident</option>
-                                <option value="3">Reserved</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Assignment Date <span class="required">*</span></label>
-                            <input type="datetime-local" name="assign_date" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Work Order ID</label>
-                            <input type="number" name="workorder_assign_id" placeholder="Optional">
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label>Notes</label>
-                            <textarea name="notes" rows="3" placeholder="Optional notes about this assignment"></textarea>
-                        </div>
-                    </div>
-                    
-                    <div class="btn-group">
-                        <button type="submit" class="btn-primary">Create Assignment</button>
-                        <button type="reset" class="btn-secondary">Clear Form</button>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
@@ -761,50 +811,55 @@
             </div>
             
             <div class="form-section">
-                <h3>Create New Space</h3>
-                <p style="color: #6b7280; margin-bottom: 15px;">
-                    If a space with the same number exists for the selected facility, it will be closed automatically and a new space record will be created.
-                </p>
-                <form id="spaceForm">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label>Space Number <span class="required">*</span></label>
-                            <input type="text" name="space_number" required placeholder="e.g., 6048, A-12">
+                <h3 class="collapsible-header" onclick="toggleFormSection(this)">
+                    <span class="toggle-icon">+</span>
+                    Create New Space
+                </h3>
+                <div class="collapsible-content">
+                    <p style="color: #6b7280; margin-bottom: 15px;">
+                        If a space with the same number exists for the selected facility, it will be closed automatically and a new space record will be created.
+                    </p>
+                    <form id="spaceForm">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Space Number <span class="required">*</span></label>
+                                <input type="text" name="space_number" required placeholder="e.g., 6048, A-12">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Space Type <span class="required">*</span></label>
+                                <input type="text" name="space_type" required placeholder="e.g., Metered, Loading Zone, Handicap">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Facility <span class="required">*</span></label>
+                                <select name="facility_id" required id="spaceFacilitySelect">
+                                    <option value="">Select facility...</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>CityWorks Asset ID</label>
+                                <input type="text" name="cwAssetID" placeholder="Optional">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Start Date <span class="required">*</span></label>
+                                <input type="datetime-local" name="start_date" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Space Status</label>
+                                <input type="text" name="space_status" value="Active" placeholder="e.g., Active, Inactive">
+                            </div>
                         </div>
                         
-                        <div class="form-group">
-                            <label>Space Type <span class="required">*</span></label>
-                            <input type="text" name="space_type" required placeholder="e.g., Metered, Loading Zone, Handicap">
+                        <div class="btn-group">
+                            <button type="submit" class="btn-primary">Create Space</button>
+                            <button type="reset" class="btn-secondary">Clear Form</button>
                         </div>
-                        
-                        <div class="form-group">
-                            <label>Facility <span class="required">*</span></label>
-                            <select name="facility_id" required id="spaceFacilitySelect">
-                                <option value="">Select facility...</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>CityWorks Asset ID</label>
-                            <input type="text" name="cwAssetID" placeholder="Optional">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Start Date <span class="required">*</span></label>
-                            <input type="datetime-local" name="start_date" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Space Status</label>
-                            <input type="text" name="space_status" value="Active" placeholder="e.g., Active, Inactive">
-                        </div>
-                    </div>
-                    
-                    <div class="btn-group">
-                        <button type="submit" class="btn-primary">Create Space</button>
-                        <button type="reset" class="btn-secondary">Clear Form</button>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">

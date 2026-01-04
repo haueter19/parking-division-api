@@ -758,6 +758,17 @@ function openAssignmentModal(deviceId) {
             return;
         }
     }
+
+    // Expand the Create Device Assignment form section if collapsed
+    const deviceAssignmentFormSection = document.getElementById('assignmentForm').closest('.form-section');
+    const header = deviceAssignmentFormSection.querySelector('.collapsible-header');
+    const content = deviceAssignmentFormSection.querySelector('.collapsible-content');
+    const icon = header.querySelector('.toggle-icon');
+    
+    if (!content.classList.contains('expanded')) {
+        content.classList.add('expanded');
+        icon.textContent = '−';
+    }
     
     // Pre-populate the form with device info
     const deviceInput = document.getElementById('assignDeviceInput');
@@ -1261,3 +1272,21 @@ document.getElementById('editAssignmentModal')?.addEventListener('click', (e) =>
         closeEditModal();
     }
 });
+
+
+/**
+ * Toggle collapsible form sections
+ * Shows/hides form content and changes +/- icon
+ */
+function toggleFormSection(header) {
+    const content = header.nextElementSibling;
+    const icon = header.querySelector('.toggle-icon');
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        icon.textContent = '+';
+    } else {
+        content.classList.add('expanded');
+        icon.textContent = '−';  // This is the minus sign (U+2212)
+    }
+}

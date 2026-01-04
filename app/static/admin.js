@@ -22,6 +22,13 @@ let adminData = {
     device_assignments: [],
 };
 
+let deviceFilters = {
+    terminalId: '',
+    deviceType: '',
+    brand: '',
+    assignmentStatus: 'all'  // 'all', 'assigned', 'unassigned'
+};
+
 let currentEditAssignment = null;
 let dataLoaded = false;
 
@@ -201,10 +208,12 @@ function showTab(tabName, event) {  // <-- Add event parameter
     switch(tabName) {
         case 'devices':
             renderDevices(adminData.devices);
+            setupDeviceFilters();
             break;
         case 'assignments':
             renderAssignments(adminData.device_assignments);
             setupAssignmentFilters();
+            populateAssignmentDropdowns();
             break;
         case 'settlement':
             renderSettlementSystems(adminData.settlement_systems);
@@ -328,12 +337,146 @@ function renderDevices(devices) {
             </td>
             <td>${device.Brand || '-'} ${device.Model || ''}</td>
             <td>
-                ${device.facility_name ? `<span class="badge badge-info">Assigned: ${device.facility_name}${device.space_number ? ' - ' + device.space_number : ''}</span>` : '<span class="badge">Unassigned</span>'}
+                ${device.facility_name ? 
+                    `<span class="badge badge-info">Assigned: ${device.facility_name}${device.space_number ? ' - ' + device.space_number : ''}</span>` : 
+                    '<span class="badge">Unassigned</span>'
+                }
+                ${!device.assignment_id ? 
+                    `<button class="btn-primary action-btn" onclick="switchToAssignmentsTab(${device.device_id})" style="margin-left: 8px;">Assign</button>` :
+                    `<button class="btn-secondary action-btn" onclick="switchToAssignmentsTab(${device.device_id})" style="margin-left: 8px;">Reassign</button>`
+                }
             </td>
         </tr>
     `).join('');
     
     table.style.display = 'table';
+}
+
+/**
+ * Setup device filter event listeners
+ * Called when the devices tab is shown
+ */
+function setupDeviceFilters() {
+    // Terminal ID filter
+    const terminalIdInput = document.getElementById('filterDeviceTerminalIdInput');
+    if (terminalIdInput) {
+        terminalIdInput.addEventListener('input', (e) => {
+            deviceFilters.terminalId = e.target.value;
+            applyDeviceFilters();
+        });
+    }
+    
+    // Device type filter
+    const deviceTypeSelect = document.getElementById('filterDeviceTypeSelectDevices');
+    if (deviceTypeSelect) {
+        deviceTypeSelect.addEventListener('change', (e) => {
+            deviceFilters.deviceType = e.target.value;
+            applyDeviceFilters();
+        });
+        
+        // Populate device type dropdown
+        deviceTypeSelect.innerHTML = '<option value="">All Types</option>' +
+            adminData.device_types.map(t => `<option value="${t}">${t}</option>`).join('');
+    }
+    
+    // Brand filter
+    const brandInput = document.getElementById('filterDeviceBrandInput');
+    if (brandInput) {
+        brandInput.addEventListener('input', (e) => {
+            deviceFilters.brand = e.target.value;
+            applyDeviceFilters();
+        });
+    }
+    
+    // Assignment status filter
+    const assignmentStatusSelect = document.getElementById('filterDeviceAssignmentStatusSelect');
+    if (assignmentStatusSelect) {
+        assignmentStatusSelect.addEventListener('change', (e) => {
+            deviceFilters.assignmentStatus = e.target.value;
+            applyDeviceFilters();
+        });
+    }
+}
+
+/**
+ * Apply current filter settings to devices list
+ */
+function applyDeviceFilters() {
+    let filtered = [...adminData.devices];
+    
+    // Filter by terminal ID
+    if (deviceFilters.terminalId) {
+        filtered = filtered.filter(d => 
+            d.device_terminal_id.toLowerCase().includes(deviceFilters.terminalId.toLowerCase())
+        );
+    }
+    
+    // Filter by device type
+    if (deviceFilters.deviceType) {
+        filtered = filtered.filter(d => d.device_type === deviceFilters.deviceType);
+    }
+    
+    // Filter by brand
+    if (deviceFilters.brand) {
+        filtered = filtered.filter(d => 
+            d.Brand && d.Brand.toLowerCase().includes(deviceFilters.brand.toLowerCase())
+        );
+    }
+    
+    // Filter by assignment status
+    if (deviceFilters.assignmentStatus === 'assigned') {
+        filtered = filtered.filter(d => d.assignment_id);
+    } else if (deviceFilters.assignmentStatus === 'unassigned') {
+        filtered = filtered.filter(d => !d.assignment_id);
+    }
+    
+    renderDevices(filtered);
+    
+    // Update filter status display
+    const activeFilters = [];
+    if (deviceFilters.terminalId) activeFilters.push(`Terminal: ${deviceFilters.terminalId}`);
+    if (deviceFilters.deviceType) activeFilters.push(`Type: ${deviceFilters.deviceType}`);
+    if (deviceFilters.brand) activeFilters.push(`Brand: ${deviceFilters.brand}`);
+    if (deviceFilters.assignmentStatus !== 'all') activeFilters.push(`Status: ${deviceFilters.assignmentStatus}`);
+    
+    const filterStatusEl = document.getElementById('deviceFilterStatus');
+    if (filterStatusEl) {
+        filterStatusEl.textContent = 
+            activeFilters.length > 0 ? `(Filtered: ${activeFilters.join(', ')})` : '';
+    }
+    
+    const deviceCountEl = document.getElementById('deviceCount');
+    if (deviceCountEl) {
+        deviceCountEl.textContent = 
+            `Showing ${filtered.length} of ${adminData.devices.length} devices`;
+    }
+}
+
+/**
+ * Clear all device filters
+ */
+function clearDeviceFilters() {
+    deviceFilters = {
+        terminalId: '',
+        deviceType: '',
+        brand: '',
+        assignmentStatus: 'all'
+    };
+    
+    // Reset filter inputs
+    const terminalIdInput = document.getElementById('filterDeviceTerminalIdInput');
+    if (terminalIdInput) terminalIdInput.value = '';
+    
+    const deviceTypeSelect = document.getElementById('filterDeviceTypeSelectDevices');
+    if (deviceTypeSelect) deviceTypeSelect.value = '';
+    
+    const brandInput = document.getElementById('filterDeviceBrandInput');
+    if (brandInput) brandInput.value = '';
+    
+    const assignmentStatusSelect = document.getElementById('filterDeviceAssignmentStatusSelect');
+    if (assignmentStatusSelect) assignmentStatusSelect.value = 'all';
+    
+    applyDeviceFilters();
 }
 
 // ============= Assignments Tab =============
@@ -376,6 +519,62 @@ function setupAssignmentFilters() {
     deviceTypeSelect.innerHTML = '<option value="">All Types</option>' +
         adminData.device_types.map(t => `<option value="${t}">${t}</option>`).join('');
 }
+
+document.getElementById('assignmentForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    
+    // Get device_id from either select or datalist input
+    let deviceId;
+    const deviceInput = document.getElementById('assignDeviceInput');
+    if (deviceInput) {
+        // Using datalist - need to find device_id from terminal_id
+        const terminalId = deviceInput.value;
+        const device = adminData.devices.find(d => d.device_terminal_id === terminalId);
+        if (!device) {
+            showMessage('Please select a valid device from the list', 'error');
+            return;
+        }
+        deviceId = device.device_id;
+    } else {
+        // Using select
+        deviceId = parseInt(formData.get('device_id'));
+    }
+    
+    const data = {
+        device_id: deviceId,
+        facility_id: parseInt(formData.get('facility_id')),
+        space_id: formData.get('space_id') ? parseInt(formData.get('space_id')) : null,
+        program_id: formData.get('program_type') ? parseInt(formData.get('program_type')) : 1,
+        assign_date: formData.get('assign_date'),
+        workorder_assign_id: formData.get('workorder_assign_id') ? parseInt(formData.get('workorder_assign_id')) : null,
+        notes: formData.get('notes') || null
+    };
+    
+    try {
+        const response = await fetch('/api/v1/admin/device-assignments', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            showMessage('Device assignment created successfully!', 'success');
+            e.target.reset();
+            await loadAllData();
+            applyAssignmentFilters();
+        } else {
+            const error = await response.json();
+            showMessage(error.detail || 'Failed to create assignment', 'error');
+        }
+    } catch (error) {
+        showMessage('Error creating assignment', 'error');
+    }
+});
 
 function applyAssignmentFilters() {
     let filtered = [...adminData.device_assignments];
@@ -470,6 +669,121 @@ function renderAssignments(assignments) {
     `).join('');
     
     table.style.display = 'table';
+}
+
+/**
+ * Populate the device and facility dropdowns for device assignment form
+ * Called when the assignments tab is shown
+ */
+function populateAssignmentDropdowns() {
+    // Populate facility dropdown
+    const facilitySelect = document.getElementById('assignFacilitySelect');
+    if (facilitySelect && adminData && adminData.facilities) {
+        facilitySelect.innerHTML = '<option value="">Select facility...</option>' +
+            adminData.facilities.map(f => 
+                `<option value="${f.facility_id}">${f.facility_name}</option>`
+            ).join('');
+    }
+    
+    // Populate device datalist - for 1000+ devices
+    const deviceDatalist = document.getElementById('assignDeviceDatalist');
+    if (deviceDatalist && adminData && adminData.devices) {
+        deviceDatalist.innerHTML = adminData.devices.map(d => 
+            `<option value="${d.device_terminal_id}">${d.device_terminal_id} (${d.device_type})</option>`
+        ).join('');
+    }
+}
+
+/**
+ * Load spaces for a selected facility
+ * Called when facility dropdown changes
+ */
+function loadSpacesForFacility(facilityId) {
+    const spaceSelect = document.getElementById('assignSpaceSelect');
+    
+    if (!facilityId || !adminData || !adminData.spaces) {
+        spaceSelect.innerHTML = '<option value="">No space (facility only)</option>';
+        return;
+    }
+    
+    // Filter spaces by facility and only show active spaces
+    const filteredSpaces = adminData.spaces.filter(s => 
+        s.facility_id === parseInt(facilityId) && !s.end_date
+    );
+    
+    spaceSelect.innerHTML = '<option value="">No space (facility only)</option>' +
+        filteredSpaces.map(s => 
+            `<option value="${s.space_id}">${s.space_number}${s.space_type ? ' (' + s.space_type + ')' : ''}</option>`
+        ).join('');
+}
+
+
+/**
+ * Switch to assignments tab and start device assignment
+ * Called from "Assign" button on Devices tab
+ */
+function switchToAssignmentsTab(deviceId) {
+    // Store the device ID temporarily
+    sessionStorage.setItem('pendingAssignmentDeviceId', deviceId);
+    
+    // Switch to assignments tab
+    showTab('assignments');
+    
+    // After a brief delay to ensure tab is loaded, open the assignment modal
+    setTimeout(() => {
+        const storedDeviceId = sessionStorage.getItem('pendingAssignmentDeviceId');
+        if (storedDeviceId) {
+            openAssignmentModal(parseInt(storedDeviceId));
+            sessionStorage.removeItem('pendingAssignmentDeviceId');
+        }
+    }, 100);
+}
+
+
+/**
+ * Pre-populate assignment form for a specific device
+ * Called when user clicks "Assign" from Devices tab
+ */
+function openAssignmentModal(deviceId) {
+    const device = adminData.devices.find(d => d.device_id === deviceId);
+    
+    if (!device) {
+        showMessage('Device not found', 'error');
+        return;
+    }
+    
+    // If device is already assigned, show warning
+    if (device.assignment_id) {
+        if (!confirm(`This device is currently assigned to ${device.facility_name}${device.space_number ? ' - Space ' + device.space_number : ''}. Do you want to create a new assignment anyway?`)) {
+            return;
+        }
+    }
+    
+    // Pre-populate the form with device info
+    const deviceInput = document.getElementById('assignDeviceInput');
+    if (deviceInput) {
+        deviceInput.value = device.device_terminal_id;
+        deviceInput.dataset.deviceId = device.device_id;
+    }
+    
+    // Clear other fields
+    const form = document.getElementById('assignmentForm');
+    form.elements['facility_id'].value = '';
+    form.elements['space_id'].value = '';
+    if (form.elements['program_type']) form.elements['program_type'].value = '1';
+    if (form.elements['notes']) form.elements['notes'].value = '';
+    
+    // Scroll to the assignment form
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Highlight the form briefly
+    const formSection = form.closest('.form-section');
+    formSection.style.backgroundColor = '#fef3c7';
+    setTimeout(() => {
+        formSection.style.backgroundColor = '';
+    }, 2000);
+    
+    showMessage(`Ready to assign device ${device.device_terminal_id}`, 'info');
 }
 
 // ============= Spaces Tab (NEW) =============

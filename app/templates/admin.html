@@ -402,6 +402,34 @@
         .btn-danger:hover {
             background-color: #b91c1c;
         }
+        /* Add this to your CSS if using datalist */
+        #assignDeviceInput {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        #assignDeviceInput:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        /* Style for action buttons in table */
+        .action-btn {
+            padding: 4px 12px;
+            font-size: 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .action-btn:hover {
+            opacity: 0.8;
+        }
     </style>
 </head>
 <body>
@@ -432,6 +460,44 @@
 
         <!-- Device Management Tab -->
         <div id="devices-tab" class="tab-content active">
+            <!-- Filter Section -->
+            <div class="form-section" style="background: #e6f2ff; border-left: 4px solid #667eea;">
+                <h3>🔍 Filter Devices</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Device Terminal ID</label>
+                        <input type="text" id="filterDeviceTerminalIdInput" placeholder="Type to filter..." />
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Device Type</label>
+                        <select id="filterDeviceTypeSelectDevices">
+                            <option value="">All Types</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Brand</label>
+                        <input type="text" id="filterDeviceBrandInput" placeholder="Type to filter..." />
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Assignment Status</label>
+                        <select id="filterDeviceAssignmentStatusSelect">
+                            <option value="all">All Devices</option>
+                            <option value="assigned">Assigned Only</option>
+                            <option value="unassigned">Unassigned Only</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="button" class="btn-secondary" onclick="clearDeviceFilters()" style="margin-top: 22px;">
+                            Clear Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- Device List Section -->
             <div class="form-section">
                 <h3>Add New Device</h3>
                 <form id="deviceForm">
@@ -506,8 +572,11 @@
                     </div>
                 </form>
             </div>
-
-            <h3>Existing Devices</h3>
+            <!-- Existing Devices Section -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+                <h3>Existing Devices <span id="deviceFilterStatus" style="color: #667eea; font-size: 0.9rem;"></span></h3>
+                <div id="deviceCount" style="color: #6b7280; font-size: 0.9rem;"></div>
+            </div>
             <div class="loading" id="devicesLoading">Loading devices...</div>
             <table id="devicesTable" style="display: none;">
                 <thead>
@@ -517,7 +586,7 @@
                         <th>Type</th>
                         <th>Payment Support</th>
                         <th>Brand/Model</th>
-                        <th>Actions</th>
+                        <th>Assignment Status</th> <!-- NEW COLUMN -->
                     </tr>
                 </thead>
                 <tbody id="devicesTableBody"></tbody>
@@ -567,11 +636,23 @@
                 <h3>Create Device Assignment</h3>
                 <form id="assignmentForm">
                     <div class="form-grid">
+                        <!-- Device selection with datalist -->
                         <div class="form-group">
-                            <label>Device <span class="required">*</span></label>
-                            <select name="device_id" id="assignDeviceSelect" required>
-                                <option value="">Select device...</option>
-                            </select>
+                            <label>Device Terminal ID <span class="required">*</span></label>
+                            <input 
+                                type="text" 
+                                id="assignDeviceInput" 
+                                list="assignDeviceDatalist" 
+                                placeholder="Type to search devices..." 
+                                required
+                                autocomplete="off"
+                            >
+                            <datalist id="assignDeviceDatalist">
+                                <!-- Options populated by JavaScript -->
+                            </datalist>
+                            <small style="color: #6b7280; margin-top: 4px; display: block;">
+                                Start typing device terminal ID to search
+                            </small>
                         </div>
                         
                         <div class="form-group">
@@ -590,30 +671,26 @@
                         
                         <div class="form-group">
                             <label>Program Type <span class="required">*</span></label>
-                            <select name="program_id" required>
-                                <option value="1" selected>Regular</option>
-                                <option value="2">Special Event</option>
+                            <select name="program_type" required>
+                                <option value="1">Regular</option>
+                                <option value="2">Resident</option>
+                                <option value="3">Reserved</option>
                             </select>
                         </div>
                         
                         <div class="form-group">
-                            <label>Assign Date <span class="required">*</span></label>
+                            <label>Assignment Date <span class="required">*</span></label>
                             <input type="datetime-local" name="assign_date" required>
                         </div>
                         
                         <div class="form-group">
-                            <label>End Date (Optional)</label>
-                            <input type="datetime-local" name="end_date">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Work Order ID (Assign)</label>
+                            <label>Work Order ID</label>
                             <input type="number" name="workorder_assign_id" placeholder="Optional">
                         </div>
                         
                         <div class="form-group full-width">
                             <label>Notes</label>
-                            <textarea name="notes" placeholder="Optional assignment notes"></textarea>
+                            <textarea name="notes" rows="3" placeholder="Optional notes about this assignment"></textarea>
                         </div>
                     </div>
                     
@@ -935,7 +1012,7 @@
             </form>
         </div>
     </div>
-    
+
     <div id="editAssignmentModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">

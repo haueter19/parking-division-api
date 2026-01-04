@@ -579,7 +579,7 @@ async def create_device_assignment(
     
     location_result = db.execute(location_query, {
         "facility_id": assignment.facility_id,
-        "space_id": assignment.space_id
+        "space_id": assignment.space_id # user provided space_id, can be NULL
     }).first()
     
     if location_result:
@@ -598,6 +598,7 @@ async def create_device_assignment(
         }).scalar()
     
     # Step 2: Create device assignment
+    # This query uses OUTPUT to return the inserted row
     assignment_insert = text("""
         INSERT INTO app.fact_device_assignment (
             device_id, location_id, assign_date, end_date,
@@ -639,13 +640,28 @@ async def create_device_assignment(
     }).first()
     
     if not charge_code_result:
-        # Get next charge code number
-        max_code = db.execute(
-            text("SELECT MAX(charge_code) FROM app.dim_charge_code")
-        ).scalar() or 82000
+        # Get charge code associated with the facility and program type
+        # This should already exist unless we need to create a new charge code
+        # This query uses the facility_id and program_id to find min/max charge codes which should be the same
+        min_max_charge_code = db.execute(
+            text("""
+                 SELECT 
+                    MIN(charge_code) min_charge_code, MAX(charge_code) max_charge_code
+                 FROM app.dim_charge_code
+                 WHERE 
+                    location_id IN (SELECT location_id FROM app.dim_location WHERE facility_id = :facility_id)
+                    AND program_type_id = :program_id
+            """), {'facility_id': assignment.facility_id, 'program_id': program_id}
+        ).first()
         
-        new_charge_code = max_code + 1
-        
+        if min_max_charge_code[0] == min_max_charge_code[1]:
+            new_charge_code = min_max_charge_code[0]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Inconsistent or non-existent charge codes for facility/program"
+            )
+
         # Create new charge code
         charge_code_insert = text("""
             INSERT INTO app.dim_charge_code (

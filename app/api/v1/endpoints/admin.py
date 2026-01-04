@@ -3,7 +3,7 @@ Admin Configuration Endpoints
 Manage devices, settlement systems, payment methods, and device assignments
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text, and_, or_
 from typing import Optional, List
@@ -17,7 +17,7 @@ from app.models.schemas import (
     SettlementSystemCreate, SettlementSystemResponse,
     PaymentMethodCreate, PaymentMethodResponse,
     DeviceAssignmentCreate, DeviceAssignmentUpdate, DeviceAssignmentResponse,
-    FacilityResponse, SpaceResponse, LocationResponse, ChargeCodeResponse
+    FacilityResponse, SpaceResponse, LocationResponse, ChargeCodeResponse, SpaceCreate
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -98,7 +98,7 @@ async def list_devices(
 ):
     """List all devices (ADMIN only)"""
     
-    filter_clause = ""
+    filter_clause = "WHERE device_type NOT IN ('Virtual', 'MK5')"
     if device_type:
         filter_clause = "WHERE device_type = :device_type"
     
@@ -107,7 +107,7 @@ async def list_devices(
                supports_mobile, cwAssetID, SerialNumber, Brand, Model
         FROM app.dim_device
         {filter_clause}
-        ORDER BY device_terminal_id
+        ORDER BY device_type, device_terminal_id
         OFFSET :skip ROWS
         FETCH NEXT :limit ROWS ONLY
     """)
@@ -177,49 +177,91 @@ async def admin_metadata(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role([UserRole.ADMIN]))
 ):
-    """Return devices, locations, facilities, and unique device types for frontend caching."""
-    # Devices
+    """
+    Return comprehensive admin metadata with JOINed data for frontend caching.
+    Loads ALL data once on page load for client-side filtering.
+    """
+    
+    # Devices with current assignment info
     devices_q = text("""
-        SELECT device_id, device_terminal_id, device_type
-        FROM app.dim_device
-        ORDER BY device_terminal_id
+        SELECT 
+            d.device_id, 
+            d.device_terminal_id, 
+            d.device_type,
+            d.supports_cash,
+            d.supports_card,
+            d.supports_mobile,
+            d.cwAssetID,
+            d.SerialNumber,
+            d.Brand,
+            d.Model,
+            da.assignment_id,
+            da.location_id,
+            f.facility_name,
+            s.space_number
+        FROM app.dim_device d
+        LEFT JOIN (
+            SELECT device_id, assignment_id, location_id
+            FROM app.fact_device_assignment
+            WHERE end_date IS NULL
+        ) da ON d.device_id = da.device_id
+        LEFT JOIN app.dim_location l ON da.location_id = l.location_id
+        LEFT JOIN app.dim_facility f ON l.facility_id = f.facility_id
+        LEFT JOIN app.dim_space s ON l.space_id = s.space_id
+        ORDER BY d.device_terminal_id
     """)
-    devices = [
-        {
-            "device_id": r.device_id,
-            "device_terminal_id": r.device_terminal_id,
-            "device_type": r.device_type
-        }
-        for r in db.execute(devices_q).fetchall()
-    ]
+    devices = [dict(r._mapping) for r in db.execute(devices_q).fetchall()]
 
-    # Locations
+    # Locations with facility and space details
     locations_q = text("""
-        SELECT location_id, facility_id, space_id
-        FROM app.dim_location
-        ORDER BY facility_id
+        SELECT 
+            l.location_id, 
+            l.facility_id, 
+            l.space_id,
+            f.facility_name,
+            f.facility_type,
+            s.space_number,
+            s.space_type
+        FROM app.dim_location l
+        INNER JOIN app.dim_facility f ON l.facility_id = f.facility_id
+        LEFT JOIN app.dim_space s ON l.space_id = s.space_id
+        ORDER BY f.facility_name, s.space_number
     """)
-    locations = [
-        {
-            "location_id": r.location_id,
-            "facility_id": r.facility_id,
-            "space_id": r.space_id
-        }
-        for r in db.execute(locations_q).fetchall()
-    ]
+    locations = [dict(r._mapping) for r in db.execute(locations_q).fetchall()]
 
     # Facilities
     facilities_q = text("""
-        SELECT facility_id, facility_name, facility_type
+        SELECT 
+            facility_id, 
+            facility_name, 
+            facility_nickname,
+            facility_type,
+            on_off_street,
+            street_area
         FROM app.dim_facility
         ORDER BY facility_name
     """)
-    facilities = [
-        {"facility_id": r.facility_id, "facility_name": r.facility_name, "facility_type": r.facility_type}
-        for r in db.execute(facilities_q).fetchall()
-    ]
+    facilities = [dict(r._mapping) for r in db.execute(facilities_q).fetchall()]
 
-    # Unique device types
+    # Spaces (active and historical)
+    spaces_q = text("""
+        SELECT 
+            s.space_id,
+            s.space_number,
+            s.space_type,
+            s.facility_id,
+            s.cwAssetID,
+            s.start_date,
+            s.end_date,
+            s.space_status,
+            f.facility_name
+        FROM app.dim_space s
+        INNER JOIN app.dim_facility f ON s.facility_id = f.facility_id
+        ORDER BY f.facility_name, s.space_number, s.start_date DESC
+    """)
+    spaces = [dict(r._mapping) for r in db.execute(spaces_q).fetchall()]
+
+    # Device types (distinct)
     device_types_q = text("""
         SELECT DISTINCT device_type
         FROM app.dim_device
@@ -228,11 +270,66 @@ async def admin_metadata(
     """)
     device_types = [r.device_type for r in db.execute(device_types_q).fetchall()]
 
+    # Settlement systems
+    settlement_q = text("""
+        SELECT settlement_system_id, system_name, system_type
+        FROM app.dim_settlement_system
+        ORDER BY system_name
+    """)
+    settlement_systems = [dict(r._mapping) for r in db.execute(settlement_q).fetchall()]
+
+    # Payment methods
+    payment_q = text("""
+        SELECT 
+            payment_method_id, 
+            payment_method_brand, 
+            payment_method_type,
+            is_cash, 
+            is_card, 
+            is_mobile, 
+            is_check
+        FROM app.dim_payment_method
+        ORDER BY payment_method_brand
+    """)
+    payment_methods = [dict(r._mapping) for r in db.execute(payment_q).fetchall()]
+
+    # Device assignments with full details
+    assignments_q = text("""
+        SELECT 
+            da.assignment_id,
+            da.device_id,
+            da.location_id,
+            da.assign_date,
+            da.end_date,
+            da.assign_by_id,
+            da.end_by_id,
+            da.workorder_assign_id,
+            da.workorder_remove_id,
+            da.notes,
+            d.device_terminal_id,
+            d.device_type,
+            f.facility_id,
+            f.facility_name,
+            s.space_id,
+            s.space_number
+        FROM app.fact_device_assignment da
+        INNER JOIN app.dim_device d ON da.device_id = d.device_id
+        INNER JOIN app.dim_location l ON da.location_id = l.location_id
+        INNER JOIN app.dim_facility f ON l.facility_id = f.facility_id
+        LEFT JOIN app.dim_space s ON l.space_id = s.space_id
+        ORDER BY da.assign_date DESC
+    """)
+    device_assignments = [dict(r._mapping) for r in db.execute(assignments_q).fetchall()]
+
     return {
         "devices": devices,
         "locations": locations,
         "facilities": facilities,
-        "device_types": device_types
+        "spaces": spaces,
+        "device_types": device_types,
+        "settlement_systems": settlement_systems,
+        "payment_methods": payment_methods,
+        "device_assignments": device_assignments
     }
 
 
@@ -792,7 +889,7 @@ async def list_device_assignments(
 ):
     """List device assignments with optional filters (ADMIN only)"""
     
-    where_clauses = []
+    where_clauses = ['']
     params = {"skip": skip, "limit": limit}
     
     if device_id:
@@ -870,6 +967,157 @@ async def list_facilities(
         for r in results
     ]
 
+
+
+# ============= Space Management (NEW) =============
+
+@router.post("/spaces", response_model=SpaceResponse)
+async def create_space(
+    space: SpaceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN]))
+):
+    """
+    Create a new space (ADMIN only).
+    If a space with the same space_number exists for this facility, close it first.
+    Automatically creates a location entry for the new space.
+    """
+    
+    # Check if space_number already exists for this facility (active)
+    existing_q = text("""
+        SELECT space_id, end_date
+        FROM app.dim_space
+        WHERE facility_id = :facility_id 
+          AND space_number = :space_number
+          AND end_date IS NULL
+    """)
+    
+    existing = db.execute(existing_q, {
+        "facility_id": space.facility_id,
+        "space_number": space.space_number
+    }).first()
+    
+    if existing:
+        # Close the existing space
+        close_q = text("""
+            UPDATE app.dim_space
+            SET end_date = :end_date
+            WHERE space_id = :space_id
+        """)
+        
+        db.execute(close_q, {
+            "space_id": existing.space_id,
+            "end_date": space.start_date  # New space start = old space end
+        })
+    
+    # Create new space
+    insert_q = text("""
+        INSERT INTO app.dim_space (
+            space_number, space_type, facility_id, cwAssetID, 
+            start_date, end_date, space_status
+        )
+        OUTPUT INSERTED.space_id, INSERTED.space_number, INSERTED.space_type,
+               INSERTED.facility_id, INSERTED.cwAssetID, INSERTED.start_date,
+               INSERTED.end_date, INSERTED.space_status
+        VALUES (
+            :space_number, :space_type, :facility_id, :cwAssetID,
+            :start_date, NULL, :space_status
+        )
+    """)
+    
+    result = db.execute(insert_q, {
+        "space_number": space.space_number,
+        "space_type": space.space_type,
+        "facility_id": space.facility_id,
+        "cwAssetID": space.cwAssetID,
+        "start_date": space.start_date,
+        "space_status": space.space_status
+    }).first()
+    
+    new_space_id = result.space_id
+    
+    # Create location for this space
+    location_insert = text("""
+        INSERT INTO app.dim_location (facility_id, space_id)
+        VALUES (:facility_id, :space_id)
+    """)
+    
+    db.execute(location_insert, {
+        "facility_id": space.facility_id,
+        "space_id": new_space_id
+    })
+    
+    db.commit()
+    
+    return SpaceResponse(
+        space_id=result.space_id,
+        space_number=result.space_number,
+        space_type=result.space_type,
+        facility_id=result.facility_id,
+        cwAssetID=result.cwAssetID,
+        start_date=result.start_date,
+        end_date=result.end_date,
+        space_status=result.space_status
+    )
+
+
+@router.post("/spaces/{space_id}/close", response_model=SpaceResponse)
+async def close_space(
+    space_id: int,
+    end_date: datetime = Query(..., description="Date to close the space"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.ADMIN]))
+):
+    """Close a space by setting its end_date (ADMIN only)"""
+    
+    # Verify space exists and is not already closed
+    check_q = text("""
+        SELECT space_id, end_date
+        FROM app.dim_space
+        WHERE space_id = :space_id
+    """)
+    
+    existing = db.execute(check_q, {"space_id": space_id}).first()
+    
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Space {space_id} not found"
+        )
+    
+    if existing.end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Space {space_id} is already closed"
+        )
+    
+    # Close the space
+    update_q = text("""
+        UPDATE app.dim_space
+        SET end_date = :end_date
+        OUTPUT INSERTED.space_id, INSERTED.space_number, INSERTED.space_type,
+               INSERTED.facility_id, INSERTED.cwAssetID, INSERTED.start_date,
+               INSERTED.end_date, INSERTED.space_status
+        WHERE space_id = :space_id
+    """)
+    
+    result = db.execute(update_q, {
+        "space_id": space_id,
+        "end_date": end_date
+    }).first()
+    
+    db.commit()
+    
+    return SpaceResponse(
+        space_id=result.space_id,
+        space_number=result.space_number,
+        space_type=result.space_type,
+        facility_id=result.facility_id,
+        cwAssetID=result.cwAssetID,
+        start_date=result.start_date,
+        end_date=result.end_date,
+        space_status=result.space_status
+    )
 
 @router.get("/spaces", response_model=List[SpaceResponse])
 async def list_spaces(

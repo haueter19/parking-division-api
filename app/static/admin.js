@@ -1,6 +1,7 @@
 /**
- * Admin Configuration JavaScript
- * Handles all admin page interactions and API calls
+ * Admin Configuration JavaScript - UPDATED VERSION
+ * Loads all data once on page load, handles filtering on client-side
+ * Includes searchable dropdowns using vanilla JavaScript
  */
 
 const token = localStorage.getItem('access_token');
@@ -8,9 +9,169 @@ if (!token) {
     window.location.href = '/';
 }
 
+// ============= Global Data Cache =============
+
+let adminData = {
+    devices: [],
+    locations: [],
+    facilities: [],
+    spaces: [],
+    device_types: [],
+    settlement_systems: [],
+    payment_methods: [],
+    device_assignments: [],
+};
+
+let currentEditAssignment = null;
+let dataLoaded = false;
+
+function populateSpaceFacilityDropdown() {
+    const select = document.getElementById('spaceFacilitySelect');
+    if (select && adminData && adminData.facilities) {
+        select.innerHTML = '<option value="">Select facility...</option>' +
+            adminData.facilities.map(f => 
+                `<option value="${f.facility_id}">${f.facility_name}</option>`
+            ).join('');
+    }
+}
+// ============= Initialization =============
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadUserInfo();
+    await loadAllData();
+    showTab('devices');
+});
+
+async function loadAllData() {
+    try {
+        const response = await fetch('/api/v1/admin/metadata', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+            adminData = await response.json();
+            dataLoaded = true;
+            console.log('Admin data loaded:', {
+                devices: adminData.devices.length,
+                spaces: adminData.spaces.length,
+                assignments: adminData.device_assignments.length
+            });
+        } else {
+            showMessage('Failed to load admin data', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading admin data:', error);
+        showMessage('Error loading admin data', 'error');
+    }
+}
+
+// ============= Searchable Dropdown Component =============
+
+function createSearchableDropdown(selectElement, items, valueKey, displayFunction) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'searchable-dropdown';
+    wrapper.style.position = 'relative';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Type to search...';
+    input.className = 'searchable-input';
+    
+    const dropdown = document.createElement('div');
+    dropdown.className = 'searchable-options';
+    dropdown.style.display = 'none';
+    dropdown.style.position = 'absolute';
+    dropdown.style.top = '100%';
+    dropdown.style.left = '0';
+    dropdown.style.right = '0';
+    dropdown.style.maxHeight = '200px';
+    dropdown.style.overflowY = 'auto';
+    dropdown.style.background = 'white';
+    dropdown.style.border = '1px solid #d1d5db';
+    dropdown.style.borderRadius = '4px';
+    dropdown.style.zIndex = '1000';
+    dropdown.style.marginTop = '2px';
+    
+    let selectedValue = '';
+    
+    function renderOptions(filter = '') {
+        dropdown.innerHTML = '';
+        const filtered = items.filter(item => {
+            const display = displayFunction(item).toLowerCase();
+            return display.includes(filter.toLowerCase());
+        });
+        
+        filtered.forEach(item => {
+            const option = document.createElement('div');
+            option.className = 'searchable-option';
+            option.textContent = displayFunction(item);
+            option.style.padding = '8px 12px';
+            option.style.cursor = 'pointer';
+            option.dataset.value = item[valueKey];
+            
+            option.addEventListener('mouseenter', () => {
+                option.style.background = '#f3f4f6';
+            });
+            
+            option.addEventListener('mouseleave', () => {
+                option.style.background = 'white';
+            });
+            
+            option.addEventListener('click', () => {
+                selectedValue = item[valueKey];
+                input.value = displayFunction(item);
+                selectElement.value = selectedValue;
+                selectElement.dispatchEvent(new Event('change'));
+                dropdown.style.display = 'none';
+            });
+            
+            dropdown.appendChild(option);
+        });
+        
+        if (filtered.length === 0) {
+            const noResults = document.createElement('div');
+            noResults.textContent = 'No results found';
+            noResults.style.padding = '8px 12px';
+            noResults.style.color = '#6b7280';
+            dropdown.appendChild(noResults);
+        }
+    }
+    
+    input.addEventListener('focus', () => {
+        renderOptions(input.value);
+        dropdown.style.display = 'block';
+    });
+    
+    input.addEventListener('input', (e) => {
+        renderOptions(e.target.value);
+        dropdown.style.display = 'block';
+    });
+    
+    input.addEventListener('blur', () => {
+        // Delay to allow click events on options
+        setTimeout(() => {
+            dropdown.style.display = 'none';
+        }, 200);
+    });
+    
+    wrapper.appendChild(input);
+    wrapper.appendChild(dropdown);
+    
+    // Replace select with wrapper
+    selectElement.style.display = 'none';
+    selectElement.parentNode.insertBefore(wrapper, selectElement);
+    
+    return { input, dropdown, wrapper };
+}
+
 // ============= Tab Management =============
 
-function showTab(tabName) {
+function showTab(tabName, event) {  // <-- Add event parameter
+    if (!dataLoaded) {
+        showMessage('Loading data, please wait...', 'info');
+        return;
+    }
+    
     // Hide all tabs
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.remove('active');
@@ -23,44 +184,40 @@ function showTab(tabName) {
     
     // Show selected tab
     document.getElementById(`${tabName}-tab`).classList.add('active');
-    event.target.classList.add('active');
     
-    // Load data for the tab
+    // Only try to access event.target if event exists
+    if (event && event.target) {
+        event.target.classList.add('active');
+    } else {
+        // If no event (called programmatically), find and activate the button
+        document.querySelectorAll('.tab').forEach(btn => {
+            if (btn.textContent.toLowerCase().includes(tabName.toLowerCase())) {
+                btn.classList.add('active');
+            }
+        });
+    }
+    
+    // Render data for the tab
     switch(tabName) {
         case 'devices':
-            loadDevices();
+            renderDevices(adminData.devices);
             break;
         case 'assignments':
-            loadAssignments();
-            loadDevicesForDropdown();
-            loadFacilitiesForDropdown();
+            renderAssignments(adminData.device_assignments);
+            setupAssignmentFilters();
             break;
         case 'settlement':
-            loadSettlementSystems();
+            renderSettlementSystems(adminData.settlement_systems);
             break;
         case 'payment':
-            loadPaymentMethods();
+            renderPaymentMethods(adminData.payment_methods);
+            break;
+        case 'spaces':
+            populateSpaceFacilityDropdown();
+            renderSpaces(adminData.spaces);
+            setupSpaceFilters();
             break;
     }
-}
-
-// Admin metadata cache (devices, locations, facilities, device_types)
-let adminMetadata = null;
-
-async function loadAdminMetadata() {
-    if (adminMetadata) return adminMetadata;
-    try {
-        const resp = await fetch('/api/v1/admin/metadata', { headers: { 'Authorization': `Bearer ${token}` } });
-        if (resp.ok) {
-            adminMetadata = await resp.json();
-            return adminMetadata;
-        }
-    } catch (err) {
-        console.error('Error loading admin metadata', err);
-    }
-    // Fallback to empty structures
-    adminMetadata = { devices: [], locations: [], facilities: [], device_types: [] };
-    return adminMetadata;
 }
 
 // ============= User Info =============
@@ -75,7 +232,6 @@ async function loadUserInfo() {
             const user = await response.json();
             document.getElementById('userName').textContent = user.full_name || user.username;
             
-            // Check if user is admin
             if (user.role !== 'admin') {
                 showMessage('Access denied. Admin privileges required.', 'error');
                 setTimeout(() => window.location.href = '/upload', 2000);
@@ -105,7 +261,7 @@ function showMessage(text, type) {
     }, 5000);
 }
 
-// ============= Device Management =============
+// ============= Devices Tab =============
 
 document.getElementById('deviceForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -136,7 +292,8 @@ document.getElementById('deviceForm').addEventListener('submit', async (e) => {
         if (response.ok) {
             showMessage('Device created successfully!', 'success');
             e.target.reset();
-            loadDevices();
+            await loadAllData();
+            renderDevices(adminData.devices);
         } else {
             const error = await response.json();
             showMessage(error.detail || 'Failed to create device', 'error');
@@ -146,437 +303,319 @@ document.getElementById('deviceForm').addEventListener('submit', async (e) => {
     }
 });
 
-async function loadDevices() {
-    const loading = document.getElementById('devicesLoading');
-    const table = document.getElementById('devicesTable');
+function renderDevices(devices) {
     const tbody = document.getElementById('devicesTableBody');
+    const table = document.getElementById('devicesTable');
+    const loading = document.getElementById('devicesLoading');
     
-    loading.classList.add('show');
-    table.style.display = 'none';
+    loading.classList.remove('show');
     
-    try {
-        const response = await fetch('/api/v1/admin/devices', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-            const devices = await response.json();
-            
-            tbody.innerHTML = devices.map(device => `
-                <tr>
-                    <td>${device.device_id}</td>
-                    <td><strong>${device.device_terminal_id}</strong></td>
-                    <td>${device.device_type}</td>
-                    <td>
-                        ${device.supports_cash ? '<span class="badge badge-success">Cash</span>' : ''}
-                        ${device.supports_card ? '<span class="badge badge-info">Card</span>' : ''}
-                        ${device.supports_mobile ? '<span class="badge badge-warning">Mobile</span>' : ''}
-                    </td>
-                    <td>${device.Brand || ''} ${device.Model || ''}</td>
-                    <td>
-                        <button class="btn-secondary action-btn" onclick="viewDeviceDetails(${device.device_id})">View</button>
-                    </td>
-                </tr>
-            `).join('');
-            
-            table.style.display = 'table';
-        }
-    } catch (error) {
-        showMessage('Error loading devices', 'error');
-    } finally {
-        loading.classList.remove('show');
-    }
-}
-
-function viewDeviceDetails(deviceId) {
-    // Could implement a detail modal here
-    alert(`View details for device ${deviceId}`);
-}
-
-// ============= Device Assignment Management =============
-
-// Filter state for assignments
-const assignmentFilters = {
-    device_id: null,
-    location_id: null,
-    device_type: null,
-    facility_id: null,
-    active_only: true
-};
-
-function applyAssignmentFilters() {
-    const deviceId = document.getElementById('filterDeviceSelect').value;
-    const locationId = document.getElementById('filterLocationSelect').value;
-    const deviceType = document.getElementById('filterDeviceTypeSelect') ? document.getElementById('filterDeviceTypeSelect').value : '';
-    const facilityId = document.getElementById('filterFacilitySelect') ? document.getElementById('filterFacilitySelect').value : '';
-    const status = document.getElementById('filterStatusSelect').value;
-    
-    assignmentFilters.device_id = deviceId ? parseInt(deviceId) : null;
-    assignmentFilters.location_id = locationId ? parseInt(locationId) : null;
-    assignmentFilters.device_type = deviceType || null;
-    assignmentFilters.facility_id = facilityId ? parseInt(facilityId) : null;
-    
-    // Handle status filter
-    if (status === 'active') {
-        assignmentFilters.active_only = true;
-    } else if (status === 'closed') {
-        assignmentFilters.active_only = false;
-    } else {
-        assignmentFilters.active_only = null;
-    }
-    
-    loadAssignments();
-}
-
-function clearAssignmentFilters() {
-    document.getElementById('filterDeviceSelect').value = '';
-    document.getElementById('filterLocationSelect').value = '';
-    document.getElementById('filterStatusSelect').value = 'active';
-    if (document.getElementById('filterDeviceTypeSelect')) document.getElementById('filterDeviceTypeSelect').value = '';
-    if (document.getElementById('filterFacilitySelect')) document.getElementById('filterFacilitySelect').value = '';
-    
-    assignmentFilters.device_id = null;
-    assignmentFilters.location_id = null;
-    assignmentFilters.device_type = null;
-    assignmentFilters.facility_id = null;
-    assignmentFilters.active_only = true;
-    
-    loadAssignments();
-}
-
-document.getElementById('assignmentForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const formData = new FormData(e.target);
-    
-    // Convert datetime-local to ISO format
-    const assignDate = new Date(formData.get('assign_date')).toISOString();
-    const endDate = formData.get('end_date') ? new Date(formData.get('end_date')).toISOString() : null;
-    
-    const data = {
-        device_id: parseInt(formData.get('device_id')),
-        facility_id: parseInt(formData.get('facility_id')),
-        space_id: formData.get('space_id') ? parseInt(formData.get('space_id')) : null,
-        assign_date: assignDate,
-        end_date: endDate,
-        workorder_assign_id: formData.get('workorder_assign_id') ? parseInt(formData.get('workorder_assign_id')) : null,
-        notes: formData.get('notes') || null,
-        program_id: parseInt(formData.get('program_id'))
-    };
-    
-    try {
-        const response = await fetch('/api/v1/admin/device-assignments', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
-        
-        if (response.ok) {
-            showMessage('Device assignment created successfully!', 'success');
-            e.target.reset();
-            loadAssignments();
-        } else {
-            const error = await response.json();
-            showMessage(error.detail || 'Failed to create assignment', 'error');
-        }
-    } catch (error) {
-        showMessage('Error creating assignment', 'error');
-    }
-});
-
-async function loadAssignments() {
-    const loading = document.getElementById('assignmentsLoading');
-    const table = document.getElementById('assignmentsTable');
-    const tbody = document.getElementById('assignmentsTableBody');
-    const filterStatus = document.getElementById('assignmentFilterStatus');
-    const countDisplay = document.getElementById('assignmentCount');
-    
-    loading.classList.add('show');
-    table.style.display = 'none';
-    
-    // Build query parameters
-    const params = new URLSearchParams({
-        limit: '1000'
-    });
-    
-    if (assignmentFilters.device_id) {
-        params.append('device_id', assignmentFilters.device_id);
-    }
-    
-    if (assignmentFilters.location_id) {
-        params.append('location_id', assignmentFilters.location_id);
-    }
-    
-    if (assignmentFilters.active_only !== null) {
-        params.append('active_only', assignmentFilters.active_only);
-    }
-    
-    try {
-        const response = await fetch(`/api/v1/admin/device-assignments?${params.toString()}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-            let assignments = await response.json();
-            // Handle response wrapping (could be array or {data: array})
-            if (!Array.isArray(assignments)) {
-                assignments = assignments.data || [];
-            }
-            
-            // Load admin metadata (devices, locations, facilities, device types)
-            const meta = await loadAdminMetadata();
-            const devices = meta.devices || [];
-            const locations = meta.locations || [];
-            const deviceMap = Object.fromEntries(devices.map(d => [d.device_id, d]));
-            const locationMap = Object.fromEntries(locations.map(l => [l.location_id, l]));
-
-            // Populate filter dropdowns if not already done
-            await populateAssignmentFilterDropdowns(devices, locations, meta.device_types, meta.facilities);
-            
-            // Update filter status message
-            let filterMessage = '';
-            const activeFilters = [];
-            
-            if (assignmentFilters.device_id) {
-                const device = deviceMap[assignmentFilters.device_id];
-                activeFilters.push(`Device: ${device?.device_terminal_id}`);
-            }
-            
-            if (assignmentFilters.location_id) {
-                const location = locationMap[assignmentFilters.location_id];
-                activeFilters.push(`Location: ${location?.facility_name}`);
-            }
-            
-            if (assignmentFilters.active_only === true) {
-                activeFilters.push('Status: Active');
-            } else if (assignmentFilters.active_only === false) {
-                activeFilters.push('Status: Closed');
-            }
-            
-            if (activeFilters.length > 0) {
-                filterMessage = `(Filtered: ${activeFilters.join(', ')})`;
-            }
-            
-            // Client-side filtering: fetch assignments (unfiltered) then apply filters locally
-            let fetched = assignments;
-            // apply assignmentFilters
-            const filtered = fetched.filter(a => {
-                // device_id filter
-                if (assignmentFilters.device_id && a.device_id !== assignmentFilters.device_id) return false;
-                // location_id filter
-                if (assignmentFilters.location_id && a.location_id !== assignmentFilters.location_id) return false;
-                // device_type filter
-                if (assignmentFilters.device_type) {
-                    const dv = deviceMap[a.device_id];
-                    if (!dv || dv.device_type !== assignmentFilters.device_type) return false;
-                }
-                // facility filter
-                if (assignmentFilters.facility_id) {
-                    const loc = locationMap[a.location_id];
-                    if (!loc || loc.facility_id !== assignmentFilters.facility_id) return false;
-                }
-                // status filter
-                if (assignmentFilters.active_only === true && a.end_date) return false;
-                if (assignmentFilters.active_only === false && !a.end_date) return false;
-                return true;
-            });
-
-            filterStatus.textContent = filterMessage;
-            countDisplay.textContent = `Showing ${filtered.length} assignment${filtered.length !== 1 ? 's' : ''}`;
-
-            tbody.innerHTML = filtered.map(assignment => {
-                const device = deviceMap[assignment.device_id];
-                const location = locationMap[assignment.location_id];
-
-                return `
-                    <tr>
-                        <td><strong>${device ? device.device_terminal_id : assignment.device_id}</strong></td>
-                        <td>${device ? device.device_type : 'N/A'}</td>
-                        <td>${location ? `${location.facility_name}${location.space_number ? ` - Space ${location.space_number}` : ''}` : assignment.location_id}</td>
-                        <td>${new Date(assignment.assign_date).toLocaleDateString()}</td>
-                        <td>${assignment.end_date ? new Date(assignment.end_date).toLocaleDateString() : 'Active'}</td>
-                        <td>
-                            ${assignment.end_date ? '<span class="badge badge-warning">Closed</span>' : '<span class="badge badge-success">Active</span>'}
-                        </td>
-                        <td>
-                            <button class="btn-secondary action-btn" onclick="editAssignment(${assignment.assignment_id})">Edit</button>
-                            ${!assignment.end_date ? `<button class="btn-danger action-btn" onclick="closeAssignment(${assignment.assignment_id})">Close</button>` : ''}
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-
-            table.style.display = 'table';
-        }
-    } catch (error) {
-        showMessage('Error loading assignments', 'error');
-    } finally {
-        loading.classList.remove('show');
-    }
-}
-
-async function populateAssignmentFilterDropdowns(devices, locations, deviceTypes = [], facilities = []) {
-    // Devices dropdown
-    const deviceSelect = document.getElementById('filterDeviceSelect');
-    if (deviceSelect && deviceSelect.options.length <= 1) {
-        const deviceOptions = devices
-            .map(d => `<option value="${d.device_id}">${d.device_terminal_id} (${d.device_type})</option>`)
-            .join('');
-        deviceSelect.innerHTML = '<option value="">All Devices</option>' + deviceOptions;
-    }
-
-    // Device type dropdown
-    const deviceTypeSelect = document.getElementById('filterDeviceTypeSelect');
-    if (deviceTypeSelect && deviceTypeSelect.options.length <= 1) {
-        const typeOptions = deviceTypes.map(t => `<option value="${t}">${t}</option>`).join('');
-        deviceTypeSelect.innerHTML = '<option value="">All Types</option>' + typeOptions;
-    }
-
-    // Facility dropdown
-    const facilitySelect = document.getElementById('filterFacilitySelect');
-    if (facilitySelect && facilitySelect.options.length <= 1) {
-        const facOptions = facilities.map(f => `<option value="${f.facility_id}">${f.facility_name}</option>`).join('');
-        facilitySelect.innerHTML = '<option value="">All Facilities</option>' + facOptions;
-    }
-
-    // Locations dropdown
-    const locationSelect = document.getElementById('filterLocationSelect');
-    if (locationSelect && locationSelect.options.length <= 1) {
-        const locationOptions = locations
-            .map(l => `<option value="${l.location_id}">${l.facility_name}${l.space_number ? ` - Space ${l.space_number}` : ''}</option>`)
-            .join('');
-        locationSelect.innerHTML = '<option value="">All Locations</option>' + locationOptions;
-    }
-}
-
-async function loadDevicesForDropdown() {
-    try {
-        const meta = await loadAdminMetadata();
-        const devices = meta.devices || [];
-        const select = document.getElementById('assignDeviceSelect');
-        select.innerHTML = '<option value="">Select device...</option>' +
-            devices.map(d => `<option value="${d.device_id}">${d.device_terminal_id} (${d.device_type})</option>`).join('');
-    } catch (error) {
-        console.error('Error loading devices:', error);
-    }
-}
-
-async function loadFacilitiesForDropdown() {
-    try {
-        const meta = await loadAdminMetadata();
-        const facilities = meta.facilities || [];
-        const select = document.getElementById('assignFacilitySelect');
-        select.innerHTML = '<option value="">Select facility...</option>' +
-            facilities.map(f => `<option value="${f.facility_id}">${f.facility_name}</option>`).join('');
-    } catch (error) {
-        console.error('Error loading facilities:', error);
-    }
-}
-
-async function loadSpacesForFacility(facilityId) {
-    const select = document.getElementById('assignSpaceSelect');
-    select.innerHTML = '<option value="">Loading...</option>';
-    
-    if (!facilityId) {
-        select.innerHTML = '<option value="">Select facility first</option>';
+    if (!devices || devices.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No devices found</td></tr>';
+        table.style.display = 'table';
         return;
     }
     
-    try {
-        const response = await fetch(`/api/v1/admin/spaces?facility_id=${facilityId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-            const spaces = await response.json();
-            select.innerHTML = '<option value="">No space (facility only)</option>' +
-                spaces.map(s => `<option value="${s.space_id}">${s.space_number || s.space_id}</option>`).join('');
-        }
-    } catch (error) {
-        select.innerHTML = '<option value="">Error loading spaces</option>';
-    }
+    tbody.innerHTML = devices.map(device => `
+        <tr>
+            <td>${device.device_id}</td>
+            <td><strong>${device.device_terminal_id}</strong></td>
+            <td>${device.device_type}</td>
+            <td>
+                ${device.supports_cash ? '<span class="badge badge-success">Cash</span>' : ''}
+                ${device.supports_card ? '<span class="badge badge-info">Card</span>' : ''}
+                ${device.supports_mobile ? '<span class="badge badge-warning">Mobile</span>' : ''}
+            </td>
+            <td>${device.Brand || '-'} ${device.Model || ''}</td>
+            <td>
+                ${device.facility_name ? `<span class="badge badge-info">Assigned: ${device.facility_name}${device.space_number ? ' - ' + device.space_number : ''}</span>` : '<span class="badge">Unassigned</span>'}
+            </td>
+        </tr>
+    `).join('');
+    
+    table.style.display = 'table';
 }
 
-async function editAssignment(assignmentId) {
-    // Load assignment details
-    try {
-        const response = await fetch('/api/v1/admin/device-assignments', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-            const assignments = await response.json();
-            const assignment = assignments.find(a => a.assignment_id === assignmentId);
-            
-            if (assignment) {
-                // Load locations for dropdown
-                await loadLocationsForEdit();
-                
-                // Populate form
-                const form = document.getElementById('editAssignmentForm');
-                form.elements['assignment_id'].value = assignment.assignment_id;
-                form.elements['location_id'].value = assignment.location_id;
-                
-                if (assignment.assign_date) {
-                    form.elements['assign_date'].value = new Date(assignment.assign_date).toISOString().slice(0, 16);
-                }
-                
-                if (assignment.end_date) {
-                    form.elements['end_date'].value = new Date(assignment.end_date).toISOString().slice(0, 16);
-                }
-                
-                form.elements['workorder_assign_id'].value = assignment.workorder_assign_id || '';
-                form.elements['workorder_remove_id'].value = assignment.workorder_remove_id || '';
-                form.elements['notes'].value = assignment.notes || '';
-                
-                // Show modal
-                document.getElementById('editAssignmentModal').classList.add('show');
-            }
-        }
-    } catch (error) {
-        showMessage('Error loading assignment details', 'error');
-    }
+// ============= Assignments Tab =============
+
+let assignmentFilters = {
+    device: '',
+    deviceType: '',
+    facility: '',
+    location: '',
+    status: 'active'
+};
+
+function setupAssignmentFilters() {
+    // Device filter
+    document.getElementById('filterDeviceInput').addEventListener('input', (e) => {
+        assignmentFilters.device = e.target.value;
+        applyAssignmentFilters();
+    });
+    
+    // Device type filter
+    document.getElementById('filterDeviceTypeSelect').addEventListener('change', (e) => {
+        assignmentFilters.deviceType = e.target.value;
+        applyAssignmentFilters();
+    });
+    
+    // Facility filter
+    document.getElementById('filterFacilityInput').addEventListener('input', (e) => {
+        assignmentFilters.facility = e.target.value;
+        applyAssignmentFilters();
+    });
+    
+    // Status filter
+    document.getElementById('filterStatusSelect').addEventListener('change', (e) => {
+        assignmentFilters.status = e.target.value;
+        applyAssignmentFilters();
+    });
+    
+    // Populate device type dropdown
+    const deviceTypeSelect = document.getElementById('filterDeviceTypeSelect');
+    deviceTypeSelect.innerHTML = '<option value="">All Types</option>' +
+        adminData.device_types.map(t => `<option value="${t}">${t}</option>`).join('');
 }
 
-async function loadLocationsForEdit() {
-    try {
-        const response = await fetch('/api/v1/admin/locations', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-            const locations = await response.json();
-            const select = document.getElementById('editLocationSelect');
-            
-            select.innerHTML = '<option value="">Select location...</option>' +
-                locations.map(l => `<option value="${l.location_id}">${l.facility_name}${l.space_number ? ` - Space ${l.space_number}` : ''}</option>`).join('');
-        }
-    } catch (error) {
-        console.error('Error loading locations:', error);
+function applyAssignmentFilters() {
+    let filtered = [...adminData.device_assignments];
+    
+    // Filter by device
+    if (assignmentFilters.device) {
+        filtered = filtered.filter(a => 
+            a.device_terminal_id.toLowerCase().includes(assignmentFilters.device.toLowerCase())
+        );
     }
+    
+    // Filter by device type
+    if (assignmentFilters.deviceType) {
+        filtered = filtered.filter(a => a.device_type === assignmentFilters.deviceType);
+    }
+    
+    // Filter by facility
+    if (assignmentFilters.facility) {
+        filtered = filtered.filter(a => 
+            a.facility_name.toLowerCase().includes(assignmentFilters.facility.toLowerCase())
+        );
+    }
+    
+    // Filter by status
+    if (assignmentFilters.status === 'active') {
+        filtered = filtered.filter(a => !a.end_date);
+    } else if (assignmentFilters.status === 'closed') {
+        filtered = filtered.filter(a => a.end_date);
+    }
+    
+    renderAssignments(filtered);
+    
+    // Update filter status
+    const activeFilters = [];
+    if (assignmentFilters.device) activeFilters.push(`Device: ${assignmentFilters.device}`);
+    if (assignmentFilters.deviceType) activeFilters.push(`Type: ${assignmentFilters.deviceType}`);
+    if (assignmentFilters.facility) activeFilters.push(`Facility: ${assignmentFilters.facility}`);
+    if (assignmentFilters.status !== 'all') activeFilters.push(`Status: ${assignmentFilters.status}`);
+    
+    document.getElementById('assignmentFilterStatus').textContent = 
+        activeFilters.length > 0 ? `(Filtered: ${activeFilters.join(', ')})` : '';
+    
+    document.getElementById('assignmentCount').textContent = 
+        `Showing ${filtered.length} of ${adminData.device_assignments.length} assignments`;
 }
 
-document.getElementById('editAssignmentForm').addEventListener('submit', async (e) => {
+function clearAssignmentFilters() {
+    assignmentFilters = {
+        device: '',
+        deviceType: '',
+        facility: '',
+        location: '',
+        status: 'active'
+    };
+    
+    document.getElementById('filterDeviceInput').value = '';
+    document.getElementById('filterDeviceTypeSelect').value = '';
+    document.getElementById('filterFacilityInput').value = '';
+    document.getElementById('filterStatusSelect').value = 'active';
+    
+    applyAssignmentFilters();
+}
+
+function renderAssignments(assignments) {
+    const tbody = document.getElementById('assignmentsTableBody');
+    const table = document.getElementById('assignmentsTable');
+    const loading = document.getElementById('assignmentsLoading');
+    
+    loading.classList.remove('show');
+    
+    if (!assignments || assignments.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No assignments found</td></tr>';
+        table.style.display = 'table';
+        return;
+    }
+    
+    tbody.innerHTML = assignments.map(assignment => `
+        <tr>
+            <td><strong>${assignment.device_terminal_id}</strong></td>
+            <td>${assignment.device_type}</td>
+            <td>${assignment.facility_name}${assignment.space_number ? ' - Space ' + assignment.space_number : ''}</td>
+            <td>${new Date(assignment.assign_date).toLocaleDateString()}</td>
+            <td>${assignment.end_date ? new Date(assignment.end_date).toLocaleDateString() : 'Active'}</td>
+            <td>
+                ${assignment.end_date ? '<span class="badge badge-warning">Closed</span>' : '<span class="badge badge-success">Active</span>'}
+            </td>
+            <td>
+                <button class="btn-secondary action-btn" onclick="editAssignment(${assignment.assignment_id})">Edit</button>
+                ${!assignment.end_date ? `<button class="btn-danger action-btn" onclick="closeAssignment(${assignment.assignment_id})">Close</button>` : ''}
+            </td>
+        </tr>
+    `).join('');
+    
+    table.style.display = 'table';
+}
+
+// ============= Spaces Tab (NEW) =============
+
+let spaceFilters = {
+    facility: '',
+    spaceNumber: '',
+    spaceType: '',
+    status: 'active'
+};
+
+function setupSpaceFilters() {
+    // Facility filter
+    document.getElementById('filterSpaceFacilityInput').addEventListener('input', (e) => {
+        spaceFilters.facility = e.target.value;
+        applySpaceFilters();
+    });
+    
+    // Space number filter
+    document.getElementById('filterSpaceNumberInput').addEventListener('input', (e) => {
+        spaceFilters.spaceNumber = e.target.value;
+        applySpaceFilters();
+    });
+    
+    // Space type filter
+    document.getElementById('filterSpaceTypeInput').addEventListener('input', (e) => {
+        spaceFilters.spaceType = e.target.value;
+        applySpaceFilters();
+    });
+    
+    // Status filter
+    document.getElementById('filterSpaceStatusSelect').addEventListener('change', (e) => {
+        spaceFilters.status = e.target.value;
+        applySpaceFilters();
+    });
+}
+
+function applySpaceFilters() {
+    let filtered = [...adminData.spaces];
+    
+    // Filter by facility
+    if (spaceFilters.facility) {
+        filtered = filtered.filter(s => 
+            s.facility_name.toLowerCase().includes(spaceFilters.facility.toLowerCase())
+        );
+    }
+    
+    // Filter by space number
+    if (spaceFilters.spaceNumber) {
+        filtered = filtered.filter(s => 
+            s.space_number && s.space_number.toLowerCase().includes(spaceFilters.spaceNumber.toLowerCase())
+        );
+    }
+    
+    // Filter by space type
+    if (spaceFilters.spaceType) {
+        filtered = filtered.filter(s => 
+            s.space_type && s.space_type.toLowerCase().includes(spaceFilters.spaceType.toLowerCase())
+        );
+    }
+    
+    // Filter by status
+    if (spaceFilters.status === 'active') {
+        filtered = filtered.filter(s => !s.end_date);
+    } else if (spaceFilters.status === 'closed') {
+        filtered = filtered.filter(s => s.end_date);
+    }
+    
+    renderSpaces(filtered);
+    
+    // Update filter status
+    const activeFilters = [];
+    if (spaceFilters.facility) activeFilters.push(`Facility: ${spaceFilters.facility}`);
+    if (spaceFilters.spaceNumber) activeFilters.push(`Space: ${spaceFilters.spaceNumber}`);
+    if (spaceFilters.spaceType) activeFilters.push(`Type: ${spaceFilters.spaceType}`);
+    if (spaceFilters.status !== 'all') activeFilters.push(`Status: ${spaceFilters.status}`);
+    
+    document.getElementById('spaceFilterStatus').textContent = 
+        activeFilters.length > 0 ? `(Filtered: ${activeFilters.join(', ')})` : '';
+    
+    document.getElementById('spaceCount').textContent = 
+        `Showing ${filtered.length} of ${adminData.spaces.length} spaces`;
+}
+
+function clearSpaceFilters() {
+    spaceFilters = {
+        facility: '',
+        spaceNumber: '',
+        spaceType: '',
+        status: 'active'
+    };
+    
+    document.getElementById('filterSpaceFacilityInput').value = '';
+    document.getElementById('filterSpaceNumberInput').value = '';
+    document.getElementById('filterSpaceTypeInput').value = '';
+    document.getElementById('filterSpaceStatusSelect').value = 'active';
+    
+    applySpaceFilters();
+}
+
+function renderSpaces(spaces) {
+    const tbody = document.getElementById('spacesTableBody');
+    const table = document.getElementById('spacesTable');
+    const loading = document.getElementById('spacesLoading');
+    
+    loading.classList.remove('show');
+    
+    if (!spaces || spaces.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No spaces found</td></tr>';
+        table.style.display = 'table';
+        return;
+    }
+    
+    tbody.innerHTML = spaces.map(space => `
+        <tr>
+            <td>${space.space_id}</td>
+            <td><strong>${space.space_number}</strong></td>
+            <td>${space.space_type || '-'}</td>
+            <td>${space.facility_name}</td>
+            <td>${new Date(space.start_date).toLocaleDateString()}</td>
+            <td>${space.end_date ? new Date(space.end_date).toLocaleDateString() : 'Active'}</td>
+            <td>
+                ${space.end_date ? '<span class="badge badge-warning">Closed</span>' : '<span class="badge badge-success">Active</span>'}
+            </td>
+        </tr>
+    `).join('');
+    
+    table.style.display = 'table';
+}
+
+document.getElementById('spaceForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const formData = new FormData(e.target);
-    const assignmentId = formData.get('assignment_id');
-    
-    const data = {};
-    
-    if (formData.get('location_id')) data.location_id = parseInt(formData.get('location_id'));
-    if (formData.get('assign_date')) data.assign_date = new Date(formData.get('assign_date')).toISOString();
-    if (formData.get('end_date')) data.end_date = new Date(formData.get('end_date')).toISOString();
-    if (formData.get('workorder_assign_id')) data.workorder_assign_id = parseInt(formData.get('workorder_assign_id'));
-    if (formData.get('workorder_remove_id')) data.workorder_remove_id = parseInt(formData.get('workorder_remove_id'));
-    if (formData.get('notes')) data.notes = formData.get('notes');
+    const data = {
+        space_number: formData.get('space_number'),
+        space_type: formData.get('space_type'),
+        facility_id: parseInt(formData.get('facility_id')),
+        cwAssetID: formData.get('cwAssetID') || null,
+        start_date: formData.get('start_date'),
+        space_status: formData.get('space_status') || 'Active'
+    };
     
     try {
-        const response = await fetch(`/api/v1/admin/device-assignments/${assignmentId}`, {
-            method: 'PUT',
+        const response = await fetch('/api/v1/admin/spaces', {
+            method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
@@ -585,68 +624,20 @@ document.getElementById('editAssignmentForm').addEventListener('submit', async (
         });
         
         if (response.ok) {
-            showMessage('Assignment updated successfully!', 'success');
-            closeEditModal();
-            loadAssignments();
+            showMessage('Space created successfully!', 'success');
+            e.target.reset();
+            await loadAllData();
+            renderSpaces(adminData.spaces);
         } else {
             const error = await response.json();
-            showMessage(error.detail || 'Failed to update assignment', 'error');
+            showMessage(error.detail || 'Failed to create space', 'error');
         }
     } catch (error) {
-        showMessage('Error updating assignment', 'error');
+        showMessage('Error creating space', 'error');
     }
 });
 
-function closeEditModal() {
-    document.getElementById('editAssignmentModal').classList.remove('show');
-}
-
-function closeAssignment(assignmentId) {
-    // Set assignment ID and show modal
-    document.getElementById('closeAssignmentForm').elements['assignment_id'].value = assignmentId;
-    
-    // Set default end date to now
-    document.getElementById('closeAssignmentForm').elements['end_date'].value = 
-        new Date().toISOString().slice(0, 16);
-    
-    document.getElementById('closeAssignmentModal').classList.add('show');
-}
-
-document.getElementById('closeAssignmentForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const formData = new FormData(e.target);
-    const assignmentId = formData.get('assignment_id');
-    const endDate = new Date(formData.get('end_date')).toISOString();
-    const workorderRemoveId = formData.get('workorder_remove_id') ? parseInt(formData.get('workorder_remove_id')) : null;
-    const notes = formData.get('notes') || null;
-    
-    try {
-        const response = await fetch(`/api/v1/admin/device-assignments/${assignmentId}/close?end_date=${encodeURIComponent(endDate)}${workorderRemoveId ? `&workorder_remove_id=${workorderRemoveId}` : ''}${notes ? `&notes=${encodeURIComponent(notes)}` : ''}`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
-        
-        if (response.ok) {
-            showMessage('Assignment closed successfully!', 'success');
-            closeCloseModal();
-            loadAssignments();
-        } else {
-            const error = await response.json();
-            showMessage(error.detail || 'Failed to close assignment', 'error');
-        }
-    } catch (error) {
-        showMessage('Error closing assignment', 'error');
-    }
-});
-
-function closeCloseModal() {
-    document.getElementById('closeAssignmentModal').classList.remove('show');
-}
-
-// ============= Settlement System Management =============
+// ============= Settlement Systems Tab =============
 
 document.getElementById('settlementForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -670,7 +661,8 @@ document.getElementById('settlementForm').addEventListener('submit', async (e) =
         if (response.ok) {
             showMessage('Settlement system created successfully!', 'success');
             e.target.reset();
-            loadSettlementSystems();
+            await loadAllData();
+            renderSettlementSystems(adminData.settlement_systems);
         } else {
             const error = await response.json();
             showMessage(error.detail || 'Failed to create settlement system', 'error');
@@ -680,40 +672,31 @@ document.getElementById('settlementForm').addEventListener('submit', async (e) =
     }
 });
 
-async function loadSettlementSystems() {
-    const loading = document.getElementById('settlementLoading');
-    const table = document.getElementById('settlementTable');
+function renderSettlementSystems(systems) {
     const tbody = document.getElementById('settlementTableBody');
+    const table = document.getElementById('settlementTable');
+    const loading = document.getElementById('settlementLoading');
     
-    loading.classList.add('show');
-    table.style.display = 'none';
+    loading.classList.remove('show');
     
-    try {
-        const response = await fetch('/api/v1/admin/settlement-systems', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (response.ok) {
-            const systems = await response.json();
-            
-            tbody.innerHTML = systems.map(system => `
-                <tr>
-                    <td>${system.settlement_system_id}</td>
-                    <td><strong>${system.system_name}</strong></td>
-                    <td>${system.system_type || '-'}</td>
-                </tr>
-            `).join('');
-            
-            table.style.display = 'table';
-        }
-    } catch (error) {
-        showMessage('Error loading settlement systems', 'error');
-    } finally {
-        loading.classList.remove('show');
+    if (!systems || systems.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">No settlement systems found</td></tr>';
+        table.style.display = 'table';
+        return;
     }
+    
+    tbody.innerHTML = systems.map(system => `
+        <tr>
+            <td>${system.settlement_system_id}</td>
+            <td><strong>${system.system_name}</strong></td>
+            <td>${system.system_type || '-'}</td>
+        </tr>
+    `).join('');
+    
+    table.style.display = 'table';
 }
 
-// ============= Payment Method Management =============
+// ============= Payment Methods Tab =============
 
 document.getElementById('paymentForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -741,7 +724,8 @@ document.getElementById('paymentForm').addEventListener('submit', async (e) => {
         if (response.ok) {
             showMessage('Payment method created successfully!', 'success');
             e.target.reset();
-            loadPaymentMethods();
+            await loadAllData();
+            renderPaymentMethods(adminData.payment_methods);
         } else {
             const error = await response.json();
             showMessage(error.detail || 'Failed to create payment method', 'error');
@@ -751,48 +735,215 @@ document.getElementById('paymentForm').addEventListener('submit', async (e) => {
     }
 });
 
-async function loadPaymentMethods() {
-    const loading = document.getElementById('paymentLoading');
-    const table = document.getElementById('paymentTable');
+function renderPaymentMethods(methods) {
     const tbody = document.getElementById('paymentTableBody');
+    const table = document.getElementById('paymentTable');
+    const loading = document.getElementById('paymentLoading');
     
-    loading.classList.add('show');
-    table.style.display = 'none';
+    loading.classList.remove('show');
+    
+    if (!methods || methods.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No payment methods found</td></tr>';
+        table.style.display = 'table';
+        return;
+    }
+    
+    tbody.innerHTML = methods.map(method => `
+        <tr>
+            <td>${method.payment_method_id}</td>
+            <td><strong>${method.payment_method_brand}</strong></td>
+            <td>${method.payment_method_type}</td>
+            <td>
+                ${method.is_cash ? '<span class="badge badge-success">Cash</span>' : ''}
+                ${method.is_card ? '<span class="badge badge-info">Card</span>' : ''}
+                ${method.is_mobile ? '<span class="badge badge-warning">Mobile</span>' : ''}
+                ${method.is_check ? '<span class="badge badge-info">Check</span>' : ''}
+            </td>
+        </tr>
+    `).join('');
+    
+    table.style.display = 'table';
+}
+
+
+function editAssignment(assignmentId) {
+    // Find the assignment in our cached data
+    const assignment = adminData.device_assignments.find(a => a.assignment_id === assignmentId);
+    
+    if (!assignment) {
+        showMessage('Assignment not found', 'error');
+        return;
+    }
+    
+    currentEditAssignment = assignment;
+    
+    // Populate the edit modal
+    const form = document.getElementById('editAssignmentForm');
+    form.elements['assignment_id'].value = assignment.assignment_id;
+    
+    // Populate location dropdown
+    populateEditLocationDropdown();
+    
+    // Set current location
+    setTimeout(() => {
+        form.elements['location_id'].value = assignment.location_id;
+    }, 100);
+    
+    // Set dates
+    if (assignment.assign_date) {
+        const assignDate = new Date(assignment.assign_date);
+        form.elements['assign_date'].value = formatDateTimeLocal(assignDate);
+    }
+    
+    if (assignment.end_date) {
+        const endDate = new Date(assignment.end_date);
+        form.elements['end_date'].value = formatDateTimeLocal(endDate);
+    } else {
+        form.elements['end_date'].value = '';
+    }
+    
+    // Set workorder IDs
+    form.elements['workorder_assign_id'].value = assignment.workorder_assign_id || '';
+    form.elements['workorder_remove_id'].value = assignment.workorder_remove_id || '';
+    
+    // Set notes
+    form.elements['notes'].value = assignment.notes || '';
+    
+    // Show modal
+    document.getElementById('editAssignmentModal').classList.add('show');
+}
+
+function populateEditLocationDropdown() {
+    const select = document.getElementById('editLocationSelect');
+    
+    if (!adminData || !adminData.locations) {
+        select.innerHTML = '<option value="">No locations available</option>';
+        return;
+    }
+    
+    // Group locations by facility for better UX
+    const locationsByFacility = {};
+    adminData.locations.forEach(loc => {
+        if (!locationsByFacility[loc.facility_name]) {
+            locationsByFacility[loc.facility_name] = [];
+        }
+        locationsByFacility[loc.facility_name].push(loc);
+    });
+    
+    let optionsHtml = '<option value="">Select location...</option>';
+    
+    Object.keys(locationsByFacility).sort().forEach(facilityName => {
+        const locations = locationsByFacility[facilityName];
+        
+        locations.forEach(loc => {
+            const label = loc.space_number 
+                ? `${loc.location_id} - ${facilityName} - Space ${loc.space_number}`
+                : facilityName;
+            optionsHtml += `<option value="${loc.location_id}">${label}</option>`;
+        });
+    });
+    
+    select.innerHTML = optionsHtml;
+}
+
+function closeEditModal() {
+    document.getElementById('editAssignmentModal').classList.remove('show');
+    currentEditAssignment = null;
+}
+
+// Helper function to format date for datetime-local input
+function formatDateTimeLocal(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+// Handle edit form submission
+document.getElementById('editAssignmentForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const assignmentId = parseInt(formData.get('assignment_id'));
+    
+    // Build update payload - only include changed fields
+    const data = {};
+    
+    const locationId = formData.get('location_id');
+    if (locationId && parseInt(locationId) !== currentEditAssignment.location_id) {
+        data.location_id = parseInt(locationId);
+    }
+    
+    const assignDate = formData.get('assign_date');
+    if (assignDate) {
+        const newAssignDate = new Date(assignDate).toISOString();
+        if (newAssignDate !== currentEditAssignment.assign_date) {
+            data.assign_date = assignDate;
+        }
+    }
+    
+    const endDate = formData.get('end_date');
+    if (endDate) {
+        data.end_date = endDate;
+    }
+    
+    const workorderAssign = formData.get('workorder_assign_id');
+    if (workorderAssign && workorderAssign !== '') {
+        data.workorder_assign_id = parseInt(workorderAssign);
+    }
+    
+    const workorderRemove = formData.get('workorder_remove_id');
+    if (workorderRemove && workorderRemove !== '') {
+        data.workorder_remove_id = parseInt(workorderRemove);
+    }
+    
+    const notes = formData.get('notes');
+    if (notes !== (currentEditAssignment.notes || '')) {
+        data.notes = notes;
+    }
+    
+    // Check if there are any changes
+    if (Object.keys(data).length === 0) {
+        showMessage('No changes detected', 'info');
+        closeEditModal();
+        return;
+    }
     
     try {
-        const response = await fetch('/api/v1/admin/payment-methods', {
-            headers: { 'Authorization': `Bearer ${token}` }
+        const response = await fetch(`/api/v1/admin/device-assignments/${assignmentId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
         });
         
         if (response.ok) {
-            const methods = await response.json();
+            showMessage('Assignment updated successfully!', 'success');
+            closeEditModal();
             
-            tbody.innerHTML = methods.map(method => `
-                <tr>
-                    <td>${method.payment_method_id}</td>
-                    <td><strong>${method.payment_method_brand}</strong></td>
-                    <td>${method.payment_method_type}</td>
-                    <td>
-                        ${method.is_cash ? '<span class="badge badge-success">Cash</span>' : ''}
-                        ${method.is_card ? '<span class="badge badge-info">Card</span>' : ''}
-                        ${method.is_mobile ? '<span class="badge badge-warning">Mobile</span>' : ''}
-                        ${method.is_check ? '<span class="badge badge-info">Check</span>' : ''}
-                    </td>
-                </tr>
-            `).join('');
-            
-            table.style.display = 'table';
+            // Reload data and re-render
+            await loadAllData();
+            applyAssignmentFilters();
+        } else {
+            const error = await response.json();
+            showMessage(error.detail || 'Failed to update assignment', 'error');
         }
     } catch (error) {
-        showMessage('Error loading payment methods', 'error');
-    } finally {
-        loading.classList.remove('show');
+        console.error('Error updating assignment:', error);
+        showMessage('Error updating assignment', 'error');
     }
-}
+});
 
-// ============= Initialization =============
+// Close modal when clicking close button
+document.querySelector('#editAssignmentModal .close-modal')?.addEventListener('click', closeEditModal);
 
-document.addEventListener('DOMContentLoaded', () => {
-    loadUserInfo();
-    loadDevices();
+// Close modal when clicking outside
+document.getElementById('editAssignmentModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'editAssignmentModal') {
+        closeEditModal();
+    }
 });

@@ -506,3 +506,13 @@ class ChargeCodeResponse(BaseModel):
     location_id: int
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class SpaceCreate(BaseModel):
+    """Schema for creating a space"""
+    space_number: str = Field(..., max_length=50)
+    space_type: str = Field(..., max_length=50)
+    facility_id: int
+    cwAssetID: Optional[str] = Field(None, max_length=50)
+    start_date: datetime = Field(default_factory=datetime.now)
+    space_status: Optional[str] = Field("Active", max_length=50)

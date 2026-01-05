@@ -153,7 +153,7 @@ async def settle_by_source(
         ) AS SourceTable
         PIVOT (
             COUNT(staging_table)
-            FOR staging_table IN ([windcave_staging], [payments_insider_sales_staging], [ips_cc_staging], [ips_mobile_staging], [ips_cash_staging], [zms_cash_regular])
+            FOR staging_table IN ([windcave_staging], [payments_insider_sales_staging], [ips_staging], [zms_cash_regular])
         ) AS PivotTable
         ORDER BY settle_date DESC
         """
@@ -161,7 +161,7 @@ async def settle_by_source(
 
     rows = db.execute(pivot_sql, {"start_dt": start_dt, "end_dt": end_dt}).fetchall()
 
-    pivot_cols = ['windcave_staging', 'payments_insider_sales_staging', 'ips_cc_staging', 'ips_mobile_staging', 'ips_cash_staging', 'zms_cash_regular']
+    pivot_cols = ['windcave_staging', 'payments_insider_sales_staging', 'ips_staging', 'zms_cash_regular']
 
     mapping = {}
     for row in rows:

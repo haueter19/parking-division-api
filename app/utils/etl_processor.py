@@ -591,7 +591,7 @@ class DataLoader:
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
 
         # --- Remove failed transactions / Transactions where no money was paid ---
-        df = df[df['total'] >= 0]
+        df = df[df['total'] > 0]
         
         # --- Remove .0 from STRING columns only (pole and terminal) ---
         for col in ['pole', 'terminal']:
@@ -604,20 +604,19 @@ class DataLoader:
 
         
         # --- Bulk inser using Pandas to_sql ---
-        df.to_sql(name='ips_staging', schema='app', con=self.db.bind, if_exists='append', index=False, method=None, chunksize=1000)
+        try:
+            df.to_sql(name='ips_staging', schema='app', con=self.db.bind, if_exists='append', index=False, method=None, chunksize=1000)
         
-        # --- Bulk insert using SQLAlchemy ---
-        #self.db.execute(insert(IPSStaging), records)
-        #self.db.commit()
+            # Update file as processed
+            file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+            if file_record:
+                file_record.is_processed = True
+                file_record.processed_at = datetime.now()
+                file_record.records_processed = len(df)
+                self.db.commit()
+        except Exception as e:
+            print(f"Error inserting data: {e}")
 
-        # Update file as processed
-        file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
-        if file_record:
-            file_record.is_processed = True
-            file_record.processed_at = datetime.now()
-            file_record.records_processed = len(df)
-            self.db.commit()
-        
         return len(df)
         
 

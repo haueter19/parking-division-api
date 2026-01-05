@@ -561,15 +561,15 @@ class DataLoader:
         # --- Normalize column names ---
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
         df.rename(columns=({'card_#':'card_number'}), inplace=True)
-        #df.rename(columns=({'Amount ($)':'amount', '$_paid':'paid', '$001':'pennies', '$005':'nickels', '$010':'dimes', '$025':'quarters', '$100':'dollars'}), inplace=True)
 
         # --- Add metadata columns ---
         df["source_file_id"] = file_id
         df["processed_to_final"] = False
 
-        # --- Make sure these columns are floats
+        # --- Make sure these columns are floats ---
         for col in ['credit_card', 'smart_card', 'total', 'coin', 'bills']:
-            df[col] = df[col].astype(float)
+            if col in df.columns:
+                df[col] = df[col].astype(float)
 
         # --- Convert datetimes where possible ---
         for col in df.columns:
@@ -584,34 +584,41 @@ class DataLoader:
 
         for col in int_columns:
             if col in df.columns:
-                # Convert to nullable integer type or replace NaN with None
-                df[col] = df[col].replace({pd.NA: None, np.nan: None})
-                # Convert to int where not None
-                df.loc[df[col].notna(), col] = df[col].loc[df[col].notna()].astype(int)
+                # Convert to int, replacing NaN with None
+                df[col] = df[col].apply(lambda x: int(x) if pd.notna(x) else None)
 
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
 
-        # --- Remove .0 from column ---
-        for col in ['pole', 'terminal', 'transaction_hour']:
-            df[col] = df[col].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
+        # --- Remove failed transactions / Transactions where no money was paid ---
+        df = df[df['total'] >= 0]
+        
+        # --- Remove .0 from STRING columns only (pole and terminal) ---
+        for col in ['pole', 'terminal']:
+            if col in df.columns:
+                df[col] = df[col].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
 
-        # --- Convert to list of dictionaries ---
-        records = df.to_dict(orient="records")
+        # --- Strip trailing whitespace from all string columns ---
+        for col in df.select_dtypes(include=['object']).columns:
+            df[col] = df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
+
+        
+        # --- Bulk inser using Pandas to_sql ---
+        df.to_sql(name='ips_staging', schema='app', con=self.db.bind, if_exists='append', index=False, method=None, chunksize=1000)
         
         # --- Bulk insert using SQLAlchemy ---
-        self.db.execute(insert(IPSStaging), records)
-        self.db.commit()
+        #self.db.execute(insert(IPSStaging), records)
+        #self.db.commit()
 
         # Update file as processed
         file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
         if file_record:
             file_record.is_processed = True
             file_record.processed_at = datetime.now()
-            file_record.records_processed = len(records)
+            file_record.records_processed = len(df)
             self.db.commit()
         
-        return len(records)
+        return len(df)
         
 
     def load_ips_credit(self, file_path: str, file_id: int, convenience_fee: float = 0.45) -> int:

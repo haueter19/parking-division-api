@@ -35,6 +35,9 @@ def infer_data_source_type(filename: str) -> DataSourceType:
         return DataSourceType.PAYMENTS_INSIDER_SALES
     
     # IPS patterns
+    if filename_lower.startswith("transaction summary"):
+        return DataSourceType.IPS
+    
     if filename_lower.startswith("dailybankrecon"):
         return DataSourceType.IPS_CC
     

@@ -56,7 +56,10 @@ class PaymentType(str, enum.Enum):
     MASTERCARD = "mastercard"
     MC = 'mastercard'
     AMEX = "amex"
+    CHECK = "check"
+    DEBIT = "debit"
     DISCOVER = "discover"
+    DISC = 'discover'
     CASH = "cash"
     MOBILE = "mobile"
     PARK_SMARTER = 'park_smarter'
@@ -69,6 +72,7 @@ class DataSourceType(str, enum.Enum):
     WINDCAVE = "windcave"  # Windcave credit card settlements
     PAYMENTS_INSIDER_PAYMENTS = "pi_payments"  # Payments Insider credit card
     PAYMENTS_INSIDER_SALES = "pi_sales"  # Payments Insider sales report
+    IPS = 'ips'
     IPS_CC = "ips_cc"  # IPS credit card
     IPS_MOBILE = "ips_mobile"  # IPS credit card
     IPS_CASH = "ips_cash" 
@@ -137,6 +141,7 @@ class UploadedFile(Base):
     windcave_records = relationship("WindcaveStaging", back_populates="source_file")
     payments_insider_sales_records = relationship("PaymentsInsiderSalesStaging", back_populates="source_file")
     payments_insider_payments_records = relationship("PaymentsInsiderPaymentsStaging", back_populates="source_file")
+    ips_records = relationship("IPSStaging", back_populates="source_file")
     ips_cc_records = relationship("IPSCreditCardStaging", back_populates="source_file")
     ips_mobile_records = relationship("IPSMobileStaging", back_populates="source_file")
     ips_cash_records = relationship("IPSCashStaging", back_populates="source_file")
@@ -299,6 +304,62 @@ class PaymentsInsiderPaymentsStaging(Base):
     final_transaction = relationship("Transaction", back_populates="pi_payments_source")
 
 
+class IPSStaging(Base):
+    """Staging table for IPS coin, credit, and mobile/app transactions"""
+    __tablename__ = "ips_staging"
+    __table_args__ = {"schema":"app"}
+    id = Column(Integer, primary_key=True, index=True)
+    source_file_id = Column(Integer, ForeignKey("uploaded_files.id"), nullable=False)
+
+    # Raw fields from IPS    
+    date = Column(DateTime)
+    time = Column(String(11))
+    transaction_hour = Column(Integer)
+    zone = Column(String(24))
+    area = Column(String(50))
+    sub_area = Column(String(50))
+    pole = Column(String(24))
+    terminal = Column(String(12))
+    transaction_id = Column(String(25))
+    vendor_id = Column(Integer)
+    space_name = Column(String(8))
+    license_plate = Column(String(10))
+    transaction_type = Column(String(40))
+    transaction_status = Column(String(10))
+    card_number = Column(String(15))
+    card_type = Column(String(25))
+    parking_end_time = Column(DateTime)
+    total_parking_time = Column(String(25))
+    meter_type = Column(String(12))
+    time_purchased = Column(String(25))
+    coin = Column(Numeric(10,2))
+    bills = Column(Numeric(10,2))
+    credit_card = Column(Numeric(10,2))
+    smart_card = Column(Numeric(10,2))
+    total = Column(Numeric(10,2))
+    unrecognized_coins = Column(Integer)
+    transmitted_to_meter = Column(String(3))
+    day_of_week = Column(String(9))
+    contactless = Column(String(10))
+
+    # Processing metadata
+    loaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    processed_to_final = Column(Boolean, default=False)
+
+    # Relationships
+    source_file = relationship("UploadedFile", back_populates="ips_records")
+    #final_transaction = relationship("Transaction", back_populates="ips_source")
+
+    # Calculate datetime from date and time fields
+    @hybrid_property
+    def transaction_datetime(self):
+        from datetime import datetime
+        
+        time_value = parse_time_string(self.time)
+        if self.date and time_value:
+            return datetime.combine(self.date, time_value)
+        
+
 class IPSCreditCardStaging(Base):
     """Staging table for IPS credit card transactions"""
     __tablename__ = "ips_cc_staging"
@@ -415,6 +476,7 @@ class IPSCashStaging(Base):
         time_value = parse_time_string(self.collection_time)
         if self.collection_date and time_value:
             return datetime.combine(self.collection_date, time_value)
+
 
 
 class SQLCashStaging(Base):

@@ -17,7 +17,7 @@ import os
 from app.models.database import (
     Transaction, DataSourceType, LocationType, PaymentType,
     WindcaveStaging, PaymentsInsiderPaymentsStaging, PaymentsInsiderSalesStaging, 
-    IPSCreditCardStaging, IPSMobileStaging, IPSCashStaging, SQLCashStaging,
+    IPSCreditCardStaging, IPSMobileStaging, IPSCashStaging, SQLCashStaging, IPSStaging,
     ETLProcessingLog, UploadedFile
 )
 #from db_manager import ConnectionManager
@@ -369,6 +369,7 @@ class DataLoader:
             DataSourceType.WINDCAVE: self.load_windcave_csv,
             DataSourceType.PAYMENTS_INSIDER_PAYMENTS: self.load_payments_insider,
             DataSourceType.PAYMENTS_INSIDER_SALES: self.load_payments_insider,
+            DataSourceType.IPS: self.load_ips,
             DataSourceType.IPS_CC: self.load_ips_credit,
             DataSourceType.IPS_MOBILE: self.load_ips_mobile,
             DataSourceType.IPS_CASH: self.load_ips_cash,
@@ -539,6 +540,78 @@ class DataLoader:
             self.db.commit()
         
         return len(records)
+    
+
+    def load_ips(self, file_path: str, file_id: int, convenience_fee: float = 0.45) -> int:
+        """Load IPS data to staging table"""
+
+        # Set dtypes
+        set_dtypes = {'Pole':str, 'Space Name':str, 'Terminal':str}
+
+        # Determine if Excel or CSV
+        if file_path.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(file_path, dtype=set_dtypes)
+        else:
+            df = pd.read_csv(file_path, dtype=set_dtypes)
+
+        # --- Check for a sum or total at the bottom of the report and remove it ---
+        df = df[df['Date'].notna()]
+
+        # --- Normalize column names ---
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
+        df.rename(columns=({'card_#':'card_number'}), inplace=True)
+        #df.rename(columns=({'Amount ($)':'amount', '$_paid':'paid', '$001':'pennies', '$005':'nickels', '$010':'dimes', '$025':'quarters', '$100':'dollars'}), inplace=True)
+
+        # --- Add metadata columns ---
+        df["source_file_id"] = file_id
+        df["processed_to_final"] = False
+
+        # --- Make sure these columns are floats
+        for col in ['credit_card', 'smart_card', 'total', 'coin', 'bills']:
+            df[col] = df[col].astype(float)
+
+        # --- Convert datetimes where possible ---
+        for col in df.columns:
+            if "date" in col:
+                try:
+                    df[col] = pd.to_datetime(df[col], errors="coerce")
+                except Exception:
+                    pass
+
+        # --- Handle integer columns - replace NaN with None ---
+        int_columns = ['transaction_hour', 'vendor_id', 'unrecognized_coins']
+
+        for col in int_columns:
+            if col in df.columns:
+                # Convert to nullable integer type or replace NaN with None
+                df[col] = df[col].replace({pd.NA: None, np.nan: None})
+                # Convert to int where not None
+                df.loc[df[col].notna(), col] = df[col].loc[df[col].notna()].astype(int)
+
+        # --- Convert pandas NaN to None for SQL ---
+        df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
+
+        # --- Remove .0 from column ---
+        for col in ['pole', 'terminal', 'transaction_hour']:
+            df[col] = df[col].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
+
+        # --- Convert to list of dictionaries ---
+        records = df.to_dict(orient="records")
+        
+        # --- Bulk insert using SQLAlchemy ---
+        self.db.execute(insert(IPSStaging), records)
+        self.db.commit()
+
+        # Update file as processed
+        file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+        if file_record:
+            file_record.is_processed = True
+            file_record.processed_at = datetime.now()
+            file_record.records_processed = len(records)
+            self.db.commit()
+        
+        return len(records)
+        
 
     def load_ips_credit(self, file_path: str, file_id: int, convenience_fee: float = 0.45) -> int:
         """Load IPS data to staging table"""
@@ -735,74 +808,3 @@ class DataLoader:
         
         return len(records)
 
-
-    def load_ips_cash_multi_space(self, file_path: str, file_id: int) -> int:
-        """ Load cash transactions from multi-space IPS meters """
-
-        # Determine if Excel or CSV
-        if file_path.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(file_path, dtype={'Terminal':'str'})
-        else:
-            df = pd.read_csv(file_path, dtype={'Terminal':'str'})
-
-        # --- Check for a sum or total at the bottom of the report and remove it ---
-        df = df[df['Date'].notna()]
-        
-        # --- Normalize column names ---
-        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
-        df.rename(columns=({'total_($)':'total_revenue', 'coins_($)':'coin_revenue', 'card_($)':'card_revenue', 'bills_($)':'bill_revenue', 'card_#':'card_number'}), inplace=True)
-
-        # --- Make sure these columns are floats
-        for col in ['coin_revenue', 'card_revenue', 'total_revenue', 'bill_revenue']:
-            df[col] = df[col].astype(float)
-        
-        # --- Add metadata columns ---
-        df["source_file_id"] = file_id
-        df["processed_to_final"] = False
-
-        # --- Create transaction_date_time column ---
-        df['transaction_date_time'] = df.apply(lambda row: pd.to_datetime(row['date']+' '+row['time']), axis=1)
-
-        # --- Convert datetimes where possible ---
-        for col in df.columns:
-            if "date" in col:
-                try:
-                    df[col] = pd.to_datetime(df[col], errors="coerce")
-                except Exception:
-                    pass
-                    
-        # --- Handle integer columns - replace NaN with None ---
-        int_columns = []
-        
-        if len(int_columns) > 0:
-            for col in int_columns:
-                if col in df.columns:
-                    # Convert to nullable integer type or replace NaN with None
-                    df[col] = df[col].replace({pd.NA: None, np.nan: None})
-                    # Convert to int where not None
-                    df.loc[df[col].notna(), col] = df[col].loc[df[col].notna()].astype(int)
-                
-        # --- Convert pandas NaN to None for SQL ---
-        df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
-
-        # --- Remove .0 from Space Name and Terminal if present ---
-        df['space_name'] = df['space_name'].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
-        df['terminal'] = df['terminal'].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
-
-        # --- Convert to list of dictionaries ---
-        records = df.to_dict(orient="records")
-        
-        # --- Bulk insert using SQLAlchemy ---
-        self.db.execute(insert(IPSCashMSStaging), records)
-        self.db.commit()
-
-        # --- Update file as processed ---
-        file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
-
-        if file_record:
-            file_record.is_processed = True
-            file_record.processed_at = datetime.now()
-            file_record.records_processed = len(records)
-            self.db.commit()
-        
-        return len(records)

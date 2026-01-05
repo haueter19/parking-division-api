@@ -185,6 +185,7 @@ class ETLProcessor:
             DataSourceType.WINDCAVE: ("windcave", "windcave_staging"),
             DataSourceType.PAYMENTS_INSIDER_PAYMENTS: ("payments_insider_payments", "payments_insider_payments_staging"),
             DataSourceType.PAYMENTS_INSIDER_SALES: ("payments_insider_sales", "payments_insider_sales_staging"),
+            DataSourceType.IPS: ("ips", "ips_staging"),
             DataSourceType.IPS_CC: ("ips_cc", "ips_cc_staging"),
             DataSourceType.IPS_MOBILE: ("ips_mobile", "ips_mobile_staging"),
             DataSourceType.IPS_CASH: ("ips_cash", "ips_cash_staging"),

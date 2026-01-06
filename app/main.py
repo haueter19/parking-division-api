@@ -1,12 +1,15 @@
+from datetime import datetime, timedelta
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from app.api.v1.api import api_router
 from app.db.session import init_db, SessionLocalTraffic, SessionLocal
 from app.config import settings
-from app.utils import etl_cache
+#from app.utils import etl_cache
+from app.utils.etl_processor import ETLProcessor
 import os
 import logging
 
@@ -61,19 +64,29 @@ async def startup_event():
     # Initialize ETL lookup caches
     try:
         # Open primary and traffic DB sessions and provide them to cache initializer
-        traffic_db = SessionLocalTraffic()
+        #traffic_db = SessionLocalTraffic()
         primary_db = SessionLocal()
         try:
-            success = etl_cache.initialize_etl_cache(primary_db, traffic_db=traffic_db)
+            yesterday_date = datetime.strftime(datetime.now() - timedelta(days=1), '%Y-%m-%d')
+            # Check if ETL cache for ZMS Cash Regular data is populated; if not, process it
+            result = primary_db.execute(text("""
+                                    SELECT count(*) FROM PUReporting.app.fact_transaction
+                                    WHERE staging_table = 'zms_cash_regular'
+                                    AND settle_date = :process_date
+                                    """), {"process_date": yesterday_date})
+            record_count = result.scalar()
+            if record_count and record_count > 0:
+                print(f"ZMS Cash Regular data already processed for {yesterday_date}")
+            else:
+                processor = ETLProcessor(db = primary_db)
+                success = processor.process_zms_cash(process_date=yesterday_date)
+                print(f"Processed {success['records_processed']} records for zms_cash_regular with {success['records_failed']} failures.")
+
         finally:
             # Ensure both sessions are closed
-            traffic_db.close()
+            #traffic_db.close()
             primary_db.close()
         
-        if success:
-            print("ETL caches initialized successfully")
-        else:
-            print("Warning: ETL cache initialization failed, ETL processing may have degraded performance")
     except Exception as e:
         logger.error(f"Error during ETL cache initialization: {e}", exc_info=True)
         print(f"Warning: Could not initialize ETL caches: {e}")

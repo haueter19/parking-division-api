@@ -255,15 +255,16 @@ class ETLProcessor:
                         )
                     INSERT INTO PUReporting.app.fact_transaction (transaction_date, transaction_amount, settle_date, settle_amount, staging_table, source_file_id, staging_record_id, payment_method_id, device_id, settlement_system_id, location_id, program_id, charge_code_id, reference_number)
                     SELECT * FROM penultimate_step
-                    ORDER BY cte.Id_Parking, cte.transaction_datetime
+                    --ORDER BY cte.Id_Parking, cte.transaction_datetime
                     """), {"process_date": process_date})
             
             self.db.commit()
-
+            records_processed = self.db.execute(text("SELECT count(*) FROM PUReporting.app.fact_transaction WHERE staging_table = 'zms_cash_regular' AND transaction_date = :process_date"), {"process_date": process_date}).scalar()
+            
             return {
                 "success": True,
-                "records_processed": self.db.execute(text("SELECT count(*) FROM PUReporting.app.fact_transaction WHERE staging_table = 'zms_cash_regular' AND transaction_date = :process_date"), {"process_date": process_date}).scalar(),
-                "records_created": self.db.execute(text("SELECT count(*) FROM PUReporting.app.fact_transaction WHERE staging_table = 'zms_cash_regular' AND transaction_date = :process_date"), {"process_date": process_date}).scalar(),
+                "records_processed": records_processed,
+                "records_created": records_processed,
                 "records_failed": 0
             }
         

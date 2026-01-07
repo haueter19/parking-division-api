@@ -1,8 +1,8 @@
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
-from app.models.database import UserRole, DataSourceType, LocationType, PaymentType
+from app.models.database import UserRole, DataSourceType, LocationType, PaymentType, UserRole
 
 
 # ============= User Schemas =============
@@ -11,7 +11,8 @@ class UserBase(BaseModel):
     """Base user schema"""
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-    full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
 
 
 class UserCreate(UserBase):
@@ -23,9 +24,34 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     """Schema for updating user information"""
     email: Optional[EmailStr] = None
+    first_name: Optional[str] = None
+    first_name: Optional[str] = None
     full_name: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
+
+
+class UserUpdateAdmin(BaseModel):
+    """Schema for admin updating user information"""
+    email: Optional[EmailStr] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    full_name: Optional[str] = None
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
+
+
+class PasswordReset(BaseModel):
+    """Schema for resetting a user's password"""
+    new_password: str = Field(..., min_length=8, description="Minimum 8 characters with at least one non-alphanumeric character")
+    
+    @field_validator('new_password')
+    @classmethod
+    def validate_password_complexity(cls, v: str) -> str:
+        """Ensure password contains at least one non-alphanumeric character"""
+        if not any(not c.isalnum() for c in v):
+            raise ValueError('Password must contain at least one non-alphanumeric character (!@#$%^&* etc.)')
+        return v
 
 
 class UserResponse(UserBase):

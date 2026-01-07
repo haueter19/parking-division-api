@@ -31,6 +31,8 @@ let deviceFilters = {
 
 let currentEditAssignment = null;
 let dataLoaded = false;
+let allUsers = [];
+let filteredUsers = [];
 
 function populateSpaceFacilityDropdown() {
     const select = document.getElementById('spaceFacilitySelect');
@@ -225,6 +227,10 @@ function showTab(tabName, event) {  // <-- Add event parameter
             populateSpaceFacilityDropdown();
             renderSpaces(adminData.spaces);
             setupSpaceFilters();
+            break;
+        case 'users':
+            loadUsersData();
+            setupUserFilters();
             break;
     }
 }
@@ -1273,6 +1279,413 @@ document.getElementById('editAssignmentModal')?.addEventListener('click', (e) =>
     }
 });
 
+
+// ============= Load Users Data =============
+async function loadUsersData() {
+    const loading = document.getElementById('usersLoading');
+    const table = document.getElementById('usersTable');
+    
+    if (loading) loading.classList.add('show');
+    if (table) table.style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/v1/users', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to load users');
+        }
+        
+        allUsers = await response.json();
+        filteredUsers = [...allUsers];
+        renderUsers(filteredUsers);
+        
+        if (loading) loading.classList.remove('show');
+        if (table) table.style.display = 'table';
+        
+    } catch (error) {
+        console.error('Error loading users:', error);
+        showMessage('Failed to load users: ' + error.message, 'error');
+        if (loading) loading.classList.remove('show');
+    }
+}
+
+// ============= Render Users Table =============
+function renderUsers(users) {
+    const tbody = document.getElementById('usersTableBody');
+    
+    if (!tbody) {
+        console.error('usersTableBody not found');
+        return;
+    }
+    
+    if (!users || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">No users found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = users.map(user => {
+        const statusClass = user.is_active ? 'status-active' : 'status-inactive';
+        const statusText = user.is_active ? 'Active' : 'Inactive';
+        const roleClass = `role-${user.role.toLowerCase()}`;
+        const createdDate = new Date(user.created_at).toLocaleDateString();
+        
+        const toggleAction = user.is_active 
+            ? `<button class="action-button action-deactivate" onclick="toggleUserStatus(${user.id}, false)">Deactivate</button>`
+            : `<button class="action-button action-activate" onclick="toggleUserStatus(${user.id}, true)">Activate</button>`;
+        
+        return `
+            <tr>
+                <td><strong>${user.username}</strong></td>
+                <td>${user.full_name || '<em style="color: #999;">Not set</em>'}</td>
+                <td>${user.email}</td>
+                <td><span class="role-badge ${roleClass}">${user.role}</span></td>
+                <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                <td>${createdDate}</td>
+                <td>
+                    <button class="action-button action-edit" onclick="openEditUserModal(${user.id})">Edit</button>
+                    <button class="action-button action-reset" onclick="openResetPasswordModal(${user.id})">Reset Password</button>
+                    ${toggleAction}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// ============= User Filtering =============
+function setupUserFilters() {
+    const searchInput = document.getElementById('filterUserSearch');
+    const roleSelect = document.getElementById('filterUserRole');
+    const activeSelect = document.getElementById('filterUserActive');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', filterUsers);
+    }
+    if (roleSelect) {
+        roleSelect.addEventListener('change', filterUsers);
+    }
+    if (activeSelect) {
+        activeSelect.addEventListener('change', filterUsers);
+    }
+}
+
+function filterUsers() {
+    const search = document.getElementById('filterUserSearch')?.value.toLowerCase() || '';
+    const role = document.getElementById('filterUserRole')?.value || '';
+    const activeFilter = document.getElementById('filterUserActive')?.value || '';
+    
+    filteredUsers = allUsers.filter(user => {
+        const matchesSearch = !search || 
+            user.username.toLowerCase().includes(search) ||
+            (user.email && user.email.toLowerCase().includes(search)) ||
+            (user.full_name && user.full_name.toLowerCase().includes(search));
+        
+        const matchesRole = !role || user.role.toLowerCase() === role;
+        
+        const matchesActive = !activeFilter || 
+            (activeFilter === 'true' && user.is_active) ||
+            (activeFilter === 'false' && !user.is_active);
+        
+        return matchesSearch && matchesRole && matchesActive;
+    });
+    
+    renderUsers(filteredUsers);
+}
+
+function clearUserFilters() {
+    document.getElementById('filterUserSearch').value = '';
+    document.getElementById('filterUserRole').value = '';
+    document.getElementById('filterUserActive').value = '';
+    filterUsers();
+}
+
+// ============= Collapsible Section Toggle =============
+function toggleSection(sectionId) {
+    const content = document.getElementById(`${sectionId}-content`);
+    const icon = document.getElementById(`toggle-${sectionId}`);
+    
+    if (content && icon) {
+        if (content.classList.contains('expanded')) {
+            content.classList.remove('expanded');
+            icon.textContent = '+';
+        } else {
+            content.classList.add('expanded');
+            icon.textContent = '-';
+        }
+    }
+}
+
+// ============= Add New User =============
+async function handleAddUserSubmit(e) {
+    e.preventDefault();
+    
+    const username = document.getElementById('newUsername').value.trim();
+    const email = document.getElementById('newEmail').value.trim();
+    const firstName = document.getElementById('newFirstName').value.trim();
+    const lastName = document.getElementById('newLastName').value.trim();
+    const fullName = document.getElementById('newFullName').value.trim();
+    const role = document.getElementById('newRole').value;
+    const password = document.getElementById('newPassword').value;
+    const passwordConfirm = document.getElementById('newPasswordConfirm').value;
+    
+    // Validate passwords match
+    if (password !== passwordConfirm) {
+        showMessage('Passwords do not match', 'error');
+        return;
+    }
+    
+    // Validate password complexity
+    if (password.length < 8) {
+        showMessage('Password must be at least 8 characters', 'error');
+        return;
+    }
+    
+    if (!/[^a-zA-Z0-9]/.test(password)) {
+        showMessage('Password must contain at least one non-alphanumeric character', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/v1/users', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                username,
+                email,
+                full_name: fullName || null,
+                password,
+                role
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showMessage(`User '${username}' created successfully!`, 'success');
+            document.getElementById('addUserForm').reset();
+            
+            // Collapse the form
+            toggleSection('add-user');
+            
+            // Reload users
+            await loadUsersData();
+        } else {
+            showMessage(data.detail || 'Failed to create user', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating user:', error);
+        showMessage('Failed to create user: ' + error.message, 'error');
+    }
+}
+
+// Attach form listener when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    const addUserForm = document.getElementById('addUserForm');
+    if (addUserForm) {
+        addUserForm.addEventListener('submit', handleAddUserSubmit);
+    }
+});
+
+// ============= Edit User Modal =============
+function openEditUserModal(userId) {
+    const user = allUsers.find(u => u.id === userId);
+    if (!user) return;
+    
+    document.getElementById('editUserId').value = user.id;
+    document.getElementById('editUsername').value = user.username;
+    document.getElementById('editEmail').value = user.email;
+    document.getElementById('editFullName').value = user.full_name || '';
+    document.getElementById('editRole').value = user.role.toLowerCase();
+    document.getElementById('editIsActive').value = user.is_active.toString();
+    
+    document.getElementById('editUserModal').classList.add('show');
+}
+
+function closeEditUserModal() {
+    document.getElementById('editUserModal').classList.remove('show');
+}
+
+async function handleEditUserSubmit(e) {
+    e.preventDefault();
+    
+    const userId = document.getElementById('editUserId').value;
+    const email = document.getElementById('editEmail').value.trim();
+    const fullName = document.getElementById('editFullName').value.trim();
+    const role = document.getElementById('editRole').value;
+    const isActive = document.getElementById('editIsActive').value === 'true';
+    
+    try {
+        const response = await fetch(`/api/v1/users/${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email,
+                full_name: fullName || null,
+                role,
+                is_active: isActive
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showMessage('User updated successfully!', 'success');
+            closeEditUserModal();
+            await loadUsersData();
+        } else {
+            showMessage(data.detail || 'Failed to update user', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating user:', error);
+        showMessage('Failed to update user: ' + error.message, 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const editUserForm = document.getElementById('editUserForm');
+    if (editUserForm) {
+        editUserForm.addEventListener('submit', handleEditUserSubmit);
+    }
+});
+
+// ============= Reset Password Modal =============
+function openResetPasswordModal(userId) {
+    const user = allUsers.find(u => u.id === userId);
+    if (!user) return;
+    
+    document.getElementById('resetPasswordUserId').value = user.id;
+    document.getElementById('resetPasswordUsername').textContent = user.username;
+    document.getElementById('resetNewPassword').value = '';
+    document.getElementById('resetPasswordConfirm').value = '';
+    
+    document.getElementById('resetPasswordModal').classList.add('show');
+}
+
+function closeResetPasswordModal() {
+    document.getElementById('resetPasswordModal').classList.remove('show');
+}
+
+async function handleResetPasswordSubmit(e) {
+    e.preventDefault();
+    
+    const userId = document.getElementById('resetPasswordUserId').value;
+    const username = document.getElementById('resetPasswordUsername').textContent;
+    const newPassword = document.getElementById('resetNewPassword').value;
+    const passwordConfirm = document.getElementById('resetPasswordConfirm').value;
+    
+    // Validate passwords match
+    if (newPassword !== passwordConfirm) {
+        showMessage('Passwords do not match', 'error');
+        return;
+    }
+    
+    // Validate password complexity
+    if (newPassword.length < 8) {
+        showMessage('Password must be at least 8 characters', 'error');
+        return;
+    }
+    
+    if (!/[^a-zA-Z0-9]/.test(newPassword)) {
+        showMessage('Password must contain at least one non-alphanumeric character', 'error');
+        return;
+    }
+    
+    // Confirm action
+    if (!confirm(`Are you sure you want to reset the password for user '${username}'?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/v1/users/${userId}/reset-password`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                new_password: newPassword
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showMessage(`Password reset successfully for '${username}'!`, 'success');
+            closeResetPasswordModal();
+        } else {
+            showMessage(data.detail || 'Failed to reset password', 'error');
+        }
+    } catch (error) {
+        console.error('Error resetting password:', error);
+        showMessage('Failed to reset password: ' + error.message, 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const resetPasswordForm = document.getElementById('resetPasswordForm');
+    if (resetPasswordForm) {
+        resetPasswordForm.addEventListener('submit', handleResetPasswordSubmit);
+    }
+});
+
+// ============= Toggle User Status =============
+async function toggleUserStatus(userId, newStatus) {
+    const user = allUsers.find(u => u.id === userId);
+    if (!user) return;
+    
+    const action = newStatus ? 'activate' : 'deactivate';
+    const confirmMsg = `Are you sure you want to ${action} user '${user.username}'?`;
+    
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/v1/users/${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                is_active: newStatus
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showMessage(`User '${user.username}' ${action}d successfully!`, 'success');
+            await loadUsersData();
+        } else {
+            showMessage(data.detail || `Failed to ${action} user`, 'error');
+        }
+    } catch (error) {
+        console.error(`Error ${action}ing user:`, error);
+        showMessage(`Failed to ${action} user: ` + error.message, 'error');
+    }
+}
+
+
+// Close modals when clicking outside
+window.addEventListener('click', (event) => {
+    const editModal = document.getElementById('editUserModal');
+    const resetModal = document.getElementById('resetPasswordModal');
+    
+    if (event.target === editModal) {
+        closeEditUserModal();
+    }
+    if (event.target === resetModal) {
+        closeResetPasswordModal();
+    }
+});
 
 /**
  * Toggle collapsible form sections

@@ -382,6 +382,89 @@
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
+        /* User management section */
+        .status-active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-inactive {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .role-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .role-admin {
+            background: #fed7e2;
+            color: #97266d;
+        }
+
+        .role-manager {
+            background: #bee3f8;
+            color: #2c5282;
+        }
+
+        .role-uploader {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .role-viewer {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+        .action-button {
+            padding: 6px 12px;
+            margin: 0 2px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .action-edit {
+            background: #667eea;
+            color: white;
+        }
+
+        .action-edit:hover {
+            background: #5568d3;
+        }
+
+        .action-reset {
+            background: #ed8936;
+            color: white;
+        }
+
+        .action-reset:hover {
+            background: #dd6b20;
+        }
+
+        .action-deactivate {
+            background: #f56565;
+            color: white;
+        }
+
+        .action-deactivate:hover {
+            background: #e53e3e;
+        }
+
+        .action-activate {
+            background: #48bb78;
+            color: white;
+        }
+
+        .action-activate:hover {
+            background: #38a169;
+        }
 
         /* Table action buttons */
         .action-btn {
@@ -495,6 +578,7 @@
             <button class="tab" onclick="showTab('spaces', event)">Spaces</button>
             <button class="tab" onclick="showTab('settlement', event)">Settlement Systems</button>
             <button class="tab" onclick="showTab('payment', event)">Payment Methods</button>
+            <button class="tab" onclick="showTab('users', event)">Users</button>
         </div>
 
         <!-- Device Management Tab -->
@@ -981,54 +1065,202 @@
                 <tbody id="paymentTableBody"></tbody>
             </table>
         </div>
-    </div>
 
-    <!-- Edit Assignment Modal -->
-    <div id="editAssignmentModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Edit Device Assignment</h2>
-                <button class="close-modal" onclick="closeEditModal()">&times;</button>
-            </div>
-            <form id="editAssignmentForm">
-                <input type="hidden" name="assignment_id">
+        <!-- User Management tab -->
+        <div id="users-tab" class="tab-content">
+            <!-- Filter Section -->
+            <div class="form-section" style="background: #e6f2ff; border-left: 4px solid #667eea;">
+                <h3>🔍 Filter Users</h3>
                 <div class="form-grid">
                     <div class="form-group">
-                        <label>Location</label>
-                        <select name="location_id" id="editLocationSelect">
-                            <option value="">Loading...</option>
+                        <label>Search</label>
+                        <input type="text" id="filterUserSearch" placeholder="Username, email, or name..." />
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Role</label>
+                        <select id="filterUserRole">
+                            <option value="">All Roles</option>
+                            <option value="admin">Admin</option>
+                            <option value="manager">Manager</option>
+                            <option value="uploader">Uploader</option>
+                            <option value="viewer">Viewer</option>
                         </select>
                     </div>
                     
                     <div class="form-group">
-                        <label>Assign Date</label>
-                        <input type="datetime-local" name="assign_date">
+                        <label>Status</label>
+                        <select id="filterUserActive">
+                            <option value="">All</option>
+                            <option value="true">Active</option>
+                            <option value="false">Inactive</option>
+                        </select>
                     </div>
                     
                     <div class="form-group">
-                        <label>End Date</label>
-                        <input type="datetime-local" name="end_date">
+                        <button type="button" class="btn-secondary" onclick="clearUserFilters()" style="margin-top: 22px;">
+                            Clear Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div> 
+        <!-- Add New User Section -->
+        <div class="form-section">
+            <h3 class="collapsible-header" onclick="toggleSection('add-user')">
+                <span class="toggle-icon" id="toggle-add-user">+</span>
+                Add New User
+            </h3>
+            <div id="add-user-content" class="collapsible-content">
+                <form id="addUserForm" style="margin-top: 15px;">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Username <span class="required">*</span></label>
+                            <input type="text" id="newUsername" required minlength="3" maxlength="50" />
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Email <span class="required">*</span></label>
+                            <input type="email" id="newEmail" required />
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Full Name</label>
+                            <input type="text" id="newFullName" maxlength="100" />
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Role <span class="required">*</span></label>
+                            <select id="newRole" required>
+                                <option value="viewer">Viewer</option>
+                                <option value="uploader">Uploader</option>
+                                <option value="manager">Manager</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Initial Password <span class="required">*</span></label>
+                            <input type="password" id="newPassword" required minlength="8" />
+                            <small style="color: #666; font-size: 0.85rem;">Min 8 chars, must include a non-alphanumeric character (!@#$%^&* etc.)</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Confirm Password <span class="required">*</span></label>
+                            <input type="password" id="newPasswordConfirm" required minlength="8" />
+                        </div>
+                    </div>
+                    
+                    <div class="btn-group">
+                        <button type="submit" class="btn-primary">Create User</button>
+                        <button type="reset" class="btn-secondary">Clear Form</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Users Table -->
+        <div class="form-section">
+            <h3>👥 User Accounts</h3>
+            <div class="loading" id="usersLoading">Loading users...</div>
+            <table id="usersTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Full Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 20px;">Loading users...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div id="editUserModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>✏️ Edit User</h2>
+                <button class="close-modal" onclick="closeEditUserModal()">&times;</button>
+            </div>
+            <form id="editUserForm">
+                <input type="hidden" id="editUserId" />
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="editUsername" disabled style="background: #f0f0f0;" />
+                        <small style="color: #666;">Username cannot be changed</small>
                     </div>
                     
                     <div class="form-group">
-                        <label>Work Order (Assign)</label>
-                        <input type="number" name="workorder_assign_id">
+                        <label>Email <span class="required">*</span></label>
+                        <input type="email" id="editEmail" required />
                     </div>
                     
                     <div class="form-group">
-                        <label>Work Order (Remove)</label>
-                        <input type="number" name="workorder_remove_id">
+                        <label>Full Name</label>
+                        <input type="text" id="editFullName" maxlength="100" />
                     </div>
                     
-                    <div class="form-group full-width">
-                        <label>Notes</label>
-                        <textarea name="notes"></textarea>
+                    <div class="form-group">
+                        <label>Role <span class="required">*</span></label>
+                        <select id="editRole" required>
+                            <option value="viewer">Viewer</option>
+                            <option value="uploader">Uploader</option>
+                            <option value="manager">Manager</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Status <span class="required">*</span></label>
+                        <select id="editIsActive" required>
+                            <option value="true">Active</option>
+                            <option value="false">Inactive</option>
+                        </select>
                     </div>
                 </div>
                 
                 <div class="btn-group">
-                    <button type="submit" class="btn-primary">Update Assignment</button>
-                    <button type="button" class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                    <button type="button" class="btn-secondary" onclick="closeEditUserModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reset Password Modal -->
+    <div id="resetPasswordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔑 Reset Password</h2>
+                <button class="close-modal" onclick="closeResetPasswordModal()">&times;</button>
+            </div>
+            <p style="margin-bottom: 15px;">Reset password for: <strong id="resetPasswordUsername"></strong></p>
+            <form id="resetPasswordForm">
+                <input type="hidden" id="resetPasswordUserId" />
+                <div class="form-group">
+                    <label>New Password <span class="required">*</span></label>
+                    <input type="password" id="resetNewPassword" required minlength="8" />
+                    <small style="color: #666; font-size: 0.85rem;">Min 8 chars, must include a non-alphanumeric character (!@#$%^&* etc.)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Confirm Password <span class="required">*</span></label>
+                    <input type="password" id="resetPasswordConfirm" required minlength="8" />
+                </div>
+                
+                <div class="btn-group">
+                    <button type="submit" class="btn-primary">Reset Password</button>
+                    <button type="button" class="btn-secondary" onclick="closeResetPasswordModal()">Cancel</button>
                 </div>
             </form>
         </div>

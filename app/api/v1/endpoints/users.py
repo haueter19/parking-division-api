@@ -5,16 +5,15 @@ Provides CRUD operations for user accounts including password resets
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import text, or_
+from sqlalchemy import text
 from typing import List, Optional
 from datetime import datetime
 
 from app.db.session import get_db
-from app.api.dependencies import require_role
+from app.api.dependencies import require_role, get_current_active_user
 from app.models.database import User, UserRole
 from app.models.schemas import UserCreate, UserResponse, UserUpdate, PasswordReset
 from app.utils.auth import get_password_hash
-import re
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -48,15 +47,25 @@ async def list_users(
     List all users with optional filtering (ADMIN only)
     
     Query parameters:
-    - search: Search by username, email, or full_name
+    - search: Search by username, email, first_name, or last_name
     - role: Filter by role
     - is_active: Filter by active status
     """
-    query = "SELECT id, username, email, full_name, role, is_active, created_at FROM app.users WHERE 1=1"
+    query = """
+        SELECT employee_id, username, email, first_name, last_name, role, is_active, created_at 
+        FROM pt.employees 
+        WHERE 1=1
+    """
     params = {}
     
     if search:
-        query += " AND (username LIKE :search OR email LIKE :search OR full_name LIKE :search)"
+        query += """ AND (
+            username LIKE :search 
+            OR email LIKE :search 
+            OR first_name LIKE :search 
+            OR last_name LIKE :search
+            OR CONCAT(first_name, ' ', last_name) LIKE :search
+        )"""
         params["search"] = f"%{search}%"
     
     if role:
@@ -67,16 +76,17 @@ async def list_users(
         query += " AND is_active = :is_active"
         params["is_active"] = is_active
     
-    query += " ORDER BY full_name, username"
+    query += " ORDER BY first_name, last_name, username"
     
     results = db.execute(text(query), params).fetchall()
     
     return [
         UserResponse(
-            id=r.id,
+            id=r.employee_id,
             username=r.username,
             email=r.email,
-            full_name=r.full_name,
+            first_name=r.first_name,
+            last_name=r.last_name,
             role=UserRole(r.role.lower()) if isinstance(r.role, str) else r.role,
             is_active=bool(r.is_active),
             created_at=r.created_at
@@ -94,9 +104,9 @@ async def get_user(
     """Get user details by ID (ADMIN only)"""
     
     query = text("""
-        SELECT id, username, email, full_name, role, is_active, created_at
-        FROM app.users
-        WHERE id = :user_id
+        SELECT employee_id, username, email, first_name, last_name, role, is_active, created_at
+        FROM pt.employees
+        WHERE employee_id = :user_id
     """)
     
     result = db.execute(query, {"user_id": user_id}).first()
@@ -108,11 +118,12 @@ async def get_user(
         )
     
     return UserResponse(
-        id=result.id,
+        id=result.employee_id,
         username=result.username,
         email=result.email,
-        full_name=result.full_name,
-        role=UserRole(result.role),
+        first_name=result.first_name,
+        last_name=result.last_name,
+        role=UserRole(result.role.lower()) if isinstance(result.role, str) else result.role,
         is_active=bool(result.is_active),
         created_at=result.created_at
     )
@@ -141,7 +152,7 @@ async def create_user(
     
     # Check if username exists
     existing_username = db.execute(
-        text("SELECT id FROM app.users WHERE username = :username"),
+        text("SELECT employee_id FROM pt.employees WHERE username = :username"),
         {"username": user_data.username}
     ).first()
     
@@ -151,47 +162,57 @@ async def create_user(
             detail="Username already exists"
         )
     
-    # Check if email exists
-    existing_email = db.execute(
-        text("SELECT id FROM app.users WHERE email = :email"),
-        {"email": user_data.email}
-    ).first()
-    
-    if existing_email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already exists"
-        )
+    # Check if email exists (if provided)
+    if user_data.email:
+        existing_email = db.execute(
+            text("SELECT employee_id FROM pt.employees WHERE email = :email"),
+            {"email": user_data.email}
+        ).first()
+        
+        if existing_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already exists"
+            )
     
     # Create new user
     hashed_password = get_password_hash(user_data.password)
     
     insert_query = text("""
-        INSERT INTO app.users (username, email, full_name, role, hashed_password, is_active, created_at)
-        VALUES (:username, :email, :full_name, :role, :hashed_password, 1, GETDATE())
+        INSERT INTO pt.employees 
+        (username, email, first_name, last_name, role, password_hash, is_active, created_at, created_by)
+        VALUES 
+        (:username, :email, :first_name, :last_name, :role, :password_hash, 1, GETUTCDATE(), :created_by)
     """)
     
     db.execute(insert_query, {
         "username": user_data.username,
         "email": user_data.email,
-        "full_name": user_data.full_name,
+        "first_name": user_data.first_name,
+        "last_name": user_data.last_name,
         "role": user_data.role.value,
-        "hashed_password": hashed_password
+        "password_hash": hashed_password,
+        "created_by": current_user.employee_id
     })
     db.commit()
     
     # Retrieve the created user
     new_user = db.execute(
-        text("SELECT id, username, email, full_name, role, is_active, created_at FROM app.users WHERE username = :username"),
+        text("""
+            SELECT employee_id, username, email, first_name, last_name, role, is_active, created_at 
+            FROM pt.employees 
+            WHERE username = :username
+        """),
         {"username": user_data.username}
     ).first()
     
     return UserResponse(
-        id=new_user.id,
+        id=new_user.employee_id,
         username=new_user.username,
         email=new_user.email,
-        full_name=new_user.full_name,
-        role=UserRole(new_user.role),
+        first_name=new_user.first_name,
+        last_name=new_user.last_name,
+        role=UserRole(new_user.role.lower()) if isinstance(new_user.role, str) else new_user.role,
         is_active=bool(new_user.is_active),
         created_at=new_user.created_at
     )
@@ -207,12 +228,12 @@ async def update_user(
     """
     Update user information (ADMIN only)
     
-    Can update: email, full_name, role, is_active
+    Can update: email, first_name, last_name, role, is_active
     Cannot update: username (primary identifier)
     """
     # Check if user exists
     existing_user = db.execute(
-        text("SELECT id, username FROM app.users WHERE id = :user_id"),
+        text("SELECT employee_id, username FROM pt.employees WHERE employee_id = :user_id"),
         {"user_id": user_id}
     ).first()
     
@@ -224,12 +245,12 @@ async def update_user(
     
     # Build dynamic update query
     update_fields = []
-    params = {"user_id": user_id}
+    params = {"user_id": user_id, "updated_by": current_user.employee_id}
     
     if user_data.email is not None:
         # Check if email is already taken by another user
         email_check = db.execute(
-            text("SELECT id FROM app.users WHERE email = :email AND id != :user_id"),
+            text("SELECT employee_id FROM pt.employees WHERE email = :email AND employee_id != :user_id"),
             {"email": user_data.email, "user_id": user_id}
         ).first()
         
@@ -242,9 +263,13 @@ async def update_user(
         update_fields.append("email = :email")
         params["email"] = user_data.email
     
-    if user_data.full_name is not None:
-        update_fields.append("full_name = :full_name")
-        params["full_name"] = user_data.full_name
+    if user_data.first_name is not None:
+        update_fields.append("first_name = :first_name")
+        params["first_name"] = user_data.first_name
+    
+    if user_data.last_name is not None:
+        update_fields.append("last_name = :last_name")
+        params["last_name"] = user_data.last_name
     
     if user_data.role is not None:
         update_fields.append("role = :role")
@@ -260,11 +285,15 @@ async def update_user(
             detail="No fields to update"
         )
     
+    # Add audit fields
+    update_fields.append("updated_at = GETUTCDATE()")
+    update_fields.append("updated_by = :updated_by")
+    
     # Execute update
     update_query = text(f"""
-        UPDATE app.users 
+        UPDATE pt.employees 
         SET {', '.join(update_fields)}
-        WHERE id = :user_id
+        WHERE employee_id = :user_id
     """)
     
     db.execute(update_query, params)
@@ -272,16 +301,21 @@ async def update_user(
     
     # Return updated user
     updated_user = db.execute(
-        text("SELECT id, username, email, full_name, role, is_active, created_at FROM app.users WHERE id = :user_id"),
+        text("""
+            SELECT employee_id, username, email, first_name, last_name, role, is_active, created_at 
+            FROM pt.employees 
+            WHERE employee_id = :user_id
+        """),
         {"user_id": user_id}
     ).first()
     
     return UserResponse(
-        id=updated_user.id,
+        id=updated_user.employee_id,
         username=updated_user.username,
         email=updated_user.email,
-        full_name=updated_user.full_name,
-        role=UserRole(updated_user.role),
+        first_name=updated_user.first_name,
+        last_name=updated_user.last_name,
+        role=UserRole(updated_user.role.lower()) if isinstance(updated_user.role, str) else updated_user.role,
         is_active=bool(updated_user.is_active),
         created_at=updated_user.created_at
     )
@@ -311,7 +345,7 @@ async def reset_user_password(
     
     # Check if user exists
     existing_user = db.execute(
-        text("SELECT id, username FROM app.users WHERE id = :user_id"),
+        text("SELECT employee_id, username FROM pt.employees WHERE employee_id = :user_id"),
         {"user_id": user_id}
     ).first()
     
@@ -325,14 +359,17 @@ async def reset_user_password(
     hashed_password = get_password_hash(password_data.new_password)
     
     update_query = text("""
-        UPDATE app.users 
-        SET hashed_password = :hashed_password
-        WHERE id = :user_id
+        UPDATE pt.employees 
+        SET password_hash = :password_hash,
+            updated_at = GETUTCDATE(),
+            updated_by = :updated_by
+        WHERE employee_id = :user_id
     """)
     
     db.execute(update_query, {
         "user_id": user_id,
-        "hashed_password": hashed_password
+        "password_hash": hashed_password,
+        "updated_by": current_user.employee_id
     })
     db.commit()
     
@@ -355,7 +392,7 @@ async def delete_user(
     Note: This is a hard delete. Consider using is_active=false instead for soft deletes.
     """
     # Prevent deleting yourself
-    if user_id == current_user.id:
+    if user_id == current_user.employee_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete your own account"
@@ -363,7 +400,7 @@ async def delete_user(
     
     # Check if user exists
     existing_user = db.execute(
-        text("SELECT id, username FROM app.users WHERE id = :user_id"),
+        text("SELECT employee_id, username FROM pt.employees WHERE employee_id = :user_id"),
         {"user_id": user_id}
     ).first()
     
@@ -374,7 +411,7 @@ async def delete_user(
         )
     
     # Delete user
-    delete_query = text("DELETE FROM app.users WHERE id = :user_id")
+    delete_query = text("DELETE FROM pt.employees WHERE employee_id = :user_id")
     db.execute(delete_query, {"user_id": user_id})
     db.commit()
     

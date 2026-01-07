@@ -39,6 +39,7 @@ class UserRole(str, enum.Enum):
     MANAGER = "manager"
     VIEWER = "viewer"
     UPLOADER = "uploader"
+    EMPLOYEE = "employee"
 
 class LocationType(str, enum.Enum):
     """Location type for transactions"""
@@ -107,7 +108,110 @@ class User(Base):
     uploaded_files = relationship("UploadedFile", back_populates="uploader")
 
 
+class Employee(Base):
+    """
+    Employee model - serves as the unified user table for both applications
+    Maps to pt.employees table in the database
+    Can be aliased as User for backward compatibility
+    """
+    __tablename__ = "employees"
+    __table_args__ = {"schema": "pt"}
+    
+    employee_id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(100), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=True)  # Nullable for SSO users
+    email = Column(String(255), nullable=True, index=True)
+    
+    # Name fields
+    first_name = Column(String(75), nullable=False)
+    last_name = Column(String(75), nullable=False)
+    
+    # Role and hierarchy
+    role = Column(String(20), nullable=False, default='employee')
+    manager_id = Column(Integer, ForeignKey("pt.employees.employee_id"), nullable=True)
+    
+    # Status and audit fields
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, server_default=func.getutcdate(), nullable=False)
+    created_by = Column(Integer, ForeignKey("pt.employees.employee_id"), nullable=True)
+    updated_at = Column(DateTime, nullable=True)
+    updated_by = Column(Integer, ForeignKey("pt.employees.employee_id"), nullable=True)
+    
+    # Relationships
+    # Self-referential relationship for manager
+    manager = relationship("Employee", 
+                          remote_side=[employee_id], 
+                          foreign_keys=[manager_id],
+                          backref="direct_reports")
+    
+    # Creator and updater relationships
+    creator = relationship("Employee", 
+                          remote_side=[employee_id], 
+                          foreign_keys=[created_by])
+    updater = relationship("Employee", 
+                          remote_side=[employee_id], 
+                          foreign_keys=[updated_by])
+    
+    # REMOVED the uploaded_files relationship to avoid backref conflict
+    # If you need this relationship, define it only in UploadedFile model
+    
+    @hybrid_property
+    def id(self):
+        """Alias for employee_id to maintain compatibility with existing code"""
+        return self.employee_id
+    
+    @hybrid_property
+    def hashed_password(self):
+        """Alias for password_hash to maintain compatibility"""
+        return self.password_hash
+    
+    @hashed_password.setter
+    def hashed_password(self, value):
+        """Setter for hashed_password alias"""
+        self.password_hash = value
+    
+    @hybrid_property
+    def full_name(self):
+        """
+        Computed property that concatenates first_name and last_name
+        Returns properly formatted full name
+        """
+        if self.first_name and self.last_name:
+            return f"{self.first_name} {self.last_name}"
+        elif self.first_name:
+            return self.first_name
+        elif self.last_name:
+            return self.last_name
+        return None
+    
+    @full_name.setter
+    def full_name(self, value):
+        """
+        Setter to allow setting full_name which will split into first/last
+        Useful for backward compatibility
+        """
+        if value:
+            parts = value.strip().split(None, 1)  # Split on first whitespace
+            self.first_name = parts[0] if len(parts) > 0 else None
+            self.last_name = parts[1] if len(parts) > 1 else None
+        else:
+            self.first_name = None
+            self.last_name = None
+    
+    def __repr__(self):
+        return f"<Employee(id={self.employee_id}, username='{self.username}', role='{self.role}')>"
+
+
+User = Employee  # Alias for backward compatibility
+
 class UploadedFile(Base):
+    """
+    Model for tracking uploaded files
+    Now references pt.employees instead of app.users
+    
+    Note: Staging table relationships removed temporarily to avoid mapping errors.
+    Add them back once all staging models are properly defined.
+    """
     __tablename__ = "uploaded_files"
     __table_args__ = {"schema": "app"}
     
@@ -117,8 +221,13 @@ class UploadedFile(Base):
     file_path = Column(String(500), nullable=False)
     file_size = Column(Integer, nullable=False)
     file_hash = Column(String(64), unique=True, index=True)
+    
+    # Data source type
     data_source_type = Column(Enum(DataSourceType), nullable=False, index=True)
-    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # Foreign key to pt.employees instead of app.users
+    uploaded_by = Column(Integer, ForeignKey("pt.employees.employee_id"), nullable=False)
+    
     description = Column(Text)
     upload_date = Column(DateTime(timezone=True), server_default=func.now())
     is_processed = Column(Boolean, default=False, nullable=False)
@@ -126,20 +235,24 @@ class UploadedFile(Base):
     records_processed = Column(Integer)
     processing_errors = Column(JSON)  # Store any errors encountered
     
-    # Relationships
-    uploader = relationship("User", back_populates="uploaded_files")
+    # Relationship to Employee (aliased as User)
+    # Define the relationship HERE, not in Employee class
+    uploader = relationship("Employee", 
+                           foreign_keys=[uploaded_by],
+                           backref="uploaded_files")
     
     @property
     def uploaded_by_user(self):
-        """Alias property for API/serialization compatibility.
-
+        """
+        Alias property for API/serialization compatibility.
+        
         Some parts of the codebase (Pydantic schemas and templates) expect
         an attribute named `uploaded_by_user`. The actual relationship is
         named `uploader`. Expose this property so Pydantic's
         `from_attributes=True` can find the nested User object.
         """
         return self.uploader
-    # Link to staging records for audit trail
+    
     windcave_records = relationship("WindcaveStaging", back_populates="source_file")
     payments_insider_sales_records = relationship("PaymentsInsiderSalesStaging", back_populates="source_file")
     payments_insider_payments_records = relationship("PaymentsInsiderPaymentsStaging", back_populates="source_file")
@@ -147,7 +260,6 @@ class UploadedFile(Base):
     ips_cc_records = relationship("IPSCreditCardStaging", back_populates="source_file")
     ips_mobile_records = relationship("IPSMobileStaging", back_populates="source_file")
     ips_cash_records = relationship("IPSCashStaging", back_populates="source_file")
-
 
 # ============= Staging Tables =============
 

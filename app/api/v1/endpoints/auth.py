@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from datetime import timedelta
 from app.db.session import get_db
 from app.models.database import User, UserRole
@@ -19,10 +20,18 @@ async def login(
 ):
     """
     Authenticate user and return access token
+    Now uses pt.employees table
     """
-    user = db.query(User).filter(User.username == form_data.username).first()
+    # Query pt.employees table
+    query = text("""
+        SELECT employee_id, username, password_hash, is_active, role
+        FROM pt.employees
+        WHERE username = :username
+    """)
     
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    user = db.execute(query, {"username": form_data.username}).first()
+    
+    if not user or not user.password_hash or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -50,7 +59,16 @@ async def get_current_user_info(
     """
     Get current user information
     """
-    return current_user
+    return UserResponse(
+        id=current_user.employee_id,
+        username=current_user.username,
+        email=current_user.email,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        role=UserRole(current_user.role.lower()) if isinstance(current_user.role, str) else UserRole(current_user.role),
+        is_active=current_user.is_active,
+        created_at=current_user.created_at
+    )
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -61,80 +79,72 @@ async def register_user(
 ):
     """
     Register a new user (Admin only)
+    Creates user in pt.employees table
     """
     # Check if username exists
-    if db.query(User).filter(User.username == user_data.username).first():
+    existing = db.execute(
+        text("SELECT employee_id FROM pt.employees WHERE username = :username"),
+        {"username": user_data.username}
+    ).first()
+    
+    if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username already registered"
         )
     
     # Check if email exists
-    if db.query(User).filter(User.email == user_data.email).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
+    if user_data.email:
+        existing_email = db.execute(
+            text("SELECT employee_id FROM pt.employees WHERE email = :email"),
+            {"email": user_data.email}
+        ).first()
+        
+        if existing_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
     
     # Create new user
-    new_user = User(
-        username=user_data.username,
-        email=user_data.email,
-        full_name=user_data.full_name,
-        role=user_data.role,
-        hashed_password=get_password_hash(user_data.password)
+    hashed_password = get_password_hash(user_data.password)
+    
+    insert_query = text("""
+        INSERT INTO pt.employees 
+        (username, email, first_name, last_name, role, password_hash, is_active, created_at, created_by)
+        VALUES 
+        (:username, :email, :first_name, :last_name, :role, :password_hash, 1, GETUTCDATE(), :created_by)
+    """)
+    
+    db.execute(insert_query, {
+        "username": user_data.username,
+        "email": user_data.email,
+        "first_name": user_data.first_name,
+        "last_name": user_data.last_name,
+        "role": user_data.role.value,
+        "password_hash": hashed_password,
+        "created_by": current_user.employee_id
+    })
+    db.commit()
+    
+    # Retrieve the created user
+    new_user = db.execute(
+        text("""
+            SELECT employee_id, username, email, first_name, last_name, role, is_active, created_at 
+            FROM pt.employees 
+            WHERE username = :username
+        """),
+        {"username": user_data.username}
+    ).first()
+    
+    return UserResponse(
+        id=new_user.employee_id,
+        username=new_user.username,
+        email=new_user.email,
+        first_name=new_user.first_name,
+        last_name=new_user.last_name,
+        role=UserRole(new_user.role.lower()) if isinstance(new_user.role, str) else new_user.role,
+        is_active=bool(new_user.is_active),
+        created_at=new_user.created_at
     )
-    
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    return new_user
 
-
-@router.put("/users/{user_id}", response_model=UserResponse)
-async def update_user(
-    user_id: int,
-    user_data: UserUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_role([UserRole.ADMIN]))
-):
-    """
-    Update user information (Admin only)
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    # Update fields if provided
-    if user_data.email is not None:
-        user.email = user_data.email
-    if user_data.full_name is not None:
-        user.full_name = user_data.full_name
-    if user_data.role is not None:
-        user.role = user_data.role
-    if user_data.is_active is not None:
-        user.is_active = user_data.is_active
-    
-    db.commit()
-    db.refresh(user)
-    
-    return user
-
-
-@router.get("/users", response_model=list[UserResponse])
-async def list_users(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.MANAGER]))
-):
-    """
-    List all users (Admin/Manager only)
-    """
-    users = db.query(User).offset(skip).limit(limit).all()
-    return users

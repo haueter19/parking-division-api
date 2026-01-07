@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, computed_field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
@@ -11,22 +11,41 @@ class UserBase(BaseModel):
     """Base user schema"""
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    first_name: Optional[str] = Field(None, max_length=50)
+    last_name: Optional[str] = Field(None, max_length=50)
+    
+    @computed_field
+    @property
+    def full_name(self) -> Optional[str]:
+        """Automatically compute full_name from first_name and last_name"""
+        if self.first_name and self.last_name:
+            return f"{self.first_name} {self.last_name}"
+        elif self.first_name:
+            return self.first_name
+        elif self.last_name:
+            return self.last_name
+        return None
 
 
 class UserCreate(UserBase):
     """Schema for creating a new user"""
     password: str = Field(..., min_length=8)
     role: UserRole = UserRole.VIEWER
+    
+    @field_validator('password')
+    @classmethod
+    def validate_password_complexity(cls, v: str) -> str:
+        """Ensure password contains at least one non-alphanumeric character"""
+        if not any(not c.isalnum() for c in v):
+            raise ValueError('Password must contain at least one non-alphanumeric character (!@#$%^&* etc.)')
+        return v
 
 
 class UserUpdate(BaseModel):
     """Schema for updating user information"""
     email: Optional[EmailStr] = None
-    first_name: Optional[str] = None
-    first_name: Optional[str] = None
-    full_name: Optional[str] = None
+    first_name: Optional[str] = Field(None, max_length=50)
+    last_name: Optional[str] = Field(None, max_length=50)
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
 
@@ -41,6 +60,32 @@ class UserUpdateAdmin(BaseModel):
     is_active: Optional[bool] = None
 
 
+class UserResponse(BaseModel):
+    """Schema for user response"""
+    id: int
+    username: str
+    email: EmailStr
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    role: UserRole
+    is_active: bool
+    created_at: datetime
+    
+    @computed_field
+    @property
+    def full_name(self) -> Optional[str]:
+        """Automatically compute full_name from first_name and last_name"""
+        if self.first_name and self.last_name:
+            return f"{self.first_name} {self.last_name}"
+        elif self.first_name:
+            return self.first_name
+        elif self.last_name:
+            return self.last_name
+        return None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PasswordReset(BaseModel):
     """Schema for resetting a user's password"""
     new_password: str = Field(..., min_length=8, description="Minimum 8 characters with at least one non-alphanumeric character")
@@ -52,16 +97,6 @@ class PasswordReset(BaseModel):
         if not any(not c.isalnum() for c in v):
             raise ValueError('Password must contain at least one non-alphanumeric character (!@#$%^&* etc.)')
         return v
-
-
-class UserResponse(UserBase):
-    """Schema for user response"""
-    id: int
-    role: UserRole
-    is_active: bool
-    created_at: datetime
-    
-    model_config = ConfigDict(from_attributes=True)
 
 
 class UserLogin(BaseModel):

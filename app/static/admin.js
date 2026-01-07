@@ -1321,7 +1321,7 @@ function renderUsers(users) {
     }
     
     if (!users || users.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">No users found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">No users found</td></tr>';
         return;
     }
     
@@ -1335,10 +1335,15 @@ function renderUsers(users) {
             ? `<button class="action-button action-deactivate" onclick="toggleUserStatus(${user.id}, false)">Deactivate</button>`
             : `<button class="action-button action-activate" onclick="toggleUserStatus(${user.id}, true)">Activate</button>`;
         
+        // Display first_name and last_name separately
+        const firstName = user.first_name || '<em style="color: #999;">Not set</em>';
+        const lastName = user.last_name || '<em style="color: #999;">Not set</em>';
+        
         return `
             <tr>
                 <td><strong>${user.username}</strong></td>
-                <td>${user.full_name || '<em style="color: #999;">Not set</em>'}</td>
+                <td>${firstName}</td>
+                <td>${lastName}</td>
                 <td>${user.email}</td>
                 <td><span class="role-badge ${roleClass}">${user.role}</span></td>
                 <td><span class="status-badge ${statusClass}">${statusText}</span></td>
@@ -1376,9 +1381,12 @@ function filterUsers() {
     const activeFilter = document.getElementById('filterUserActive')?.value || '';
     
     filteredUsers = allUsers.filter(user => {
+        // Search in username, email, first_name, last_name, and full_name
         const matchesSearch = !search || 
             user.username.toLowerCase().includes(search) ||
             (user.email && user.email.toLowerCase().includes(search)) ||
+            (user.first_name && user.first_name.toLowerCase().includes(search)) ||
+            (user.last_name && user.last_name.toLowerCase().includes(search)) ||
             (user.full_name && user.full_name.toLowerCase().includes(search));
         
         const matchesRole = !role || user.role.toLowerCase() === role;
@@ -1424,7 +1432,6 @@ async function handleAddUserSubmit(e) {
     const email = document.getElementById('newEmail').value.trim();
     const firstName = document.getElementById('newFirstName').value.trim();
     const lastName = document.getElementById('newLastName').value.trim();
-    const fullName = document.getElementById('newFullName').value.trim();
     const role = document.getElementById('newRole').value;
     const password = document.getElementById('newPassword').value;
     const passwordConfirm = document.getElementById('newPasswordConfirm').value;
@@ -1456,7 +1463,8 @@ async function handleAddUserSubmit(e) {
             body: JSON.stringify({
                 username,
                 email,
-                full_name: fullName || null,
+                first_name: firstName || null,
+                last_name: lastName || null,
                 password,
                 role
             })
@@ -1498,7 +1506,8 @@ function openEditUserModal(userId) {
     document.getElementById('editUserId').value = user.id;
     document.getElementById('editUsername').value = user.username;
     document.getElementById('editEmail').value = user.email;
-    document.getElementById('editFullName').value = user.full_name || '';
+    document.getElementById('editFirstName').value = user.first_name || '';
+    document.getElementById('editLastName').value = user.last_name || '';
     document.getElementById('editRole').value = user.role.toLowerCase();
     document.getElementById('editIsActive').value = user.is_active.toString();
     
@@ -1514,7 +1523,8 @@ async function handleEditUserSubmit(e) {
     
     const userId = document.getElementById('editUserId').value;
     const email = document.getElementById('editEmail').value.trim();
-    const fullName = document.getElementById('editFullName').value.trim();
+    const firstName = document.getElementById('editFirstName').value.trim();
+    const lastName = document.getElementById('editLastName').value.trim();
     const role = document.getElementById('editRole').value;
     const isActive = document.getElementById('editIsActive').value === 'true';
     
@@ -1527,7 +1537,8 @@ async function handleEditUserSubmit(e) {
             },
             body: JSON.stringify({
                 email,
-                full_name: fullName || null,
+                first_name: firstName || null,
+                last_name: lastName || null,
                 role,
                 is_active: isActive
             })
@@ -1672,7 +1683,6 @@ async function toggleUserStatus(userId, newStatus) {
         showMessage(`Failed to ${action} user: ` + error.message, 'error');
     }
 }
-
 
 // Close modals when clicking outside
 window.addEventListener('click', (event) => {

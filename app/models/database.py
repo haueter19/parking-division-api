@@ -77,7 +77,7 @@ class DataSourceType(str, enum.Enum):
     IPS_CC = "ips_cc"  # IPS credit card
     IPS_MOBILE = "ips_mobile"  # IPS credit card
     IPS_CASH = "ips_cash" 
-    CASH_COLLECTION = "cash_collection"  # Cash collection PDFs
+    COIN_COLLECTION = "coin_collection"  # Coin collection
     RP3_PERMITS = "rp3_permits"  # Residential Parking Permit Program
     MONTHLY_PERMITS = "monthly_permits"  # Monthly parking permits
     GARAGE_TRANSACTIONS = "garage_transactions"  # Garage visit transactions
@@ -260,6 +260,7 @@ class UploadedFile(Base):
     ips_cc_records = relationship("IPSCreditCardStaging", back_populates="source_file")
     ips_mobile_records = relationship("IPSMobileStaging", back_populates="source_file")
     ips_cash_records = relationship("IPSCashStaging", back_populates="source_file")
+    ips_coin_collector_records = relationship("IPSCoinCollectorStaging", back_populates="source_file")
 
 # ============= Staging Tables =============
 
@@ -592,6 +593,53 @@ class IPSCashStaging(Base):
             return datetime.combine(self.collection_date, time_value)
 
 
+class IPSCoinCollectorStaging(Base):
+    """Staging table for IPS coin collection transactions (coins in meters)"""
+    __tablename__ = "ips_coin_collector_staging"
+    __table_args__ = {"schema": "app"}
+    
+    id = Column(Integer, primary_key=True, index=True)
+    source_file_id = Column(Integer, ForeignKey("uploaded_files.id"), nullable=False)
+    
+    # Raw fields from IPS Coin Collector reports
+    date = Column(DateTime)
+    time = Column(String(11))
+    zone = Column(String(24))
+    area = Column(String(50))
+    sub_area = Column(String(50))
+    pole = Column(String(24))
+    terminal = Column(String(12))
+    meter_type = Column(String(12))
+    collection_route = Column(String(50))
+    collection_sub_route = Column(String(50))
+    card_number = Column(String(20))
+    card_name = Column(String(50))
+    coin_count = Column(Integer)
+    collected_coin_amount = Column(Numeric(10,2))
+    coin_running_total = Column(Integer)
+    bill_count = Column(Integer)
+    collected_bill_amount = Column(Numeric(10,2))
+    bill_running_total = Column(Numeric(10,2))
+    
+    
+    # Processing metadata
+    loaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    processed_to_final = Column(Boolean, default=False)
+    
+    # Relationships
+    source_file = relationship("UploadedFile", back_populates="ips_coin_collector_records")
+    #final_transaction = relationship("Transaction", back_populates="ips_coin_collector_source")
+
+    # Calculate datetime from date and time fields
+    @hybrid_property
+    def transaction_datetime(self):
+        from datetime import datetime
+        
+        time_value = parse_time_string(self.time)
+        if self.date and time_value:
+            return datetime.combine(self.date, time_value)
+        
+
 
 class SQLCashStaging(Base):
     """Staging table for cash transactions from SQL queries"""
@@ -664,6 +712,7 @@ class Transaction(Base):
     ips_cc_source = relationship("IPSCreditCardStaging", back_populates="final_transaction", uselist=False)
     ips_mobile_source = relationship("IPSMobileStaging", back_populates="final_transaction", uselist=False)
     ips_cash_source = relationship("IPSCashStaging", back_populates="final_transaction", uselist=False)
+    #ips_coin_collection_source = relationship("IPSCoinCollectorStaging", back_populates="final_transaction", uselist=False)
     sql_cash_source = relationship("SQLCashStaging", back_populates="final_transaction", uselist=False)
 
 

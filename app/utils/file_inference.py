@@ -47,6 +47,9 @@ def infer_data_source_type(filename: str) -> DataSourceType:
     if filename_lower.startswith("collection report"):
         return DataSourceType.IPS_CASH
     
+    if 'coin collector card' in filename_lower:
+        return DataSourceType.COIN_COLLECTION
+    
     # Windcave patterns
     if (filename_lower.startswith("windcave") or 
         filename_lower.startswith("wc")):

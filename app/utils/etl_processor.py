@@ -17,8 +17,8 @@ import os
 from app.models.database import (
     Transaction, DataSourceType, LocationType, PaymentType,
     WindcaveStaging, PaymentsInsiderPaymentsStaging, PaymentsInsiderSalesStaging, 
-    IPSCreditCardStaging, IPSMobileStaging, IPSCashStaging, SQLCashStaging, IPSStaging,
-    ETLProcessingLog, UploadedFile
+    IPSCreditCardStaging, IPSMobileStaging, IPSCashStaging, IPSCoinCollectorStaging, 
+    SQLCashStaging, IPSStaging, ETLProcessingLog, UploadedFile
 )
 #from db_manager import ConnectionManager
 #cnxn = ConnectionManager()
@@ -44,7 +44,8 @@ class ETLProcessor:
         - org_code_cache: DataFrame from cache with org code lookup data
         - location_from_charge_code: Dict mapping charge codes to location names
         """
-        self.db = db        
+        self.db = db
+        self.traffic_db = traffic_db
 
     def _report_progress(self, payload: Dict[str, Any]):
         """Invoke progress callback if provided. Swallow any exceptions from callback."""
@@ -189,6 +190,7 @@ class ETLProcessor:
             DataSourceType.IPS_CC: ("ips_cc", "ips_cc_staging"),
             DataSourceType.IPS_MOBILE: ("ips_mobile", "ips_mobile_staging"),
             DataSourceType.IPS_CASH: ("ips_cash", "ips_cash_staging"),
+            DataSourceType.COIN_COLLECTION: ("coin_collection", "ips_coin_collector_staging"),
             # Add other mappings if/when needed
         }
         return mapping.get(data_source_type, ("unknown", ""))
@@ -272,7 +274,66 @@ class ETLProcessor:
             self.db.rollback()
             raise  
 
-    
+    def process_coin_collector(self, file_id: int) -> Dict[str, Any]:
+        """Process Coin Collector data from staging for PCI Compliance. This process downloads most recent collection data,
+        merges with access cards, and then updates pciInspectedDate and pciInspectedBy in Traffic SDE table PU_METER_TERMINALS."""
+
+        # Start processing log
+        log = self._start_log("ips_coin_collector_staging", file_id)
+
+        # Read in the collections data
+        # Collections = inspections
+        collections_df = pd.read_sql("""
+            SELECT 
+                id, source_file_id, CONVERT(DATETIME, CONVERT(VARCHAR, CAST(date AS DATE), 120) + ' ' + time) date, zone, area, sub_area, pole, terminal, meter_type, card_number, card_name, coin_count, collected_coin_amount
+            FROM PUReporting.app.ips_coin_collector_staging
+            WHERE date = (select top 1 date from app.ips_coin_collector_staging order by date desc)
+            """, self.db.bind)
+
+        # Access cards do not change that often. Should periodically check to make sure they are up to date. 
+        # Can download access cards from IPS: https://www.ipsmetersystems.com/Pages/Admin/ManageAccessCards.aspx
+        # Doesn't change very often, could download once a month or possibly even less. Could add this to Luci's tasks. 
+        access_cards = r'F:\Pkroot\ParkingMaintenance\PARKING METERS\IPS\Manage Access Cards_01_09_2026.csv'
+        # Read in the access cards
+        access_cards_df = pd.read_csv(access_cards, dtype={'Card #': 'str', 'Card Number': 'str'})
+
+        # Merge collection data with access card data to get who it is assigned to
+        inspections_df = collections_df.merge(access_cards_df, left_on='card_number', right_on='Card #', indicator=True, suffixes=[None,'_access_card'], how='left')
+
+        # There may be more than one collection event for a particular meter. This section groups on the terminal and uses the most recent collection as the inspection date
+        recent_inspection = inspections_df.sort_values(['terminal','date'], ascending=[True, False]).drop_duplicates('terminal', keep='first')
+        recent_inspection['ipsTerminalID'] = recent_inspection['terminal'] # recent_inspection['Terminal'].apply(lambda x: x[1:])
+        recent_inspection['pciInspectedDate'] = pd.to_datetime(recent_inspection['date'])
+        recent_inspection['pciInspectedBy'] = recent_inspection['card_name']
+
+        # This is the SQL update statement to use
+        stmt = text("""
+                    UPDATE 
+                        data_admin8.PU_METERS_TERMINALS 
+                    SET pciInspectedBy = :pciInspectedBy, pciInspectedDate = :pciInspectedDate 
+                    WHERE 
+                        ipsTerminalID = :ipsTerminalID""")
+
+        # Loop through each inspection and update the SDE table
+        updated_count = 0
+        for index, row in recent_inspection.iterrows():
+            result = self.traffic_db.execute(stmt, {
+                "pciInspectedBy": row['pciInspectedBy'],
+                "pciInspectedDate": row['pciInspectedDate'],
+                "ipsTerminalID": row['ipsTerminalID']
+            })
+            updated_count += result.rowcount
+
+        self.traffic_db.commit()
+        self._complete_log(log, processed=len(recent_inspection), created=0, updated=updated_count, failed=0)
+
+        return {
+            "success": True,
+            "records_processed": len(recent_inspection),
+            "records_created": 0,
+            "records_updated": updated_count,
+        }
+
     # Logging helper methods
     def _start_log(self, source_table: str, file_id: Optional[int]) -> ETLProcessingLog:
         """Start a processing log entry"""
@@ -375,6 +436,7 @@ class DataLoader:
             DataSourceType.IPS_CC: self.load_ips_credit,
             DataSourceType.IPS_MOBILE: self.load_ips_mobile,
             DataSourceType.IPS_CASH: self.load_ips_cash,
+            DataSourceType.COIN_COLLECTION: self.load_ips_coin_collection,
             #DataSourceType.SQL_CASH_QUERY: self.load_sql_cash_query
             # Add other mappings as needed
             }
@@ -564,6 +626,7 @@ class DataLoader:
         df.rename(columns=({'card_#':'card_number'}), inplace=True)
 
         # --- Add metadata columns ---
+        df.loc[df['transaction_type'] == 'Remote/PBC', 'convenience_fee'] = convenience_fee
         df["source_file_id"] = file_id
         df["processed_to_final"] = False
 
@@ -816,3 +879,69 @@ class DataLoader:
         
         return len(records)
 
+
+    def load_ips_coin_collection(self, file_path: str, file_id: int) -> int:
+        """Load IPS coin collection data to staging table"""
+        
+        # Determine if Excel or CSV
+        if file_path.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(file_path, dtype={'Card Number': 'str', 'Terminal': 'str', 'Pole':'str'})
+        else:
+            df = pd.read_csv(file_path, dtype={'Card Number': 'str', 'Terminal': 'str', 'Pole':'str'})
+
+        # --- Check for a sum or total at the bottom of the report and remove it ---
+        df = df[df['Date'].notna()]
+        
+        # --- Normalize column names ---
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_").str.replace("/","").str.replace('\n','').str.replace('.','')
+        df.rename(columns=({'Amount ($)':'amount', '$_paid':'paid', '$001':'pennies', '$005':'nickels', '$010':'dimes', '$025':'quarters', '$100':'dollars'}), inplace=True)
+
+        # --- Make sure these columns are floats
+        for col in ['collected_coin_amount', 'coin_running_total', 'collected_bill_amount', 'bill_running_total']:
+            df[col] = df[col].apply(lambda x: float(x.replace('$','').replace(',','')) if pd.notna(x) else x)
+            #df[col] = df[col].astype(float)
+        
+        # --- Add metadata columns ---
+        df["source_file_id"] = file_id
+        df["processed_to_final"] = False
+
+        # --- Convert datetimes where possible ---
+        for col in df.columns:
+            if "date" in col:
+                try:
+                    df[col] = pd.to_datetime(df[col], errors="coerce")
+                except Exception:
+                    pass
+                    
+        # --- Handle integer columns - replace NaN with None ---
+        int_columns = ['coin_count', 'bill_count']
+        
+        for col in int_columns:
+            if col in df.columns:
+                # Convert to nullable integer type or replace NaN with None
+                df[col] = df[col].replace({pd.NA: None, np.nan: None})
+                # Convert to int where not None
+                df.loc[df[col].notna(), col] = df[col].loc[df[col].notna()].astype(float).astype(int)
+                
+        # --- Convert pandas NaN to None for SQL ---
+        df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
+
+        # --- Remove .0 from Pole Ser No if present ---
+        #df['pole'] = df['pole'].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
+        
+        # --- Convert to list of dictionaries ---
+        records = df.to_dict(orient="records")
+        
+        # --- Bulk insert using SQLAlchemy ---
+        self.db.execute(insert(IPSCoinCollectorStaging), records)
+        self.db.commit()
+
+        # --- Update file as processed ---
+        file_record = self.db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+        if file_record:
+            file_record.is_processed = True
+            file_record.processed_at = datetime.now()
+            file_record.records_processed = len(records)
+            self.db.commit()
+        
+        return len(records)

@@ -9,7 +9,7 @@ import asyncio
 import json
 from starlette.responses import StreamingResponse
 
-from app.db.session import get_db
+from app.db.session import get_db, get_traffic_db
 from app.api.dependencies import get_current_active_user
 from app.models.database import User, UserRole, UploadedFile, ETLProcessingLog, DataSourceType
 from app.models.schemas import (
@@ -30,6 +30,7 @@ async def stream_process_etl(
     request: Request,
     file_id: int,
     db: Session = Depends(get_db),
+    traffic_db: Session = Depends(get_traffic_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """Run ETL for a file and stream progress updates as server-sent events.
@@ -57,8 +58,8 @@ async def stream_process_etl(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="ETL processing is already running for this file")
 
     # Use startup cache
-    org_code_cache = etl_cache.get_org_code_cache()
-    location_cache = etl_cache.get_location_from_charge_code()
+    #org_code_cache = etl_cache.get_org_code_cache()
+    #location_cache = etl_cache.get_location_from_charge_code()
 
     q = queue.Queue()
 
@@ -70,10 +71,14 @@ async def stream_process_etl(
 
     def run_etl():
         try:
-            processor = ETLProcessor(db, org_code_cache=org_code_cache, location_from_charge_code=location_cache, progress_callback=progress_cb)
-            source_key, staging_table = processor._get_source_key_and_staging_table(file_record.data_source_type)
-            result = processor.process_file(file_id, source_key, staging_table)
-            q.put({"event": "done", "result": result})
+            processor = ETLProcessor(db, traffic_db=traffic_db, progress_callback=progress_cb)
+            if file_record.data_source_type == DataSourceType.COIN_COLLECTION:
+                result = processor.process_coin_collector(file_id)
+                q.put({"event": "done", "result": result})
+            else:
+                source_key, staging_table = processor._get_source_key_and_staging_table(file_record.data_source_type)
+                result = processor.process_file(file_id, source_key, staging_table)
+                q.put({"event": "done", "result": result})
 
         except Exception as e:
             try:
@@ -333,6 +338,7 @@ async def load_file_to_staging(
     background_tasks: BackgroundTasks,
     process_async: bool = False,
     db: Session = Depends(get_db),
+    traffic_db: Session = Depends(get_traffic_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """
@@ -363,7 +369,7 @@ async def load_file_to_staging(
         )
     
     try:
-        loader = DataLoader(db, file_record.data_source_type)
+        loader = DataLoader(db, traffic_db, file_record.data_source_type)
         
         # Get the appropriate loader function
         load_function = loader.mapping.get(file_record.data_source_type)
@@ -399,6 +405,7 @@ async def process_file_to_final(
     background_tasks: BackgroundTasks = None,
     process_async: bool = False,
     db: Session = Depends(get_db),
+    traffic_db: Session = Depends(get_traffic_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """
@@ -441,28 +448,25 @@ async def process_file_to_final(
         )
     
     try:
-        # Get cached lookups initialized at startup
-        #org_code_cache = etl_cache.get_org_code_cache()
-        #location_cache = etl_cache.get_location_cache()
-        
-        #cnxn = ConnectionManager()
-
         processor = ETLProcessor(
             db,
-            #traffic_db=cnxn.get_engine('Traffic'),
+            traffic_db=traffic_db,
             #org_code_cache=org_code_cache,
             #location_from_charge_code=location_cache
         )
         
-        source_key, staging_table = processor._get_source_key_and_staging_table(file_record.data_source_type)
+        if file_record.data_source_type == DataSourceType.COIN_COLLECTION:
+            result = processor.process_coin_collector(file_id)
+        else:
+            source_key, staging_table = processor._get_source_key_and_staging_table(file_record.data_source_type)
 
-        if not staging_table:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No ETL processor available for: {file_record.data_source_type}"
-            )
-        
-        result = processor.process_file(file_id, source_key, staging_table)
+            if not staging_table:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"No ETL processor available for: {file_record.data_source_type}"
+                )
+            
+            result = processor.process_file(file_id, source_key, staging_table)
         
         return ProcessETLResponse(
             success=result.get("success", False),

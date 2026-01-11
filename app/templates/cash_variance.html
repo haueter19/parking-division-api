@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cash Variance - Parking Division</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #2d3748;
+            font-size: 1.5rem;
+        }
+
+        .header-nav {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .header-nav a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .header-nav a:hover {
+            background: #f0f4ff;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-name {
+            color: #4a5568;
+            font-weight: 600;
+        }
+
+        .logout-btn {
+            background: #f56565;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #e53e3e;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Form styles */
+        .form-section {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .form-section h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+
+        label .required {
+            color: #f56565;
+            font-weight: 700;
+        }
+
+        input, select {
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        input.error, select.error {
+            border-color: #f56565;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        /* Table styles */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        thead {
+            background: #f7fafc;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        th {
+            font-weight: 700;
+            color: #2d3748;
+            white-space: nowrap;
+        }
+
+        tbody tr:hover {
+            background: #f7fafc;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            margin-right: 5px;
+        }
+
+        /* Messages */
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .message.show {
+            display: block;
+        }
+
+        .message.success {
+            background: #d1fae5;
+            color: #059669;
+            border-left: 4px solid #10b981;
+        }
+
+        .message.error {
+            background: #fee2e2;
+            color: #dc2626;
+            border-left: 4px solid #f56565;
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .badge-regular {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+
+        .badge-special_event {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        /* Loading */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #6b7280;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            color: #2d3748;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6b7280;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+        }
+
+        /* Filter section */
+        .filter-section {
+            background: #e6f2ff;
+            border-left: 4px solid #667eea;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .filter-section h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-size: 1rem;
+        }
+
+        /* Collapsible sections */
+        .collapsible-header {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+        }
+
+        .collapsible-header:hover {
+            opacity: 0.7;
+        }
+
+        .toggle-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            background: #667eea;
+            color: white;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .collapsible-content {
+            display: none;
+            overflow: hidden;
+            padding-top: 15px;
+        }
+
+        .collapsible-content.expanded {
+            display: block;
+        }
+
+        /* Amount styling */
+        .amount {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+        }
+
+        .amount.positive {
+            color: #059669;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .header-nav {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Cash Variance Entry</h1>
+        <div class="header-nav">
+            <a href="/upload">Upload Files</a>
+            <a href="/files/status">File Status</a>
+            <a href="/reports/settle">Reports</a>
+            <a href="/admin">Admin</a>
+            <div class="user-info">
+                <span class="user-name" id="userName">Loading...</span>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="message" class="message"></div>
+
+        <!-- Entry Form Section -->
+        <div class="form-section">
+            <h3 class="collapsible-header" onclick="toggleFormSection(this)">
+                <span class="toggle-icon">+</span>
+                Add New Cash Variance Entry
+            </h3>
+            <div class="collapsible-content">
+                <form id="cashVarianceForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Date <span class="required">*</span></label>
+                            <input type="datetime-local" name="date" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Cashier Number <span class="required">*</span></label>
+                            <input type="text" name="cashier_number" required placeholder="e.g., C001">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Bag Number <span class="required">*</span></label>
+                            <input type="text" name="bag_number" required placeholder="e.g., BAG-12345">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Bag Type <span class="required">*</span></label>
+                            <select name="bag_type" required>
+                                <option value="regular">Regular</option>
+                                <option value="special_event">Special Event</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Location (Garage)</label>
+                            <select name="location_id" id="locationSelect">
+                                <option value="">Select location...</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Station/Device</label>
+                            <select name="device_id" id="deviceSelect">
+                                <option value="">Select station...</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Amount ($)</label>
+                            <input type="number" name="amount" step="0.01" min="0" placeholder="0.00">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Turnarounds</label>
+                            <input type="number" name="turnarounds" min="0" value="0">
+                        </div>
+
+                        <div class="form-group">
+                            <label>FTP Count (Failure to Pay)</label>
+                            <input type="number" name="ftp_count" min="0" value="0">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Coupons ($)</label>
+                            <input type="number" name="coupons" step="0.01" min="0" value="0" placeholder="0.00">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Other Non-Paying</label>
+                            <input type="number" name="other_non_paying" min="0" value="0">
+                        </div>
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="submit" class="btn-primary">Create Entry</button>
+                        <button type="reset" class="btn-secondary">Clear Form</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="filter-section">
+            <h3>Filter Entries</h3>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Start Date</label>
+                    <input type="date" id="filterStartDate">
+                </div>
+                <div class="form-group">
+                    <label>End Date</label>
+                    <input type="date" id="filterEndDate">
+                </div>
+                <div class="form-group">
+                    <label>Cashier Number</label>
+                    <input type="text" id="filterCashierNumber" placeholder="Search...">
+                </div>
+                <div class="form-group">
+                    <label>Location</label>
+                    <select id="filterLocation">
+                        <option value="">All Locations</option>
+                    </select>
+                </div>
+                <div class="form-group" style="display: flex; flex-direction: row; gap: 10px; align-items: flex-end;">
+                    <button type="button" class="btn-secondary" onclick="clearFilters()">Clear</button>
+                    <button type="button" class="btn-primary" onclick="loadEntries()">Apply</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Entries Table -->
+        <h3>Cash Variance Entries <span id="entryCount" style="color: #6b7280; font-size: 0.9rem;"></span></h3>
+        <div class="loading" id="entriesLoading">Loading entries...</div>
+        <div class="table-container">
+            <table id="entriesTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Cashier #</th>
+                        <th>Bag #</th>
+                        <th>Type</th>
+                        <th>Location</th>
+                        <th>Station</th>
+                        <th>Amount</th>
+                        <th>Turnarounds</th>
+                        <th>FTP</th>
+                        <th>Coupons</th>
+                        <th>Other</th>
+                        <th>Created By</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="entriesTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Cash Variance Entry</h2>
+                <button class="close-modal" onclick="closeEditModal()">&times;</button>
+            </div>
+            <form id="editForm">
+                <input type="hidden" name="entry_id">
+                <div class="form-grid" id="editFormFields">
+                    <!-- Fields will be populated by JavaScript -->
+                </div>
+                <div class="btn-group">
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                    <button type="button" class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/cash_variance.js"></script>
+</body>
+</html>

@@ -147,6 +147,15 @@ async def admin_page(request: Request):
         name="admin.html"
     )
 
+
+@app.get("/cash-variance", response_class=HTMLResponse)
+async def cash_variance_page(request: Request):
+    """Serve the cash variance entry page"""
+    return templates.TemplateResponse(
+        request=request,
+        name="cash_variance.html"
+    )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001, reload=True)

@@ -68,6 +68,12 @@ class PaymentType(str, enum.Enum):
     TEXT = 'text'
     OTHER = "other"  
 
+class BagType(str, enum.Enum):
+    """Bag type enumeration for cash variance entries"""
+    REGULAR = "regular"
+    SPECIAL_EVENT = "special_event"
+
+
 class DataSourceType(str, enum.Enum):
     """Data source type enumeration for categorizing uploaded files"""
     WINDCAVE = "windcave"  # Windcave credit card settlements
@@ -736,3 +742,44 @@ class ETLProcessingLog(Base):
     
     # Relationship
     source_file = relationship("UploadedFile")
+
+
+# ============= Cash Variance Entry =============
+class CashVariance(Base):
+    """
+    Cash variance entry model for tracking cashier bag submissions
+    Used to record cashier shift data including amounts, turnarounds, and exceptions
+    """
+    __tablename__ = "cash_variance"
+    __table_args__ = {"schema": "app"}
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Required fields
+    date = Column(DateTime, nullable=False, index=True)
+    cashier_number = Column(String(50), nullable=False, index=True)
+    bag_number = Column(String(50), nullable=False, index=True)
+    bag_type = Column(Enum(BagType), nullable=False, default=BagType.REGULAR)
+
+    # Location and device references (nullable, populated from dropdowns)
+    location_id = Column(Integer, nullable=True)  # References dim_location
+    device_id = Column(Integer, nullable=True)    # References dim_device
+
+    # Financial fields
+    amount = Column(Numeric(10, 2), nullable=True)
+
+    # Count fields
+    turnarounds = Column(Integer, default=0)
+    ftp_count = Column(Integer, default=0)  # Failure to pay count
+    coupons = Column(Numeric(10, 2), default=0)
+    other_non_paying = Column(Integer, default=0)
+
+    # Audit fields
+    created_by = Column(Integer, ForeignKey("pt.employees.employee_id"), nullable=False)
+    created_at = Column(DateTime, server_default=func.getutcdate())
+    updated_by = Column(Integer, ForeignKey("pt.employees.employee_id"), nullable=True)
+    updated_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    creator = relationship("Employee", foreign_keys=[created_by])
+    updater = relationship("Employee", foreign_keys=[updated_by])

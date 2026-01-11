@@ -2,7 +2,7 @@ from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, co
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
-from app.models.database import UserRole, DataSourceType, LocationType, PaymentType, UserRole
+from app.models.database import UserRole, DataSourceType, LocationType, PaymentType, UserRole, BagType
 
 
 # ============= User Schemas =============
@@ -577,3 +577,56 @@ class SpaceCreate(BaseModel):
     cwAssetID: Optional[str] = Field(None, max_length=50)
     start_date: datetime = Field(default_factory=datetime.now)
     space_status: Optional[str] = Field("Active", max_length=50)
+
+
+# ============= Cash Variance Schemas =============
+
+class CashVarianceBase(BaseModel):
+    """Base schema for cash variance entries"""
+    date: datetime
+    cashier_number: str = Field(..., min_length=1, max_length=50)
+    bag_number: str = Field(..., min_length=1, max_length=50)
+    bag_type: BagType = BagType.REGULAR
+    location_id: Optional[int] = None
+    device_id: Optional[int] = None
+    amount: Optional[float] = None
+    turnarounds: int = 0
+    ftp_count: int = 0
+    coupons: Optional[float] = 0
+    other_non_paying: int = 0
+
+
+class CashVarianceCreate(CashVarianceBase):
+    """Schema for creating a cash variance entry"""
+    pass
+
+
+class CashVarianceUpdate(BaseModel):
+    """Schema for updating a cash variance entry - all fields optional"""
+    date: Optional[datetime] = None
+    cashier_number: Optional[str] = Field(None, min_length=1, max_length=50)
+    bag_number: Optional[str] = Field(None, min_length=1, max_length=50)
+    bag_type: Optional[BagType] = None
+    location_id: Optional[int] = None
+    device_id: Optional[int] = None
+    amount: Optional[float] = None
+    turnarounds: Optional[int] = None
+    ftp_count: Optional[int] = None
+    coupons: Optional[float] = None
+    other_non_paying: Optional[int] = None
+
+
+class CashVarianceResponse(CashVarianceBase):
+    """Schema for cash variance entry response"""
+    id: int
+    created_by: int
+    created_at: datetime
+    updated_by: Optional[int] = None
+    updated_at: Optional[datetime] = None
+
+    # Joined fields for display
+    location_name: Optional[str] = None
+    device_terminal_id: Optional[str] = None
+    created_by_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)

@@ -148,7 +148,7 @@ async def admin_page(request: Request):
     )
 
 
-@app.get("/cash-variance", response_class=HTMLResponse)
+@app.get("/cash_variance", response_class=HTMLResponse)
 async def cash_variance_page(request: Request):
     """Serve the cash variance entry page"""
     return templates.TemplateResponse(

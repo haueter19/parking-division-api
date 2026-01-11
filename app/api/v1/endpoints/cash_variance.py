@@ -15,7 +15,7 @@ from app.models.schemas import (
     CashVarianceCreate, CashVarianceUpdate, CashVarianceResponse
 )
 
-router = APIRouter(prefix="/cash-variance", tags=["cash-variance"])
+router = APIRouter(prefix="/cash_variance", tags=["cash_variance"])
 
 
 @router.get("/metadata")

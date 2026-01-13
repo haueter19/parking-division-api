@@ -319,7 +319,7 @@ async def revenue_filter_options(
     filters = {}
 
     # Settlement systems
-    result = db.execute(text("SELECT DISTINCT settlement_system FROM app.dim_settlement_system ORDER BY settlement_system"))
+    result = db.execute(text("SELECT DISTINCT system_name FROM app.dim_settlement_system ORDER BY system_name"))
     filters['settlement_systems'] = [row[0] for row in result.fetchall() if row[0]]
 
     # Payment methods
@@ -409,8 +409,8 @@ async def revenue_report(
     params = {"start_dt": start_dt, "end_dt": end_dt}
 
     if settlement_system:
-        where_conditions.append("ss.settlement_system = :settlement_system")
-        params["settlement_system"] = settlement_system
+        where_conditions.append("ss.system_name = :system_name")
+        params["system_name"] = settlement_system
 
     if payment_method:
         where_conditions.append("pm.payment_method_type = :payment_method")

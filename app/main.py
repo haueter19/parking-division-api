@@ -127,6 +127,12 @@ async def file_status_page(request: Request):
     )
 
 
+@app.get("/reports", response_class=HTMLResponse)
+async def reports_page(request: Request):
+    """Serve the reports hub page with links to all available reports"""
+    return templates.TemplateResponse(request=request, name="reports.html")
+
+
 @app.get("/reports/settle", response_class=HTMLResponse)
 async def settle_report_page(request: Request):
     """Serve the settlement report page - date-range selector and results"""

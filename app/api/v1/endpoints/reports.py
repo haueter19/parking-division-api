@@ -307,3 +307,41 @@ async def settle_rollup_report(
         })
 
     return {"rows": result_rows}
+
+
+@router.get('/revenue')
+async def revenue_report(
+    start_date: Optional[str] = '2025-10-01',
+    end_date: Optional[str] = datetime.now().strftime('%Y-%m-%d'),
+    period: Optional[str] = 'month',
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.MANAGER, UserRole.ADMIN]))
+):
+    """Return revenue data grouped by period.
+
+    Query parameters:
+    - start_date: YYYY-MM-DD (inclusive)
+    - end_date: YYYY-MM-DD (inclusive)
+    - period: 'day', 'week', or 'month' (default: 'month')
+    """
+    qry = text("""
+        select
+            settle_date, sum(settle_amount) amount
+        from app.fact_transaction t
+        where 
+            settle_date BETWEEN :start_date and :end_date
+        group by settle_date
+        order by 1
+        """)
+    
+    records = db.execute(qry, {"start_date": start_date, "end_date": end_date}).fetchall()
+
+    results = []
+    for row in records:
+        results.append({
+            "settle_date": row.settle_date.isoformat() if row.settle_date else None,
+            "amount": float(row.amount) or 0
+        })
+    
+    return {"data": results}
+        

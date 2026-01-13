@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Revenue Report - Parking Division</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial; background: #f3f4f6; padding: 24px; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); max-width: 1400px; margin: 0 auto; }
+        h1 { margin-bottom: 6px; }
+        .note { color: #6b7280; font-size: 0.9rem; margin-bottom: 16px; }
+
+        .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px; }
+        .control-group { display: flex; flex-direction: column; gap: 4px; }
+        .control-group label { font-weight: 600; font-size: 0.85rem; color: #374151; }
+        .control-group select, .control-group input[type=date] {
+            padding: 8px 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            min-width: 150px;
+            font-size: 0.9rem;
+        }
+        .control-group select:focus, .control-group input:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        button {
+            padding: 10px 16px;
+            border-radius: 6px;
+            border: none;
+            background: #2563eb;
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #1d4ed8; }
+        button.secondary { background: #6b7280; }
+        button.secondary:hover { background: #4b5563; }
+
+        .filter-section {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            border: 1px solid #e5e7eb;
+        }
+        .filter-section h3 { margin: 0 0 12px 0; font-size: 0.95rem; color: #374151; }
+        .filter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+
+        .kpi-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        .kpi {
+            display: inline-block;
+            padding: 12px 16px;
+            border-radius: 8px;
+            background: #eef2ff;
+            font-weight: 700;
+        }
+        .kpi .label { font-size: 0.8rem; color: #6b7280; font-weight: 500; }
+        .kpi .value { font-size: 1.2rem; color: #1e293b; }
+
+        #chartContainer { min-height: 450px; }
+        #loading { display: none; color: #6b7280; font-style: italic; }
+
+        .data-table { margin-top: 20px; }
+        .data-table table { width: 100%; border-collapse: collapse; }
+        .data-table th, .data-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        .data-table thead th { background: #f8fafc; font-weight: 700; position: sticky; top: 0; }
+        .data-table .amount { text-align: right; font-family: 'Courier New', monospace; }
+        .data-table tbody tr:hover { background: #f8fafc; }
+
+        .toggle-table { margin-top: 12px; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <p><a href="/reports">Back to Reports</a></p>
+    <h1>Revenue by Period</h1>
+    <p class="note">View settled revenue aggregated by your chosen time period. Apply filters to drill down by system, payment method, facility, and more.</p>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="startDate">Start Date</label>
+            <input id="startDate" type="date" />
+        </div>
+        <div class="control-group">
+            <label for="endDate">End Date</label>
+            <input id="endDate" type="date" />
+        </div>
+        <div class="control-group">
+            <label for="period">Period</label>
+            <select id="period">
+                <option value="day">Day</option>
+                <option value="week">Week</option>
+                <option value="month" selected>Month</option>
+                <option value="quarter">Quarter</option>
+                <option value="year">Year</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>&nbsp;</label>
+            <button onclick="loadReport()">Generate Report</button>
+        </div>
+        <span id="loading">Loading...</span>
+    </div>
+
+    <div class="filter-section">
+        <h3>Filters (optional)</h3>
+        <div class="filter-grid">
+            <div class="control-group">
+                <label for="settlementSystem">Settlement System</label>
+                <select id="settlementSystem"><option value="">All</option></select>
+            </div>
+            <div class="control-group">
+                <label for="paymentMethod">Payment Method</label>
+                <select id="paymentMethod"><option value="">All</option></select>
+            </div>
+            <div class="control-group">
+                <label for="chargeCode">Charge Code</label>
+                <select id="chargeCode"><option value="">All</option></select>
+            </div>
+            <div class="control-group">
+                <label for="deviceType">Device Type</label>
+                <select id="deviceType"><option value="">All</option></select>
+            </div>
+            <div class="control-group">
+                <label for="facilityType">Facility Type</label>
+                <select id="facilityType"><option value="">All</option></select>
+            </div>
+            <div class="control-group">
+                <label for="facilityName">Facility Name</label>
+                <select id="facilityName"><option value="">All</option></select>
+            </div>
+        </div>
+        <div style="margin-top: 12px;">
+            <button class="secondary" onclick="clearFilters()">Clear Filters</button>
+        </div>
+    </div>
+
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <div id="chartContainer"></div>
+
+    <div class="toggle-table">
+        <button class="secondary" onclick="toggleTable()">Show/Hide Data Table</button>
+    </div>
+    <div class="data-table" id="dataTable" style="display: none;"></div>
+</div>
+
+<script>
+    const token = localStorage.getItem('access_token');
+    if (!token) { window.location.href = '/'; }
+
+    let reportData = [];
+
+    // Set default dates (last 90 days)
+    (function setDefaultDates() {
+        const today = new Date();
+        const end = new Date(today);
+        const start = new Date(today);
+        start.setDate(start.getDate() - 90);
+
+        const asDate = d => d.toISOString().split('T')[0];
+        document.getElementById('startDate').value = asDate(start);
+        document.getElementById('endDate').value = asDate(end);
+    })();
+
+    // Load filter options on page load
+    async function loadFilterOptions() {
+        try {
+            const resp = await fetch('/api/v1/reports/revenue/filters', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!resp.ok) return;
+
+            const data = await resp.json();
+
+            populateSelect('settlementSystem', data.settlement_systems || []);
+            populateSelect('paymentMethod', data.payment_methods || []);
+            populateSelect('chargeCode', data.charge_codes || []);
+            populateSelect('deviceType', data.device_types || []);
+            populateSelect('facilityType', data.facility_types || []);
+            populateSelect('facilityName', data.facility_names || []);
+        } catch (err) {
+            console.error('Failed to load filter options:', err);
+        }
+    }
+
+    function populateSelect(id, options) {
+        const select = document.getElementById(id);
+        // Keep the "All" option
+        select.innerHTML = '<option value="">All</option>';
+        options.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt;
+            option.textContent = opt;
+            select.appendChild(option);
+        });
+    }
+
+    function clearFilters() {
+        document.getElementById('settlementSystem').value = '';
+        document.getElementById('paymentMethod').value = '';
+        document.getElementById('chargeCode').value = '';
+        document.getElementById('deviceType').value = '';
+        document.getElementById('facilityType').value = '';
+        document.getElementById('facilityName').value = '';
+    }
+
+    async function loadReport() {
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        const period = document.getElementById('period').value;
+
+        if (!startDate || !endDate) {
+            alert('Please select both start and end dates');
+            return;
+        }
+
+        // Build query params
+        const params = new URLSearchParams({
+            start_date: startDate,
+            end_date: endDate,
+            period: period
+        });
+
+        // Add optional filters
+        const filters = {
+            settlement_system: document.getElementById('settlementSystem').value,
+            payment_method: document.getElementById('paymentMethod').value,
+            charge_code: document.getElementById('chargeCode').value,
+            device_type: document.getElementById('deviceType').value,
+            facility_type: document.getElementById('facilityType').value,
+            facility_name: document.getElementById('facilityName').value
+        };
+
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value) params.append(key, value);
+        });
+
+        document.getElementById('loading').style.display = 'inline';
+        document.getElementById('chartContainer').innerHTML = '';
+        document.getElementById('kpiRow').innerHTML = '';
+        document.getElementById('dataTable').innerHTML = '';
+
+        try {
+            const resp = await fetch(`/api/v1/reports/revenue?${params.toString()}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!resp.ok) {
+                const text = await resp.text();
+                alert('Error: ' + text);
+                return;
+            }
+
+            const result = await resp.json();
+            reportData = result.data || [];
+
+            renderKPIs(result.summary || {});
+            renderChart(reportData, period);
+            renderTable(reportData, period);
+
+        } catch (err) {
+            alert('Error loading report: ' + (err.message || err));
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+        }
+    }
+
+    function renderKPIs(summary) {
+        const container = document.getElementById('kpiRow');
+        if (!summary.total_revenue) {
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="kpi">
+                <div class="label">Total Revenue</div>
+                <div class="value">$${summary.total_revenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+            </div>
+            <div class="kpi">
+                <div class="label">Transaction Count</div>
+                <div class="value">${summary.transaction_count.toLocaleString()}</div>
+            </div>
+            <div class="kpi">
+                <div class="label">Avg per Transaction</div>
+                <div class="value">$${summary.avg_per_transaction.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+            </div>
+            <div class="kpi">
+                <div class="label">Periods</div>
+                <div class="value">${summary.period_count}</div>
+            </div>
+        `;
+    }
+
+    function renderChart(data, period) {
+        if (data.length === 0) {
+            document.getElementById('chartContainer').innerHTML = '<p style="color:#6b7280; text-align:center; padding: 40px;">No data found for the selected criteria</p>';
+            return;
+        }
+
+        const periodLabels = {
+            day: 'Daily',
+            week: 'Weekly',
+            month: 'Monthly',
+            quarter: 'Quarterly',
+            year: 'Yearly'
+        };
+
+        const trace = {
+            x: data.map(d => d.period_label),
+            y: data.map(d => d.amount),
+            type: 'bar',
+            marker: {
+                color: '#2563eb',
+                line: { color: '#1d4ed8', width: 1 }
+            },
+            hovertemplate: '<b>%{x}</b><br>Revenue: $%{y:,.2f}<extra></extra>'
+        };
+
+        const layout = {
+            title: {
+                text: `${periodLabels[period]} Revenue`,
+                font: { size: 18, color: '#1e293b' }
+            },
+            xaxis: {
+                title: 'Period',
+                tickangle: -45,
+                tickfont: { size: 11 }
+            },
+            yaxis: {
+                title: 'Revenue ($)',
+                tickformat: '$,.0f',
+                gridcolor: '#e5e7eb'
+            },
+            margin: { t: 60, b: 120, l: 80, r: 40 },
+            plot_bgcolor: 'white',
+            paper_bgcolor: 'white',
+            hovermode: 'x unified'
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: true,
+            modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+            displaylogo: false
+        };
+
+        Plotly.newPlot('chartContainer', [trace], layout, config);
+    }
+
+    function renderTable(data, period) {
+        if (data.length === 0) {
+            document.getElementById('dataTable').innerHTML = '';
+            return;
+        }
+
+        const rows = data.map(d => `
+            <tr>
+                <td>${d.period_label}</td>
+                <td class="amount">${d.transaction_count.toLocaleString()}</td>
+                <td class="amount">$${d.amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+            </tr>
+        `).join('');
+
+        document.getElementById('dataTable').innerHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Period</th>
+                        <th class="amount">Transactions</th>
+                        <th class="amount">Revenue</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        `;
+    }
+
+    function toggleTable() {
+        const table = document.getElementById('dataTable');
+        table.style.display = table.style.display === 'none' ? 'block' : 'none';
+    }
+
+    // Load filter options on page load
+    loadFilterOptions();
+</script>
+</body>
+</html>

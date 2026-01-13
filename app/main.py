@@ -145,6 +145,12 @@ async def settle_by_source_page(request: Request):
     return templates.TemplateResponse(request=request, name="settle_by_source.html")
 
 
+@app.get("/reports/revenue", response_class=HTMLResponse)
+async def revenue_report_page(request: Request):
+    """Serve the revenue by period report page"""
+    return templates.TemplateResponse(request=request, name="revenue_report.html")
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
     """Serve the admin configuration page"""

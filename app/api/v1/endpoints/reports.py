@@ -309,39 +309,173 @@ async def settle_rollup_report(
     return {"rows": result_rows}
 
 
-@router.get('/revenue')
-async def revenue_report(
-    start_date: Optional[str] = '2025-10-01',
-    end_date: Optional[str] = datetime.now().strftime('%Y-%m-%d'),
-    period: Optional[str] = 'month',
+@router.get('/revenue/filters')
+async def revenue_filter_options(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role([UserRole.MANAGER, UserRole.ADMIN]))
 ):
-    """Return revenue data grouped by period.
+    """Return distinct values for all filter dropdowns."""
+
+    filters = {}
+
+    # Settlement systems
+    result = db.execute(text("SELECT DISTINCT settlement_system FROM app.dim_settlement_system ORDER BY settlement_system"))
+    filters['settlement_systems'] = [row[0] for row in result.fetchall() if row[0]]
+
+    # Payment methods
+    result = db.execute(text("SELECT DISTINCT payment_method_type FROM app.dim_payment_method ORDER BY payment_method_type"))
+    filters['payment_methods'] = [row[0] for row in result.fetchall() if row[0]]
+
+    # Charge codes
+    result = db.execute(text("SELECT DISTINCT charge_code FROM app.dim_charge_code ORDER BY charge_code"))
+    filters['charge_codes'] = [str(row[0]) for row in result.fetchall() if row[0]]
+
+    # Device types
+    result = db.execute(text("SELECT DISTINCT device_type FROM app.dim_device WHERE device_type IS NOT NULL ORDER BY device_type"))
+    filters['device_types'] = [row[0] for row in result.fetchall() if row[0]]
+
+    # Facility types
+    result = db.execute(text("SELECT DISTINCT facility_type FROM app.dim_facility WHERE facility_type IS NOT NULL ORDER BY facility_type"))
+    filters['facility_types'] = [row[0] for row in result.fetchall() if row[0]]
+
+    # Facility names
+    result = db.execute(text("SELECT DISTINCT facility_name FROM app.dim_facility ORDER BY facility_name"))
+    filters['facility_names'] = [row[0] for row in result.fetchall() if row[0]]
+
+    return filters
+
+
+@router.get('/revenue')
+async def revenue_report(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    period: Optional[str] = 'month',
+    settlement_system: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    charge_code: Optional[str] = None,
+    device_type: Optional[str] = None,
+    facility_type: Optional[str] = None,
+    facility_name: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.MANAGER, UserRole.ADMIN]))
+):
+    """Return revenue data grouped by period with optional filters.
 
     Query parameters:
     - start_date: YYYY-MM-DD (inclusive)
     - end_date: YYYY-MM-DD (inclusive)
-    - period: 'day', 'week', or 'month' (default: 'month')
+    - period: 'day', 'week', 'month', 'quarter', or 'year' (default: 'month')
+    - settlement_system: Filter by settlement system
+    - payment_method: Filter by payment method type
+    - charge_code: Filter by charge code
+    - device_type: Filter by device type
+    - facility_type: Filter by facility type
+    - facility_name: Filter by facility name
     """
-    qry = text("""
-        select
-            settle_date, sum(settle_amount) amount
-        from app.fact_transaction t
-        where 
-            settle_date BETWEEN :start_date and :end_date
-        group by settle_date
-        order by 1
-        """)
-    
-    records = db.execute(qry, {"start_date": start_date, "end_date": end_date}).fetchall()
+    if not start_date or not end_date:
+        raise HTTPException(status_code=400, detail="start_date and end_date are required (YYYY-MM-DD)")
+
+    try:
+        start_dt = datetime.fromisoformat(start_date + "T00:00:00")
+        end_dt = datetime.fromisoformat(end_date + "T23:59:59")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
+
+    # Build period grouping expression based on SQL Server syntax
+    period_expressions = {
+        'day': "CONVERT(VARCHAR(10), t.settle_date, 120)",
+        'week': "CONVERT(VARCHAR(10), DATEADD(DAY, 1 - DATEPART(WEEKDAY, t.settle_date), t.settle_date), 120)",
+        'month': "FORMAT(t.settle_date, 'yyyy-MM')",
+        'quarter': "CONCAT(YEAR(t.settle_date), '-Q', DATEPART(QUARTER, t.settle_date))",
+        'year': "CAST(YEAR(t.settle_date) AS VARCHAR(4))"
+    }
+
+    period_labels = {
+        'day': "CONVERT(VARCHAR(10), t.settle_date, 120)",
+        'week': "CONCAT('Week of ', CONVERT(VARCHAR(10), DATEADD(DAY, 1 - DATEPART(WEEKDAY, t.settle_date), t.settle_date), 120))",
+        'month': "FORMAT(t.settle_date, 'MMM yyyy')",
+        'quarter': "CONCAT('Q', DATEPART(QUARTER, t.settle_date), ' ', YEAR(t.settle_date))",
+        'year': "CAST(YEAR(t.settle_date) AS VARCHAR(4))"
+    }
+
+    if period not in period_expressions:
+        raise HTTPException(status_code=400, detail=f"Invalid period. Must be one of: day, week, month, quarter, year")
+
+    period_expr = period_expressions[period]
+    period_label_expr = period_labels[period]
+
+    # Build WHERE clause with optional filters
+    where_conditions = ["t.settle_date >= :start_dt", "t.settle_date <= :end_dt"]
+    params = {"start_dt": start_dt, "end_dt": end_dt}
+
+    if settlement_system:
+        where_conditions.append("ss.settlement_system = :settlement_system")
+        params["settlement_system"] = settlement_system
+
+    if payment_method:
+        where_conditions.append("pm.payment_method_type = :payment_method")
+        params["payment_method"] = payment_method
+
+    if charge_code:
+        where_conditions.append("CAST(cc.charge_code AS VARCHAR(20)) = :charge_code")
+        params["charge_code"] = charge_code
+
+    if device_type:
+        where_conditions.append("d.device_type = :device_type")
+        params["device_type"] = device_type
+
+    if facility_type:
+        where_conditions.append("f.facility_type = :facility_type")
+        params["facility_type"] = facility_type
+
+    if facility_name:
+        where_conditions.append("f.facility_name = :facility_name")
+        params["facility_name"] = facility_name
+
+    where_clause = " AND ".join(where_conditions)
+
+    query = text(f"""
+        SELECT
+            {period_expr} AS period_key,
+            {period_label_expr} AS period_label,
+            COUNT(*) AS transaction_count,
+            SUM(t.settle_amount) AS amount
+        FROM app.fact_transaction t
+        INNER JOIN app.dim_charge_code cc ON t.charge_code_id = cc.charge_code_id
+        INNER JOIN app.dim_location l ON t.location_id = l.location_id
+        INNER JOIN app.dim_facility f ON l.facility_id = f.facility_id
+        INNER JOIN app.dim_settlement_system ss ON t.settlement_system_id = ss.settlement_system_id
+        INNER JOIN app.dim_payment_method pm ON t.payment_method_id = pm.payment_method_id
+        INNER JOIN app.dim_device d ON t.device_id = d.device_id
+        WHERE {where_clause}
+        GROUP BY {period_expr}, {period_label_expr}
+        ORDER BY {period_expr}
+    """)
+
+    rows = db.execute(query, params).fetchall()
 
     results = []
-    for row in records:
+    total_revenue = 0.0
+    total_transactions = 0
+
+    for row in rows:
+        amount = float(row.amount or 0)
+        count = int(row.transaction_count)
+        total_revenue += amount
+        total_transactions += count
         results.append({
-            "settle_date": row.settle_date.isoformat() if row.settle_date else None,
-            "amount": float(row.amount) or 0
+            "period_key": row.period_key,
+            "period_label": row.period_label,
+            "transaction_count": count,
+            "amount": amount
         })
-    
-    return {"data": results}
+
+    summary = {
+        "total_revenue": total_revenue,
+        "transaction_count": total_transactions,
+        "avg_per_transaction": total_revenue / total_transactions if total_transactions > 0 else 0,
+        "period_count": len(results)
+    }
+
+    return {"data": results, "summary": summary}
         

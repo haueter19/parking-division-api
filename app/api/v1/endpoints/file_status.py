@@ -369,7 +369,7 @@ async def load_file_to_staging(
         )
     
     try:
-        loader = DataLoader(db, traffic_db, file_record.data_source_type)
+        loader = DataLoader(db, file_record.data_source_type)
         
         # Get the appropriate loader function
         load_function = loader.mapping.get(file_record.data_source_type)

@@ -31,7 +31,10 @@ SELECT
     GETDATE(),
     s.space_name,
     CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.date AS DATE), 120) + ' ' + s.time),
-    s.total, 
+    CASE
+        WHEN s.transaction_type LIKE 'Remote%' THEN s.total + s.convenience_fee
+        ELSE s.total
+    END settle_amount,
     COALESCE(CAST(pm.payment_method_id As VARCHAR(50)), 'NO_PAYMENT_METHOD') payment_method,
     COALESCE(CAST(d.device_id As VARCHAR(50)), 'DEVICE_NOT_FOUND') device_id,
     COALESCE(CAST(ss.settlement_system_id As VARCHAR(50)), 'SETTLEMENT_SYSTEM_NOT_FOUND') settlement_system_id,

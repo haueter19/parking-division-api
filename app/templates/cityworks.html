@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cityworks Work Orders - Parking Division</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #2d3748;
+            font-size: 1.5rem;
+        }
+
+        .header-nav {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .header-nav a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .header-nav a:hover {
+            background: #f0f4ff;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-name {
+            color: #4a5568;
+            font-weight: 600;
+        }
+
+        .logout-btn {
+            background: #f56565;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #e53e3e;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .page-title {
+            color: #2d3748;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 1.75rem;
+        }
+
+        .subtitle {
+            color: #718096;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        /* Filters Section */
+        .filters-section {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .filters-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .filters-header h3 {
+            color: #2d3748;
+            font-size: 1.1rem;
+        }
+
+        .toggle-filters-btn {
+            background: #667eea;
+            color: white;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .toggle-filters-btn:hover {
+            background: #5a67d8;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .filter-group label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .filter-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 20px;
+            padding: 16px 20px;
+            background: #edf2f7;
+            border-radius: 8px;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-label {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        .stat-value {
+            color: #2d3748;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        /* Work Orders Table */
+        .table-container {
+            overflow-x: auto;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #2d3748;
+            color: white;
+        }
+
+        th {
+            padding: 14px 16px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th.sortable:hover {
+            background: #4a5568;
+        }
+
+        th .sort-icon {
+            margin-left: 6px;
+            opacity: 0.5;
+        }
+
+        th.sorted .sort-icon {
+            opacity: 1;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #e2e8f0;
+            transition: background 0.15s;
+            cursor: pointer;
+        }
+
+        tbody tr:hover {
+            background: #f0f4ff;
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        td {
+            padding: 14px 16px;
+            font-size: 0.9rem;
+            color: #4a5568;
+        }
+
+        /* Status Badge */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-open {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-in-progress {
+            background: #bee3f8;
+            color: #2a4365;
+        }
+
+        .status-pending {
+            background: #feebc8;
+            color: #744210;
+        }
+
+        .status-closed {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        /* Loading State */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e2e8f0;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+        }
+
+        /* Error Message */
+        .error-message {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .header-nav {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .filters-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-bar {
+                flex-direction: column;
+                gap: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Cityworks Work Orders</h1>
+        <div class="header-nav">
+            <a href="/reports">Reports</a>
+            <a href="/upload">Upload Files</a>
+            <a href="/files/status">File Status</a>
+            <a href="/admin">Admin Config</a>
+            <div class="user-info">
+                <span class="user-name" id="userName">Loading...</span>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2 class="page-title">Update GIS Work Orders</h2>
+        <p class="subtitle">Select a work order to process GIS updates</p>
+
+        <!-- Filters Section -->
+        <div class="filters-section">
+            <div class="filters-header">
+                <h3>Filters</h3>
+                <button class="toggle-filters-btn" id="toggleFiltersBtn" onclick="toggleFilters()">Hide Filters</button>
+            </div>
+            <div id="filtersContent">
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label for="filterStatus">Status</label>
+                        <select id="filterStatus">
+                            <option value="">All Statuses</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterSubmitTo">Submit To</label>
+                        <select id="filterSubmitTo">
+                            <option value="">All</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterInitiateDateStart">Initiate Date From</label>
+                        <input type="date" id="filterInitiateDateStart">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterInitiateDateEnd">Initiate Date To</label>
+                        <input type="date" id="filterInitiateDateEnd">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterActualStartDateStart">Actual Start From</label>
+                        <input type="date" id="filterActualStartDateStart">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterActualStartDateEnd">Actual Start To</label>
+                        <input type="date" id="filterActualStartDateEnd">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterParentTemplate">Parent Template</label>
+                        <select id="filterParentTemplate">
+                            <option value="">All Templates</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterRequestedBy">Requested By</label>
+                        <select id="filterRequestedBy">
+                            <option value="">All</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="filter-actions">
+                    <button class="btn btn-secondary" onclick="clearFilters()">Clear Filters</button>
+                    <button class="btn btn-primary" onclick="applyFilters()">Apply Filters</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+            <div class="stat-item">
+                <span class="stat-label">Total Work Orders:</span>
+                <span class="stat-value" id="totalCount">--</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Filtered:</span>
+                <span class="stat-value" id="filteredCount">--</span>
+            </div>
+        </div>
+
+        <!-- Work Orders Table -->
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="work_order_id">WO ID <span class="sort-icon">&#8597;</span></th>
+                        <th class="sortable" data-sort="description">Description <span class="sort-icon">&#8597;</span></th>
+                        <th class="sortable" data-sort="status">Status <span class="sort-icon">&#8597;</span></th>
+                        <th class="sortable" data-sort="submit_to">Submit To <span class="sort-icon">&#8597;</span></th>
+                        <th class="sortable" data-sort="initiate_date">Initiate Date <span class="sort-icon">&#8597;</span></th>
+                        <th class="sortable" data-sort="actual_start_date">Actual Start <span class="sort-icon">&#8597;</span></th>
+                        <th class="sortable" data-sort="parent_template">Parent Template <span class="sort-icon">&#8597;</span></th>
+                        <th class="sortable" data-sort="requested_by">Requested By <span class="sort-icon">&#8597;</span></th>
+                    </tr>
+                </thead>
+                <tbody id="workOrdersBody">
+                    <tr>
+                        <td colspan="8">
+                            <div class="loading">
+                                <div class="loading-spinner"></div>
+                                Loading work orders...
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="/static/cityworks.js"></script>
+</body>
+</html>

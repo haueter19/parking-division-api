@@ -168,6 +168,25 @@ async def cash_variance_page(request: Request):
         name="cash_variance.html"
     )
 
+
+@app.get("/cityworks", response_class=HTMLResponse)
+async def cityworks_page(request: Request):
+    """Serve the Cityworks work orders list page"""
+    return templates.TemplateResponse(
+        request=request,
+        name="cityworks.html"
+    )
+
+
+@app.get("/cityworks/detail", response_class=HTMLResponse)
+async def cityworks_detail_page(request: Request):
+    """Serve the Cityworks work order detail/processing page"""
+    return templates.TemplateResponse(
+        request=request,
+        name="cityworks_detail.html"
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001, reload=True)

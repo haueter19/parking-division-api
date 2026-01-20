@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Order Details - Parking Division</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #2d3748;
+            font-size: 1.5rem;
+        }
+
+        .header-nav {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .header-nav a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .header-nav a:hover {
+            background: #f0f4ff;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-name {
+            color: #4a5568;
+            font-weight: 600;
+        }
+
+        .logout-btn {
+            background: #f56565;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #e53e3e;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .back-link:hover {
+            background: #f0f4ff;
+        }
+
+        .page-title {
+            color: #2d3748;
+            margin-bottom: 8px;
+            font-size: 1.75rem;
+        }
+
+        .work-order-id {
+            color: #667eea;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            color: #718096;
+            margin-bottom: 30px;
+        }
+
+        /* Content Grid */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 900px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Card Styling */
+        .card {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card-title {
+            color: #2d3748;
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        /* Work Order Details */
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .detail-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .detail-value {
+            font-size: 0.95rem;
+            color: #2d3748;
+        }
+
+        .detail-value.empty {
+            color: #a0aec0;
+            font-style: italic;
+        }
+
+        /* Status Badge */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .status-open {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-in-progress {
+            background: #bee3f8;
+            color: #2a4365;
+        }
+
+        .status-pending {
+            background: #feebc8;
+            color: #744210;
+        }
+
+        .status-closed {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        /* Comments Section */
+        .comments-box {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            min-height: 100px;
+            color: #4a5568;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        /* Assets Section */
+        .assets-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .asset-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            transition: all 0.2s;
+        }
+
+        .asset-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+
+        .asset-field {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .asset-field-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #718096;
+            text-transform: uppercase;
+        }
+
+        .asset-field-value {
+            font-size: 0.9rem;
+            color: #2d3748;
+        }
+
+        .no-assets {
+            text-align: center;
+            padding: 30px;
+            color: #718096;
+        }
+
+        /* Processing Section */
+        .process-section {
+            grid-column: 1 / -1;
+        }
+
+        .process-card {
+            background: #edf2f7;
+            border: 2px solid #cbd5e0;
+        }
+
+        .process-type-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #667eea;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 8px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .btn-primary:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .btn-warning {
+            background: #ed8936;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #dd6b20;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        /* Messages */
+        .message {
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .message.success {
+            background: #c6f6d5;
+            color: #22543d;
+            display: block;
+        }
+
+        .message.error {
+            background: #fed7d7;
+            color: #c53030;
+            display: block;
+        }
+
+        .message.info {
+            background: #bee3f8;
+            color: #2a4365;
+            display: block;
+        }
+
+        /* Loading State */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e2e8f0;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .header-nav {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Work Order Details</h1>
+        <div class="header-nav">
+            <a href="/cityworks">Work Orders</a>
+            <a href="/reports">Reports</a>
+            <a href="/admin">Admin Config</a>
+            <div class="user-info">
+                <span class="user-name" id="userName">Loading...</span>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <a href="/cityworks" class="back-link">&#8592; Back to Work Orders</a>
+
+        <h2 class="page-title">Work Order: <span class="work-order-id" id="workOrderId">Loading...</span></h2>
+        <p class="subtitle" id="workOrderDescription">Loading work order details...</p>
+
+        <!-- Message Display -->
+        <div id="messageBox" class="message"></div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading">
+            <div class="loading-spinner"></div>
+            Loading work order details...
+        </div>
+
+        <!-- Content (hidden until loaded) -->
+        <div id="contentArea" style="display: none;">
+            <div class="content-grid">
+                <!-- Work Order Details -->
+                <div class="card">
+                    <h3 class="card-title">Work Order Information</h3>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">Status</span>
+                            <span class="detail-value" id="detailStatus">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Submit To</span>
+                            <span class="detail-value" id="detailSubmitTo">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Initiate Date</span>
+                            <span class="detail-value" id="detailInitiateDate">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Actual Start Date</span>
+                            <span class="detail-value" id="detailActualStartDate">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Parent Template</span>
+                            <span class="detail-value" id="detailParentTemplate">--</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Requested By</span>
+                            <span class="detail-value" id="detailRequestedBy">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Comments Section -->
+                <div class="card">
+                    <h3 class="card-title">Comments / Notes</h3>
+                    <div class="comments-box" id="detailComments">
+                        No comments available.
+                    </div>
+                </div>
+
+                <!-- Assets Section -->
+                <div class="card" style="grid-column: 1 / -1;">
+                    <h3 class="card-title">Attached Assets</h3>
+                    <div class="assets-list" id="assetsList">
+                        <div class="no-assets">Loading assets...</div>
+                    </div>
+                </div>
+
+                <!-- Processing Section -->
+                <div class="card process-card process-section">
+                    <h3 class="card-title">Process Work Order</h3>
+
+                    <div class="process-type-indicator" id="processTypeIndicator">
+                        <span id="processTypeIcon">&#9881;</span>
+                        <span id="processTypeLabel">Process Type: Loading...</span>
+                    </div>
+
+                    <!-- Dynamic Form Fields - will be populated based on parent template -->
+                    <div id="processFormContainer">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="selectAction">Action</label>
+                                <select id="selectAction">
+                                    <option value="">Select an action...</option>
+                                    <option value="out_of_service">Move Space Out of Service</option>
+                                    <option value="return_to_service">Return Space to Service</option>
+                                    <option value="add_asset">Add Asset to GIS</option>
+                                    <option value="remove_asset">Remove Asset from GIS</option>
+                                    <option value="update_status">Update Status Only</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="selectAsset">Select Asset (if applicable)</label>
+                                <select id="selectAsset">
+                                    <option value="">Select an asset...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group" id="spaceIdGroup" style="display: none;">
+                            <label for="inputSpaceId">Space ID</label>
+                            <input type="text" id="inputSpaceId" placeholder="Enter space ID">
+                        </div>
+
+                        <div class="form-group" id="newStatusGroup" style="display: none;">
+                            <label for="selectNewStatus">New Status</label>
+                            <select id="selectNewStatus">
+                                <option value="">Select new status...</option>
+                                <option value="Out of Service">Out of Service</option>
+                                <option value="Active">Active</option>
+                                <option value="Pending">Pending</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="inputNotes">Processing Notes</label>
+                            <textarea id="inputNotes" placeholder="Enter any notes about this action..."></textarea>
+                        </div>
+
+                        <div class="action-buttons">
+                            <button class="btn btn-primary" id="btnProcess" onclick="processWorkOrder()">
+                                Process Work Order
+                            </button>
+                            <button class="btn btn-secondary" onclick="window.location.href='/cityworks'">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            window.location.href = '/';
+        }
+
+        // Get work order ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const workOrderId = urlParams.get('id');
+
+        if (!workOrderId) {
+            window.location.href = '/cityworks';
+        }
+
+        let workOrderData = null;
+        let assetsData = [];
+
+        // Load user info
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/v1/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    const user = await response.json();
+                    document.getElementById('userName').textContent = user.full_name || user.username;
+                } else {
+                    logout();
+                }
+            } catch (error) {
+                console.error('Error loading user info:', error);
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('access_token');
+            window.location.href = '/';
+        }
+
+        // Load work order details
+        async function loadWorkOrderDetails() {
+            try {
+                const response = await fetch(`/api/v1/cityworks/work-orders/${workOrderId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load work order details');
+                }
+
+                const data = await response.json();
+                workOrderData = data.work_order;
+                assetsData = data.assets || [];
+
+                // Update page with work order details
+                document.getElementById('workOrderId').textContent = workOrderId;
+                document.getElementById('workOrderDescription').textContent = workOrderData.description || 'No description';
+
+                // Update detail fields
+                document.getElementById('detailStatus').innerHTML = getStatusBadge(workOrderData.status);
+                document.getElementById('detailSubmitTo').textContent = workOrderData.submit_to || '--';
+                document.getElementById('detailInitiateDate').textContent = formatDate(workOrderData.initiate_date);
+                document.getElementById('detailActualStartDate').textContent = formatDate(workOrderData.actual_start_date);
+                document.getElementById('detailParentTemplate').textContent = workOrderData.parent_template || '--';
+                document.getElementById('detailRequestedBy').textContent = workOrderData.requested_by || '--';
+                document.getElementById('detailComments').textContent = workOrderData.comments || 'No comments available.';
+
+                // Update process type indicator
+                if (data.parent_template_info && data.parent_template_info.process_type) {
+                    document.getElementById('processTypeLabel').textContent =
+                        'Process Type: ' + data.parent_template_info.process_type;
+                }
+
+                // Render assets
+                renderAssets(assetsData);
+
+                // Populate asset dropdown
+                populateAssetDropdown(assetsData);
+
+                // Show content, hide loading
+                document.getElementById('loadingState').style.display = 'none';
+                document.getElementById('contentArea').style.display = 'block';
+
+            } catch (error) {
+                console.error('Error loading work order:', error);
+                showMessage('Error loading work order details: ' + error.message, 'error');
+                document.getElementById('loadingState').innerHTML =
+                    '<div style="color: #c53030;">Error loading work order. <a href="/cityworks">Return to list</a></div>';
+            }
+        }
+
+        function getStatusBadge(status) {
+            if (!status) return '<span class="status-badge">Unknown</span>';
+
+            const statusLower = status.toLowerCase();
+            let className = 'status-badge';
+
+            if (statusLower.includes('open')) className += ' status-open';
+            else if (statusLower.includes('progress')) className += ' status-in-progress';
+            else if (statusLower.includes('pending')) className += ' status-pending';
+            else if (statusLower.includes('closed') || statusLower.includes('complete')) className += ' status-closed';
+
+            return `<span class="${className}">${status}</span>`;
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '--';
+            try {
+                return new Date(dateStr).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            } catch {
+                return dateStr;
+            }
+        }
+
+        function renderAssets(assets) {
+            const container = document.getElementById('assetsList');
+
+            if (!assets || assets.length === 0) {
+                container.innerHTML = '<div class="no-assets">No assets attached to this work order.</div>';
+                return;
+            }
+
+            let html = '';
+            assets.forEach((asset, index) => {
+                html += `
+                    <div class="asset-card" data-index="${index}">
+                        <div class="asset-field">
+                            <span class="asset-field-label">Asset ID</span>
+                            <span class="asset-field-value">${asset.asset_id || '--'}</span>
+                        </div>
+                        <div class="asset-field">
+                            <span class="asset-field-label">Type</span>
+                            <span class="asset-field-value">${asset.asset_type || '--'}</span>
+                        </div>
+                        <div class="asset-field">
+                            <span class="asset-field-label">Space ID</span>
+                            <span class="asset-field-value">${asset.space_id || '--'}</span>
+                        </div>
+                        <div class="asset-field">
+                            <span class="asset-field-label">Location</span>
+                            <span class="asset-field-value">${asset.location || '--'}</span>
+                        </div>
+                        <div class="asset-field">
+                            <span class="asset-field-label">Status</span>
+                            <span class="asset-field-value">${asset.status || '--'}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function populateAssetDropdown(assets) {
+            const select = document.getElementById('selectAsset');
+            select.innerHTML = '<option value="">Select an asset...</option>';
+
+            if (assets && assets.length > 0) {
+                assets.forEach((asset, index) => {
+                    const option = document.createElement('option');
+                    option.value = asset.asset_id || index;
+                    option.textContent = `${asset.asset_type || 'Asset'} - ${asset.space_id || asset.asset_id || index}`;
+                    select.appendChild(option);
+                });
+            }
+        }
+
+        // Handle action selection to show/hide relevant fields
+        document.getElementById('selectAction').addEventListener('change', function() {
+            const action = this.value;
+            const spaceIdGroup = document.getElementById('spaceIdGroup');
+            const newStatusGroup = document.getElementById('newStatusGroup');
+
+            // Hide all conditional fields first
+            spaceIdGroup.style.display = 'none';
+            newStatusGroup.style.display = 'none';
+
+            // Show relevant fields based on action
+            if (action === 'out_of_service' || action === 'return_to_service') {
+                spaceIdGroup.style.display = 'block';
+            }
+
+            if (action === 'update_status') {
+                newStatusGroup.style.display = 'block';
+            }
+        });
+
+        // Process work order
+        async function processWorkOrder() {
+            const action = document.getElementById('selectAction').value;
+            if (!action) {
+                showMessage('Please select an action to perform.', 'error');
+                return;
+            }
+
+            const payload = {
+                action: action,
+                space_id: document.getElementById('inputSpaceId').value || null,
+                new_status: document.getElementById('selectNewStatus').value || null,
+                notes: document.getElementById('inputNotes').value || null
+            };
+
+            const btnProcess = document.getElementById('btnProcess');
+            btnProcess.disabled = true;
+            btnProcess.textContent = 'Processing...';
+
+            try {
+                const response = await fetch(`/api/v1/cityworks/work-orders/${workOrderId}/process?action=${action}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showMessage('Work order processed successfully!', 'success');
+                    // Optionally reload the page or redirect after a delay
+                    setTimeout(() => {
+                        loadWorkOrderDetails();
+                    }, 2000);
+                } else {
+                    throw new Error(result.detail || result.message || 'Processing failed');
+                }
+            } catch (error) {
+                console.error('Error processing work order:', error);
+                showMessage('Error processing work order: ' + error.message, 'error');
+            } finally {
+                btnProcess.disabled = false;
+                btnProcess.textContent = 'Process Work Order';
+            }
+        }
+
+        function showMessage(text, type) {
+            const messageBox = document.getElementById('messageBox');
+            messageBox.textContent = text;
+            messageBox.className = 'message ' + type;
+
+            // Auto-hide success messages
+            if (type === 'success') {
+                setTimeout(() => {
+                    messageBox.className = 'message';
+                }, 5000);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserInfo();
+            loadWorkOrderDetails();
+        });
+    </script>
+</body>
+</html>

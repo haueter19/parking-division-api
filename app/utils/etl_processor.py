@@ -649,7 +649,7 @@ class DataLoader:
         for col in int_columns:
             if col in df.columns:
                 # Convert to int, replacing NaN with None
-                df[col] = df[col].apply(lambda x: int(x) if pd.notna(x) else None)
+                df[col] = df[col].apply(lambda x: int(float(x)) if pd.notna(x) else None)
 
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
@@ -912,12 +912,15 @@ class DataLoader:
                     df[col] = pd.to_datetime(df[col], errors="coerce")
                 except Exception:
                     pass
-                    
+
+         
         # --- Handle integer columns - replace NaN with None ---
         int_columns = ['coin_count', 'bill_count']
         
         for col in int_columns:
             if col in df.columns:
+                # --- Remove $ or comma from coin_count and bill_count if present ---
+                df[col] = df[col].apply(lambda x: int(float(x.replace('$','').replace(',',''))) if pd.notna(x) else x)
                 # Convert to nullable integer type or replace NaN with None
                 df[col] = df[col].replace({pd.NA: None, np.nan: None})
                 # Convert to int where not None
@@ -926,9 +929,6 @@ class DataLoader:
         # --- Convert pandas NaN to None for SQL ---
         df = df.replace({pd.NA: None, np.nan: None, pd.NaT: None})
 
-        # --- Remove .0 from Pole Ser No if present ---
-        #df['pole'] = df['pole'].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else x)
-        
         # --- Convert to list of dictionaries ---
         records = df.to_dict(orient="records")
         

@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Optional
 from datetime import datetime
-
+from cityworks import CityworksSession, CityworksConfig
+from cityworks.api.work_order import WorkOrderAPI
 from app.db.session import get_db
 from app.api.dependencies import get_current_active_user, require_role, UserProxy
 from app.models.database import UserRole
@@ -85,7 +86,7 @@ async def get_work_orders(
 
 @router.get("/work-orders/{work_order_id}")
 async def get_work_order_detail(
-    work_order_id: str,
+    work_order_id: int,
     db: Session = Depends(get_db),
     current_user: UserProxy = Depends(require_role([UserRole.MANAGER, UserRole.ADMIN]))
 ):
@@ -100,8 +101,28 @@ async def get_work_order_detail(
     - Parent template information (for determining process type)
     """
     # TODO: Integrate with cityworks python package
+    
+    # Configure connection
+    config = CityworksConfig(environment='prod')
+
+    # Create authenticated session
+    with CityworksSession(config) as session:
+        session.authenticate('CITY/tndnh', 'Segneri2A') # MUST CHANGE THIS!
+
+    # Instantiate work order API
+    wo_api = WorkOrderAPI(session)
+
+    # API call to get work order details
+    work_order = wo_api.get_by_sid(work_order_id)
+    work_order['assets'] = wo_api.get_entities(work_order_id)
+    try:
+        work_order['instructions'] = wo_api.get_instructions(work_order_id)[str(work_order_id)]
+    except:
+        work_order['instructions'] = {}
+    work_order['comments'] = wo_api.get_comments(work_order_id)
+
     # Example structure that will be returned:
-    return {
+    """{
         "work_order": {
             "work_order_id": work_order_id,
             "work_order_sid": None,
@@ -132,7 +153,8 @@ async def get_work_order_detail(
             "template_description": None,
             "process_type": None  # e.g., "Meter/Hood Space", "Add Asset", "Remove Asset"
         }
-    }
+    }"""
+    return work_order
 
 
 @router.get("/filter-options")

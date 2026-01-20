@@ -22,7 +22,10 @@ SELECT
     CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.date AS DATE), 120) + ' ' + s.time) transaction_date,
     s.total transaction_amount, 
     s.date settle_date, 
-    s.total settle_amount, 
+    CASE
+        WHEN s.transaction_type LIKE 'Remote%' THEN s.total + s.convenience_fee
+        ELSE s.total
+    END settle_amount,
     'ips_staging', 
     s.source_file_id, 
     s.id,

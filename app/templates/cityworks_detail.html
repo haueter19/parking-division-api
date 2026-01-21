@@ -670,20 +670,21 @@
 
                 const data = await response.json();
                 workOrderData = data.work_order;
+                console.log(workOrderData)
                 assetsData = data.assets || [];
 
                 // Update page with work order details
                 document.getElementById('workOrderId').textContent = workOrderId;
-                document.getElementById('workOrderDescription').textContent = workOrderData.description || 'No description';
+                document.getElementById('workOrderDescription').textContent = workOrderData.Description || 'No description';
 
                 // Update detail fields
-                document.getElementById('detailStatus').innerHTML = getStatusBadge(workOrderData.status);
-                document.getElementById('detailSubmitTo').textContent = workOrderData.submit_to || '--';
-                document.getElementById('detailInitiateDate').textContent = formatDate(workOrderData.initiate_date);
-                document.getElementById('detailActualStartDate').textContent = formatDate(workOrderData.actual_start_date);
+                document.getElementById('detailStatus').innerHTML = getStatusBadge(workOrderData.Status);
+                document.getElementById('detailSubmitTo').textContent = workOrderData.SubmitTo || '--';
+                document.getElementById('detailInitiateDate').textContent = formatDate(workOrderData.InitiateDate);
+                document.getElementById('detailActualStartDate').textContent = formatDate(workOrderData.ActualStartDate);
                 document.getElementById('detailParentTemplate').textContent = workOrderData.parent_template || '--';
-                document.getElementById('detailRequestedBy').textContent = workOrderData.requested_by || '--';
-                document.getElementById('detailComments').textContent = workOrderData.comments || 'No comments available.';
+                document.getElementById('detailRequestedBy').textContent = workOrderData.RequestedBy || '--';
+                document.getElementById('detailComments').textContent = workOrderData.Comments || 'No comments available.';
 
                 // Update process type indicator
                 if (data.parent_template_info && data.parent_template_info.process_type) {
@@ -749,24 +750,24 @@
                 html += `
                     <div class="asset-card" data-index="${index}">
                         <div class="asset-field">
-                            <span class="asset-field-label">Asset ID</span>
-                            <span class="asset-field-value">${asset.asset_id || '--'}</span>
+                            <span class="asset-field-label">Entity UID</span>
+                            <span class="asset-field-value">${asset.EntityUid || '--'}</span>
                         </div>
                         <div class="asset-field">
-                            <span class="asset-field-label">Type</span>
-                            <span class="asset-field-value">${asset.asset_type || '--'}</span>
+                            <span class="asset-field-label">Entity Type</span>
+                            <span class="asset-field-value">${asset.EntityType || '--'}</span>
                         </div>
                         <div class="asset-field">
-                            <span class="asset-field-label">Space ID</span>
-                            <span class="asset-field-value">${asset.space_id || '--'}</span>
+                            <span class="asset-field-label">Space #</span>
+                            <span class="asset-field-value">${asset.SpaceName || '--'}</span>
                         </div>
                         <div class="asset-field">
-                            <span class="asset-field-label">Location</span>
-                            <span class="asset-field-value">${asset.location || '--'}</span>
+                            <span class="asset-field-label">OBJECTID</span>
+                            <span class="asset-field-value">${asset.EntitySid || '--'}</span>
                         </div>
                         <div class="asset-field">
                             <span class="asset-field-label">Status</span>
-                            <span class="asset-field-value">${asset.status || '--'}</span>
+                            <span class="asset-field-value">${asset.Status || '--'}</span>
                         </div>
                     </div>
                 `;

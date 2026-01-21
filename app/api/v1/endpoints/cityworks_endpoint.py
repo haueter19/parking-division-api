@@ -102,6 +102,8 @@ async def get_work_order_detail(
     """
     # TODO: Integrate with cityworks python package
     
+    
+
     # Configure connection
     config = CityworksConfig(environment='prod')
 

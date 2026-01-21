@@ -407,7 +407,7 @@ function getStatusBadge(status) {
     let className = 'status-badge';
 
     if (statusLower.includes('open')) className += ' status-open';
-    else if (statusLower.includes('progress')) className += ' status-in-progress';
+    else if (statusLower.includes('complete')) className += ' status-in-progress';
     else if (statusLower.includes('pending')) className += ' status-pending';
     else if (statusLower.includes('closed') || statusLower.includes('complete')) className += ' status-closed';
 

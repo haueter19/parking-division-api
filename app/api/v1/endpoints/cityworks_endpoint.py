@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Optional
 from datetime import datetime
-from cityworks import CityworksSession, CityworksConfig
-from cityworks.api.work_order import WorkOrderAPI
-from cityworks.gis.parking import get_spaces_from_work_order
+#from cityworks import CityworksSession, CityworksConfig
+#from cityworks.api.work_order import WorkOrderAPI
+from cityworks.gis import parking
 from app.db.session import get_db
 from app.api.dependencies import get_current_active_user, require_role, UserProxy
 from app.models.database import UserRole
@@ -106,17 +106,40 @@ async def get_work_order_detail(
         WITH wo AS (
             -- Get details about single work order
             SELECT 
-                WorkOrderSid, WorkOrderId, Description, Status, Cancel, InitiateDate, InitiatedBy, InitiatedBySid, SubmitTo, SubmitToSid, SubmitToOpenBy, DateSubmitTo, 
-                ProjStartDate, ProjFinishDate, ActualStartDate, ActualFinishDate, RequestedBy, Supervisor, SupervisorSid, WoTemplateId, 
-                ExpenseType, Location, WoAddress, Priority, WoXCoordinate, WoYCoordinate
+                 WorkOrderSid, WorkOrderId, Status, Description, Supervisor, SupervisorSid, ProjStartDate, ProjFinishDate, ActualStartDate, ActualFinishDate, RequestedBy, RequestedBySid,
+	    	    SubmitTo, SubmitToOpenBy, SubmitToOpenBySid, Priority, WoAddress, Location, WoxCoordinate, WoYCoordinate, WoClosedBy, ExpenseType, WoCategory, WoTemplateId, InitiateDate,
+    	    	InitiatedBy, InitiatedBySid, DateWoClosed
             FROM CMMS.azteca.WorkOrder
             WHERE DomainId = 3 AND WorkOrderSid = :work_order_sid
+        ),
+        parent_work_order AS (
+            SELECT 
+                p.WorkOrderSid, p.WorkOrderId, p.Description, p.Status, 
+                p.ProjStartDate, p.ProjFinishDate, p.ActualStartDate, p.ActualFinishDate,
+                p.SubmitTo, p.DateSubmitTo, p.DateSubmitToOpen, 
+                p.WoClosedBy, p.DateWoClosed, p.ExpenseType, 
+                p.Supervisor, p.SupervisorSid, p.WoAddress, p.Location,
+                al.ActivityLinkId
+            FROM CMMS.azteca.ActivityLink al
+            INNER JOIN CMMS.azteca.WorkOrder p ON (al.SourceActivityId = p.WorkOrderSid)
+            WHERE
+                p.DomainId = 3
+                AND al.DestActivityId = :work_order_sid
+                AND al.DestActivityType IN ('WorkOrder', 'ServiceRequest')
+                AND al.LinkType = 'Parent'
+        ),
+        parent_instructions AS (
+            -- Get parent work order's instructions
+            SELECT
+                i.WorkOrderSid, i.WorkOrderId, i.SeqId, i.Instructions
+            FROM CMMS.azteca.WoInstruction i
+            INNER JOIN parent_work_order p ON (i.WorkOrderSid = p.WorkOrderSid)
         ),
         assets AS (
             -- Get all entities associated with single work order
             SELECT
                 WorkOrderSid, WorkOrderId, EntityUid, EntityType, EntitySid, X, Y
-            FROM CMMS.azteca.WorkOrderEntity
+            FROM CMMS.azteca.WORKORDERENTITY
             WHERE WorkOrderSid = :work_order_sid
         ),
         comments AS (
@@ -132,7 +155,7 @@ async def get_work_order_detail(
             SELECT
                 WorkOrderSid, WorkOrderId, SeqId, Instructions
             FROM CMMS.azteca.WoInstruction
-            WHERE WorkOrderSid = :work_order_sid
+            WHERE WorkOrderSid = :work_order_sid 
         ),
         custom_fields AS (
             -- Get custom fields
@@ -146,6 +169,10 @@ async def get_work_order_detail(
             (SELECT * FROM wo FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) as json_data
         UNION ALL
         SELECT 
+            'parent_work_order' as result_type,
+            (SELECT * FROM parent_work_order FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) as json_data
+        UNION ALL
+        SELECT 
             'assets' as result_type,
             (SELECT * FROM assets FOR JSON PATH) as json_data
         UNION ALL
@@ -155,7 +182,11 @@ async def get_work_order_detail(
         UNION ALL
         SELECT 
             'instructions' as result_type,
-            (SELECT * FROM instructions FOR JSON PATH) as json_data
+            (SELECT Instructions FROM instructions ORDER BY SeqId FOR JSON PATH) as json_data
+        UNION ALL
+        SELECT 
+            'parent_instructions' as result_type,
+            (SELECT Instructions FROM parent_instructions ORDER BY SeqId FOR JSON PATH) as json_data
         UNION ALL
         SELECT 
             'custom_fields' as result_type,
@@ -169,9 +200,11 @@ async def get_work_order_detail(
         # Initialize response structure
         response = {
             "work_order": {},
+            "parent_work_order": {},
             "assets": [],
             "comments": [],
             "instructions": [],
+            "parent_instructions": [],
             "custom_fields": {}
         }
 
@@ -186,12 +219,16 @@ async def get_work_order_detail(
                 
                 if result_type == 'work_order':
                     response['work_order'] = parsed_data
+                elif result_type == 'parent_work_order':
+                    response['parent_work_order'] = parsed_data if isinstance(parsed_data, dict) else {}
                 elif result_type == 'assets':
                     response['assets'] = parsed_data if isinstance(parsed_data, list) else []
                 elif result_type == 'comments':
-                    response['comments'] = parsed_data if isinstance(parsed_data, list) else []
+                    response['comments'] = "\n".join([i['Comments'] for i in parsed_data]) if isinstance(parsed_data, list) else ''
                 elif result_type == 'instructions':
-                    response['instructions'] = parsed_data if isinstance(parsed_data, list) else []
+                    response['instructions'] = "','".join([i['Instructions'] for i in parsed_data]) if isinstance(parsed_data, list) else ''
+                elif result_type == 'parent_instructions':
+                    response['parent_instructions'] = "','".join([i['Instructions'] for i in parsed_data]) if isinstance(parsed_data, list) else ''
                 elif result_type == 'custom_fields':
                     # Convert array to flattened dict
                     if isinstance(parsed_data, list):
@@ -216,15 +253,16 @@ async def get_work_order_detail(
         
         # If flag is True, then use the cityworks package to get the spaces data from the SDE
         if spaces_flag:
-            print('hi')
             spaces = parking.get_spaces_from_work_order(response) # Expects a dictionary with a key called 'assets'. Returns a Pandas DataFrame
+            spaces.fillna({'Status':'', 'SpaceName':''}, inplace=True)
             if spaces.shape[0] > 0:
                 # Initialize list to hold updated assets
                 updated_assets = []
                 # Iterate through assets; get space data from spaces dataframe; turn required fields into dict; update asset dict with this new dict
                 for asset in response['assets']:
-                    asset.update(spaces[spaces['cwAssetID']==asset['EntityUid']][['Status', 'SpaceName']].to_dict(orient='records')[0])
-                    updated_assets.append(asset)
+                    if spaces[spaces['cwAssetID']==asset['EntityUid']].shape[0] > 0:
+                        asset.update(spaces[spaces['cwAssetID']==asset['EntityUid']][['Status', 'SpaceName']].to_dict(orient='records')[0])
+                        updated_assets.append(asset)
 
 
         return response

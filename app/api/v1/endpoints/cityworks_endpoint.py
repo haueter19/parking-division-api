@@ -5,6 +5,7 @@ from typing import Optional
 from datetime import datetime
 from cityworks import CityworksSession, CityworksConfig
 from cityworks.api.work_order import WorkOrderAPI
+from cityworks.gis.parking import get_spaces_from_work_order
 from app.db.session import get_db
 from app.api.dependencies import get_current_active_user, require_role, UserProxy
 from app.models.database import UserRole
@@ -100,63 +101,142 @@ async def get_work_order_detail(
     - Attached assets (list of dicts)
     - Parent template information (for determining process type)
     """
-    # TODO: Integrate with cityworks python package
     
+    query = text("""
+        WITH wo AS (
+            -- Get details about single work order
+            SELECT 
+                WorkOrderSid, WorkOrderId, Description, Status, Cancel, InitiateDate, InitiatedBy, InitiatedBySid, SubmitTo, SubmitToSid, SubmitToOpenBy, DateSubmitTo, 
+                ProjStartDate, ProjFinishDate, ActualStartDate, ActualFinishDate, RequestedBy, Supervisor, SupervisorSid, WoTemplateId, 
+                ExpenseType, Location, WoAddress, Priority, WoXCoordinate, WoYCoordinate
+            FROM CMMS.azteca.WorkOrder
+            WHERE DomainId = 3 AND WorkOrderSid = :work_order_sid
+        ),
+        assets AS (
+            -- Get all entities associated with single work order
+            SELECT
+                WorkOrderSid, WorkOrderId, EntityUid, EntityType, EntitySid, X, Y
+            FROM CMMS.azteca.WorkOrderEntity
+            WHERE WorkOrderSid = :work_order_sid
+        ),
+        comments AS (
+            -- Get all Comments
+            SELECT 
+                CommentId, WorkOrderSid, WorkOrderId, AuthorSid, Comments, 
+                DateCreated, LastModified, LastModifiedBySid
+            FROM CMMS.azteca.WorkOrderComment
+            WHERE WorkOrderSid = :work_order_sid
+        ),
+        instructions AS (
+            -- Get all instructions
+            SELECT
+                WorkOrderSid, WorkOrderId, SeqId, Instructions
+            FROM CMMS.azteca.WoInstruction
+            WHERE WorkOrderSid = :work_order_sid
+        ),
+        custom_fields AS (
+            -- Get custom fields
+            SELECT WorkOrderSid, WorkOrderId, CustFieldId, CustFieldName, CustFieldValue
+            FROM CMMS.azteca.WoCustField
+            WHERE WorkOrderSid = :work_order_sid
+        )
+        -- Combine all results with identifiers
+        SELECT 
+            'work_order' as result_type,
+            (SELECT * FROM wo FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) as json_data
+        UNION ALL
+        SELECT 
+            'assets' as result_type,
+            (SELECT * FROM assets FOR JSON PATH) as json_data
+        UNION ALL
+        SELECT 
+            'comments' as result_type,
+            (SELECT * FROM comments FOR JSON PATH) as json_data
+        UNION ALL
+        SELECT 
+            'instructions' as result_type,
+            (SELECT * FROM instructions FOR JSON PATH) as json_data
+        UNION ALL
+        SELECT 
+            'custom_fields' as result_type,
+            (SELECT * FROM custom_fields FOR JSON PATH) as json_data
+        """)
     
-
-    # Configure connection
-    config = CityworksConfig(environment='prod')
-
-    # Create authenticated session
-    with CityworksSession(config) as session:
-        session.authenticate('CITY/tndnh', 'Segneri2A') # MUST CHANGE THIS!
-
-    # Instantiate work order API
-    wo_api = WorkOrderAPI(session)
-
-    # API call to get work order details
-    work_order = wo_api.get_by_sid(work_order_id)
-    work_order['assets'] = wo_api.get_entities(work_order_id)
     try:
-        work_order['instructions'] = wo_api.get_instructions(work_order_id)[str(work_order_id)]
-    except:
-        work_order['instructions'] = {}
-    work_order['comments'] = wo_api.get_comments(work_order_id)
+        result = db.execute(query, {"work_order_sid": work_order_id})
+        rows = result.fetchall()
 
-    # Example structure that will be returned:
-    """{
-        "work_order": {
-            "work_order_id": work_order_id,
-            "work_order_sid": None,
-            "description": "Placeholder - integrate with cityworks package",
-            "status": None,
-            "submit_to": None,
-            "initiate_date": None,
-            "actual_start_date": None,
-            "parent_template": None,
-            "requested_by": None,
-            "comments": None
-        },
-        "assets": [
-            # List of attached assets will be populated here
-            # Example structure:
-            # {
-            #     "asset_id": "12345",
-            #     "asset_type": "Meter",
-            #     "space_id": "A-123",
-            #     "location": "123 Main St",
-            #     "status": "Active"
-            # }
-        ],
-        "parent_template_info": {
-            # Information about the parent work order template
-            # This determines what processing options are available
-            "template_id": None,
-            "template_description": None,
-            "process_type": None  # e.g., "Meter/Hood Space", "Add Asset", "Remove Asset"
+        # Initialize response structure
+        response = {
+            "work_order": {},
+            "assets": [],
+            "comments": [],
+            "instructions": [],
+            "custom_fields": {}
         }
-    }"""
-    return work_order
+
+        # Process each result type
+        for row in rows:
+            result_type = row.result_type
+            json_data = row.json_data
+            
+            if json_data:
+                import json
+                parsed_data = json.loads(json_data)
+                
+                if result_type == 'work_order':
+                    response['work_order'] = parsed_data
+                elif result_type == 'assets':
+                    response['assets'] = parsed_data if isinstance(parsed_data, list) else []
+                elif result_type == 'comments':
+                    response['comments'] = parsed_data if isinstance(parsed_data, list) else []
+                elif result_type == 'instructions':
+                    response['instructions'] = parsed_data if isinstance(parsed_data, list) else []
+                elif result_type == 'custom_fields':
+                    # Convert array to flattened dict
+                    if isinstance(parsed_data, list):
+                        response['custom_fields'] = {
+                            item['CustFieldName']: item['CustFieldValue'] 
+                            for item in parsed_data
+                        }
+        
+        # Check if work order was found
+        if not response['work_order']:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Work order {work_order_id} not found"
+            )
+        
+        # Check for any assets in one of the layers referencing a space, and if found, set flag to True
+        spaces_flag = False
+        for p in response['assets']:
+            if p['EntityType'] in ['PU_METERS_ON_ST', 'PU_DISVET_ON_ST', 'PU_LZ_ON_ST', 'PU_OFF_ST_SPACES']:
+                spaces_flag = True
+                break
+        
+        # If flag is True, then use the cityworks package to get the spaces data from the SDE
+        if spaces_flag:
+            print('hi')
+            spaces = parking.get_spaces_from_work_order(response) # Expects a dictionary with a key called 'assets'. Returns a Pandas DataFrame
+            if spaces.shape[0] > 0:
+                # Initialize list to hold updated assets
+                updated_assets = []
+                # Iterate through assets; get space data from spaces dataframe; turn required fields into dict; update asset dict with this new dict
+                for asset in response['assets']:
+                    asset.update(spaces[spaces['cwAssetID']==asset['EntityUid']][['Status', 'SpaceName']].to_dict(orient='records')[0])
+                    updated_assets.append(asset)
+
+
+        return response
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching work order details: {str(e)}"
+        )
+
 
 
 @router.get("/filter-options")

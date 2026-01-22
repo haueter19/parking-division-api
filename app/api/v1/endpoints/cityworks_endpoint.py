@@ -660,6 +660,7 @@ async def close_work_order_endpoint(
     else:
         update_user_sid = 1629
 
+    print(update_user_sid)
     try:
         # First, update the work order with completion details
         update_data = {
@@ -668,12 +669,12 @@ async def close_work_order_endpoint(
             'CompletedBySid': update_user_sid,
             'notes': notes
         }
-
+        print(update_data)
         # Configure connection
         config = CityworksConfig(environment='prod')
         
         password = settings.secret_password
-        
+        print(password)
         # Create authenticated session
         with CityworksSession(config) as session:
             #session.prompt_credentials()
@@ -692,6 +693,8 @@ async def close_work_order_endpoint(
                 'closed_by': current_user.username,
                 'timestamp': datetime.now().isoformat()
             }
+        
+        print('made it passed the update')
 
         # Now close the work order via Cityworks API
         close_response = wo_api.close_work_order(str(work_order_id))

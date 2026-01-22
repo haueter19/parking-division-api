@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     secret_key: str = Field(default="dev-secret-key-change-in-production", alias="SECRET_KEY")
     algorithm: str = Field(default="HS256", alias="ALGORITHM")
     access_token_expire_minutes: int = Field(default=480, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
-    secret_password: str = Field(default="", alias="pw")
-    
+    secret_password: str = Field(default="", alias="SECRET_PASSWORD")
+
     # File upload settings
     upload_dir: str = Field(default="./uploads", alias="UPLOAD_DIR")
     max_upload_size_mb: int = Field(default=50, alias="MAX_UPLOAD_SIZE_MB")

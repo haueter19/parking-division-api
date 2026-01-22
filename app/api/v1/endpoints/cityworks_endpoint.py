@@ -4,8 +4,8 @@ from sqlalchemy import text
 from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel
-#from cityworks import CityworksSession, CityworksConfig
-#from cityworks.api.work_order import WorkOrderAPI
+from cityworks import CityworksSession, CityworksConfig
+from cityworks.api.work_order import WorkOrderAPI
 from cityworks.gis import parking
 from cityworks.gis import operations as ops
 from app.db.session import get_db
@@ -409,7 +409,7 @@ async def validate_work_order_assets(
     - manual_review: Non-space asset type requires manual handling
     - error: Validation failed for this asset
     """
-
+    
     # First, get the work order details to determine workflow type
     detail_response = await get_work_order_detail(work_order_id, db, current_user)
 
@@ -651,20 +651,36 @@ async def close_work_order_endpoint(
     1. Update the work order with current datetime, user, and status = 'Complete'
     2. Close the work order via Cityworks API
     """
-    from cityworks.api.work_order import close_work_order
+
+    if current_user.username == 'tndnh':
+        update_user_sid = 1629
+    elif current_user.username == 'tnkgj':
+        update_user_sid = 985
+    else:
+        update_user_sid = 1629
 
     try:
         # First, update the work order with completion details
         update_data = {
-            'work_order_id': work_order_id,
-            'status': 'COMPLETE',
-            'actual_finish_date': datetime.now().isoformat(),
-            'work_completed_by': current_user.username,
+            'Status': 'Complete',
+            'ActualFinishDate': datetime.now().isoformat(),
+            'CompletedBySid': update_user_sid,
             'notes': notes
         }
 
+        # Configure connection
+        config = CityworksConfig(environment='prod')
+        from app.config import settings
+        password = settings.secret_password
+        # Create authenticated session
+        with CityworksSession(config) as session:
+            #session.prompt_credentials()
+            session.authenticate('CITY/tndnh', password)
+        # Instantiate work order API
+        wo_api = WorkOrderAPI(session)
+        
         # Call parking.update_work_order to set the completion details
-        update_response = parking.update_work_order(update_data)
+        update_response = wo_api.update_work_order(work_order_id, **update_data)
 
         if not update_response:
             return {
@@ -676,7 +692,7 @@ async def close_work_order_endpoint(
             }
 
         # Now close the work order via Cityworks API
-        close_response = close_work_order(work_order_id)
+        close_response = wo_api.close_work_order(str(work_order_id))
 
         if close_response and len(close_response) > 0:
             return {

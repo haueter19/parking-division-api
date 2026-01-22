@@ -1165,10 +1165,13 @@
         // Get work order ID from URL
         const urlParams = new URLSearchParams(window.location.search);
         const workOrderId = urlParams.get('id');
-
+        
         if (!workOrderId) {
             window.location.href = '/cityworks';
         }
+        
+        // Set document title
+        document.title = 'Work Order: '+workOrderId
 
         // ==================== Constants ====================
 
@@ -1439,6 +1442,14 @@
                             <div class="space-asset-field">
                                 <span class="space-asset-field-label">Current Status</span>
                                 <span class="space-asset-field-value">${asset.current_status || '--'}</span>
+                            </div>
+                            <div class="space-asset-field">
+                                <span class="space-asset-field-label">Space Type</span>
+                                <span class="space-asset-field-value">${asset.space_type || '--'}</span>
+                            </div>
+                            <div class="space-asset-field">
+                                <span class="space-asset-field-label">BLock</span>
+                                <span class="space-asset-field-value">${asset.space_block || '--'}</span>
                             </div>
                             <div class="space-asset-field">
                                 <span class="space-asset-field-label">Object ID</span>

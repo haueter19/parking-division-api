@@ -638,7 +638,7 @@ async def process_work_order_spaces(
 
 
 @router.post("/work-orders/{work_order_id}/close")
-async def close_work_order(
+async def close_work_order_endpoint(
     work_order_id: int,
     notes: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -647,26 +647,58 @@ async def close_work_order(
     """
     Close a work order after processing is complete.
 
-    This endpoint will call the Cityworks API to update and close the work order.
+    This endpoint will:
+    1. Update the work order with current datetime, user, and status = 'Complete'
+    2. Close the work order via Cityworks API
     """
-
-    # TODO: Implement using cityworks package API wrapper
-    # parking.close_work_order(work_order_id, notes, current_user.username)
     from cityworks.api.work_order import close_work_order
 
-    response = close_work_order(work_order_id)
-    if len(response)>0:
-        return {
-            'success': True,
-            'message': f'Work order {work_order_id} closed (STUB)',
+    try:
+        # First, update the work order with completion details
+        update_data = {
             'work_order_id': work_order_id,
-            'closed_by': current_user.username,
-            'timestamp': datetime.now().isoformat()
+            'status': 'COMPLETE',
+            'actual_finish_date': datetime.now().isoformat(),
+            'work_completed_by': current_user.username,
+            'notes': notes
         }
-    else:
+
+        # Call parking.update_work_order to set the completion details
+        update_response = parking.update_work_order(update_data)
+
+        if not update_response:
+            return {
+                'success': False,
+                'message': f'Failed to update work order {work_order_id}',
+                'work_order_id': work_order_id,
+                'closed_by': current_user.username,
+                'timestamp': datetime.now().isoformat()
+            }
+
+        # Now close the work order via Cityworks API
+        close_response = close_work_order(work_order_id)
+
+        if close_response and len(close_response) > 0:
+            return {
+                'success': True,
+                'message': f'Work order {work_order_id} closed successfully',
+                'work_order_id': work_order_id,
+                'closed_by': current_user.username,
+                'timestamp': datetime.now().isoformat()
+            }
+        else:
+            return {
+                'success': False,
+                'message': f'Work order {work_order_id} updated but failed to close via API',
+                'work_order_id': work_order_id,
+                'closed_by': current_user.username,
+                'timestamp': datetime.now().isoformat()
+            }
+
+    except Exception as e:
         return {
             'success': False,
-            'message': f'Work order {work_order_id} failed to close',
+            'message': f'Error closing work order: {str(e)}',
             'work_order_id': work_order_id,
             'closed_by': current_user.username,
             'timestamp': datetime.now().isoformat()

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 #from cityworks import CityworksSession, CityworksConfig
 #from cityworks.api.work_order import WorkOrderAPI
 from cityworks.gis import parking
-from cityworks.gis import ops
+from cityworks.gis import operations as ops
 from app.db.session import get_db
 from app.api.dependencies import get_current_active_user, require_role, UserProxy
 from app.models.database import UserRole
@@ -277,14 +277,14 @@ async def get_work_order_detail(
         # If flag is True, then use the cityworks package to get the spaces data from the SDE
         if spaces_flag:
             spaces = parking.get_spaces_from_work_order(response) # Expects a dictionary with a key called 'assets'. Returns a Pandas DataFrame
-            spaces.fillna({'Status':'', 'SpaceName':''}, inplace=True)
+            spaces.fillna({'Status':'', 'SpaceName':'', 'Space_Type':''}, inplace=True)
             if spaces.shape[0] > 0:
                 # Initialize list to hold updated assets
                 updated_assets = []
                 # Iterate through assets; get space data from spaces dataframe; turn required fields into dict; update asset dict with this new dict
                 for asset in response['assets']:
                     if spaces[spaces['cwAssetID']==asset['EntityUid']].shape[0] > 0:
-                        asset.update(spaces[spaces['cwAssetID']==asset['EntityUid']][['Status', 'SpaceName']].to_dict(orient='records')[0])
+                        asset.update(spaces[spaces['cwAssetID']==asset['EntityUid']][['Status', 'SpaceName', 'Space_Type', 'Address']].to_dict(orient='records')[0])
                         updated_assets.append(asset)
 
 
@@ -446,7 +446,7 @@ async def validate_work_order_assets(
                 if oos_data is not None and len(oos_data) > 0:
                     # Convert to dict keyed by space name for easy lookup
                     for _, row in oos_data.iterrows():
-                        space_num = row.get('Space_Number')
+                        space_num = row.get('SpaceNumber')
                         if space_num not in existing_records:
                             existing_records[space_num] = []
                         existing_records[space_num].append(row.to_dict())
@@ -460,6 +460,8 @@ async def validate_work_order_assets(
         entity_sid = asset.get('EntitySid')
         entity_uid = asset.get('EntityUid')
         space_name = asset.get('SpaceName')
+        space_type = asset.get('Space_Type')
+        space_block = asset.get('Address')
         current_status = asset.get('Status')
 
         validation_result = {
@@ -467,6 +469,8 @@ async def validate_work_order_assets(
             'entity_uid': entity_uid,
             'entity_type': entity_type,
             'space_name': space_name,
+            'space_type': space_type,
+            'space_block': space_block,
             'current_status': current_status,
             'validation_status': 'ready',
             'message': None
@@ -648,11 +652,22 @@ async def close_work_order(
 
     # TODO: Implement using cityworks package API wrapper
     # parking.close_work_order(work_order_id, notes, current_user.username)
+    from cityworks.api.work_order import close_work_order
 
-    return {
-        'success': True,
-        'message': f'Work order {work_order_id} closed (STUB)',
-        'work_order_id': work_order_id,
-        'closed_by': current_user.username,
-        'timestamp': datetime.now().isoformat()
-    }
+    response = close_work_order(work_order_id)
+    if len(response)>0:
+        return {
+            'success': True,
+            'message': f'Work order {work_order_id} closed (STUB)',
+            'work_order_id': work_order_id,
+            'closed_by': current_user.username,
+            'timestamp': datetime.now().isoformat()
+        }
+    else:
+        return {
+            'success': False,
+            'message': f'Work order {work_order_id} failed to close',
+            'work_order_id': work_order_id,
+            'closed_by': current_user.username,
+            'timestamp': datetime.now().isoformat()
+        }

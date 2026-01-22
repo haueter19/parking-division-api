@@ -1,14 +1,36 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
+from pydantic import BaseModel
 #from cityworks import CityworksSession, CityworksConfig
 #from cityworks.api.work_order import WorkOrderAPI
 from cityworks.gis import parking
+from cityworks.gis import ops
 from app.db.session import get_db
 from app.api.dependencies import get_current_active_user, require_role, UserProxy
 from app.models.database import UserRole
+
+
+# ==================== Pydantic Models ====================
+
+class AssetProcessData(BaseModel):
+    entity_sid: int
+    space_name: Optional[str] = None
+    entity_type: str
+    ada_relocation: Optional[str] = "Unknown"
+
+
+class ProcessSpacesRequest(BaseModel):
+    workflow_type: str  # 'out_of_service' or 'return_to_service'
+    assets: List[AssetProcessData]
+    # Out of service fields
+    revenue_collected: Optional[str] = None
+    removal_method: Optional[str] = None
+    reason_removed: Optional[str] = None
+    # Common fields
+    notes: Optional[str] = None
 
 router = APIRouter(prefix="/cityworks", tags=["cityworks"])
 
@@ -113,12 +135,13 @@ async def get_work_order_detail(
             WHERE DomainId = 3 AND WorkOrderSid = :work_order_sid
         ),
         parent_work_order AS (
-            SELECT 
-                p.WorkOrderSid, p.WorkOrderId, p.Description, p.Status, 
+            SELECT
+                p.WorkOrderSid, p.WorkOrderId, p.Description, p.Status,
                 p.ProjStartDate, p.ProjFinishDate, p.ActualStartDate, p.ActualFinishDate,
-                p.SubmitTo, p.DateSubmitTo, p.DateSubmitToOpen, 
-                p.WoClosedBy, p.DateWoClosed, p.ExpenseType, 
+                p.SubmitTo, p.DateSubmitTo, p.DateSubmitToOpen,
+                p.WoClosedBy, p.DateWoClosed, p.ExpenseType,
                 p.Supervisor, p.SupervisorSid, p.WoAddress, p.Location,
+                p.WoTemplateId,
                 al.ActivityLinkId
             FROM CMMS.azteca.ActivityLink al
             INNER JOIN CMMS.azteca.WorkOrder p ON (al.SourceActivityId = p.WorkOrderSid)
@@ -352,4 +375,284 @@ async def process_work_order(
         "work_order_id": work_order_id,
         "processed_by": current_user.username,
         "timestamp": datetime.now().isoformat()
+    }
+
+
+# ==================== Space Processing Endpoints ====================
+
+# Parent template IDs for workflow detection
+HOOD_SIGN_SPACE_TEMPLATE_IDS = [214, 682, 1160, 1161]  # Out of Service
+HOOD_SIGN_REMOVAL_TEMPLATE_IDS = [99, 100, 101, 1162]  # Return to Service
+
+# Space layer types that can be processed
+SPACE_LAYER_TYPES = ['PU_METERS_ON_ST', 'PU_OFF_ST_SPACES', 'PU_LZ_ON_ST', 'PU_DISVET_ON_ST']
+
+
+@router.get("/work-orders/{work_order_id}/validate-assets")
+async def validate_work_order_assets(
+    work_order_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserProxy = Depends(require_role([UserRole.MANAGER, UserRole.ADMIN]))
+):
+    """
+    Validate assets for a work order before processing.
+
+    This endpoint:
+    1. Fetches the work order and its assets
+    2. Determines the workflow type based on parent template
+    3. For each asset, checks if it's a space and validates against PU_SPACESOUTOFSERVICE
+    4. Returns validation status for each asset
+
+    Validation statuses:
+    - ready: Asset can be processed
+    - already_processed: A record already exists for this date
+    - manual_review: Non-space asset type requires manual handling
+    - error: Validation failed for this asset
+    """
+
+    # First, get the work order details to determine workflow type
+    detail_response = await get_work_order_detail(work_order_id, db, current_user)
+
+    parent_template_id = detail_response.get('parent_work_order', {}).get('WoTemplateId')
+    parent_actual_finish_date = detail_response.get('parent_work_order', {}).get('ActualFinishDate')
+    assets = detail_response.get('assets', [])
+
+    # Determine workflow type
+    if parent_template_id and int(parent_template_id) in HOOD_SIGN_SPACE_TEMPLATE_IDS:
+        workflow_type = 'out_of_service'
+    elif parent_template_id and int(parent_template_id) in HOOD_SIGN_REMOVAL_TEMPLATE_IDS:
+        workflow_type = 'return_to_service'
+    else:
+        workflow_type = None
+
+    validated_assets = []
+
+    # Collect space names for bulk lookup
+    space_assets = []
+    for asset in assets:
+        entity_type = asset.get('EntityType')
+        if entity_type in SPACE_LAYER_TYPES:
+            space_assets.append(asset)
+
+    # Get existing out-of-service records for all spaces
+    existing_records = {}
+    if space_assets:
+        space_names = [a.get('SpaceName') for a in space_assets if a.get('SpaceName')]
+        if space_names:
+            try:
+                # Call the cityworks package to check existing records
+                # ops.get_spaces_out_of_service returns data from PU_SPACESOUTOFSERVICE
+                oos_data = ops.get_spaces_out_of_service(space_names)
+                if oos_data is not None and len(oos_data) > 0:
+                    # Convert to dict keyed by space name for easy lookup
+                    for _, row in oos_data.iterrows():
+                        space_num = row.get('Space_Number')
+                        if space_num not in existing_records:
+                            existing_records[space_num] = []
+                        existing_records[space_num].append(row.to_dict())
+            except Exception as e:
+                # Log error but continue with empty records
+                print(f"Error fetching out-of-service records: {e}")
+
+    # Validate each asset
+    for asset in assets:
+        entity_type = asset.get('EntityType')
+        entity_sid = asset.get('EntitySid')
+        entity_uid = asset.get('EntityUid')
+        space_name = asset.get('SpaceName')
+        current_status = asset.get('Status')
+
+        validation_result = {
+            'entity_sid': entity_sid,
+            'entity_uid': entity_uid,
+            'entity_type': entity_type,
+            'space_name': space_name,
+            'current_status': current_status,
+            'validation_status': 'ready',
+            'message': None
+        }
+
+        # Check if this is a space asset
+        if entity_type not in SPACE_LAYER_TYPES:
+            validation_result['validation_status'] = 'manual_review'
+            validation_result['message'] = f'Non-space asset type ({entity_type}) requires manual review'
+            validated_assets.append(validation_result)
+            continue
+
+        # For out_of_service workflow, check if record already exists for this date
+        if workflow_type == 'out_of_service' and space_name:
+            records = existing_records.get(space_name, [])
+
+            # Check if any record has Date_Out on the same day as ActualFinishDate
+            if parent_actual_finish_date and records:
+                try:
+                    finish_date = datetime.fromisoformat(parent_actual_finish_date.replace('Z', '+00:00'))
+                    finish_date_only = finish_date.date()
+
+                    for record in records:
+                        date_out = record.get('Date_Out')
+                        if date_out:
+                            if isinstance(date_out, str):
+                                record_date = datetime.fromisoformat(date_out.replace('Z', '+00:00')).date()
+                            else:
+                                record_date = date_out.date() if hasattr(date_out, 'date') else None
+
+                            if record_date == finish_date_only:
+                                validation_result['validation_status'] = 'already_processed'
+                                validation_result['message'] = f'Record already exists for {finish_date_only}'
+                                break
+                except Exception as e:
+                    print(f"Error parsing dates for {space_name}: {e}")
+
+        # For return_to_service workflow, check if there's an open out-of-service record
+        elif workflow_type == 'return_to_service' and space_name:
+            records = existing_records.get(space_name, [])
+
+            # Look for a record with Date_Returned IS NULL
+            has_open_record = False
+            for record in records:
+                if record.get('Date_Returned') is None:
+                    has_open_record = True
+                    break
+
+            if not has_open_record:
+                validation_result['validation_status'] = 'already_processed'
+                validation_result['message'] = 'No open out-of-service record found for this space'
+
+        validated_assets.append(validation_result)
+
+    return {
+        'workflow_type': workflow_type,
+        'parent_template_id': parent_template_id,
+        'parent_actual_finish_date': parent_actual_finish_date,
+        'assets': validated_assets
+    }
+
+
+@router.post("/work-orders/{work_order_id}/process-spaces")
+async def process_work_order_spaces(
+    work_order_id: int,
+    request: ProcessSpacesRequest,
+    db: Session = Depends(get_db),
+    current_user: UserProxy = Depends(require_role([UserRole.MANAGER, UserRole.ADMIN]))
+):
+    """
+    Process multiple spaces for a work order.
+
+    For out_of_service workflow:
+    1. Create records in PU_SPACESOUTOFSERVICE for each space
+    2. Update space layer Status to "Out of Service" if this is the most recent record
+
+    For return_to_service workflow:
+    1. Update Date_Returned on the appropriate PU_SPACESOUTOFSERVICE record
+    2. Update space layer Status to "In Service"
+
+    Returns results for each processed space.
+    """
+
+    # Get work order details for dates and other info
+    detail_response = await get_work_order_detail(work_order_id, db, current_user)
+    parent_wo = detail_response.get('parent_work_order', {})
+    parent_actual_finish_date = parent_wo.get('ActualFinishDate')
+    submit_to = parent_wo.get('SubmitTo')
+
+    results = []
+    processed_count = 0
+
+    for asset in request.assets:
+        result = {
+            'entity_sid': asset.entity_sid,
+            'space_name': asset.space_name,
+            'success': False,
+            'message': None
+        }
+
+        try:
+            if request.workflow_type == 'out_of_service':
+                # Prepare data for PU_SPACESOUTOFSERVICE insert
+                # TODO: Replace with actual implementation using parking.add_space_out_of_service()
+
+                record_data = {
+                    'Space_Number': asset.space_name,
+                    'Date_Out': parent_actual_finish_date,
+                    'Meter_Type': None,  # Would come from asset JSON
+                    'created_user': current_user.username,
+                    'last_edited_user': current_user.username,
+                    'created_date': datetime.now().isoformat(),
+                    'last_edited_date': datetime.now().isoformat(),
+                    'Notes': request.notes,
+                    'Revenue_Collected': request.revenue_collected,
+                    'Removal_Method': request.removal_method,
+                    'RemovedBy': submit_to,
+                    'Reason_Removed': request.reason_removed,
+                    'ADA_Relocation': asset.ada_relocation,
+                    'entity_type': asset.entity_type  # For determining the layer
+                }
+
+                # STUB: In production, call parking.add_space_out_of_service([record_data])
+                # and parking.update_space_status({'space': asset.space_name, 'layer': asset.entity_type, 'status': 'Out of Service'})
+
+                result['success'] = True
+                result['message'] = f'Space {asset.space_name} moved out of service (STUB)'
+                processed_count += 1
+
+            elif request.workflow_type == 'return_to_service':
+                # TODO: Replace with actual implementation using parking.return_space_to_service()
+
+                return_data = {
+                    'Space_Number': asset.space_name,
+                    'Date_Returned': parent_actual_finish_date,
+                    'last_edited_user': current_user.username,
+                    'last_edited_date': datetime.now().isoformat(),
+                    'Notes': request.notes
+                }
+
+                # STUB: In production, call parking.return_space_to_service(return_data)
+                # and parking.update_space_status({'space': asset.space_name, 'layer': asset.entity_type, 'status': 'In Service'})
+
+                result['success'] = True
+                result['message'] = f'Space {asset.space_name} returned to service (STUB)'
+                processed_count += 1
+
+            else:
+                result['message'] = f'Unknown workflow type: {request.workflow_type}'
+
+        except Exception as e:
+            result['message'] = f'Error processing space: {str(e)}'
+
+        results.append(result)
+
+    return {
+        'success': processed_count > 0,
+        'processed_count': processed_count,
+        'total_count': len(request.assets),
+        'results': results,
+        'work_order_id': work_order_id,
+        'processed_by': current_user.username,
+        'timestamp': datetime.now().isoformat()
+    }
+
+
+@router.post("/work-orders/{work_order_id}/close")
+async def close_work_order(
+    work_order_id: int,
+    notes: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: UserProxy = Depends(require_role([UserRole.MANAGER, UserRole.ADMIN]))
+):
+    """
+    Close a work order after processing is complete.
+
+    This endpoint will call the Cityworks API to update and close the work order.
+    """
+
+    # TODO: Implement using cityworks package API wrapper
+    # parking.close_work_order(work_order_id, notes, current_user.username)
+
+    return {
+        'success': True,
+        'message': f'Work order {work_order_id} closed (STUB)',
+        'work_order_id': work_order_id,
+        'closed_by': current_user.username,
+        'timestamp': datetime.now().isoformat()
     }

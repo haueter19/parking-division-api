@@ -473,6 +473,447 @@
                 width: 100%;
             }
         }
+
+        /* ==================== Space Processing Styles ==================== */
+
+        /* Workflow Type Banner */
+        .workflow-banner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            font-weight: 600;
+        }
+
+        .workflow-banner.out-of-service {
+            background: linear-gradient(135deg, #fed7d7 0%, #feb2b2 100%);
+            color: #c53030;
+            border: 1px solid #fc8181;
+        }
+
+        .workflow-banner.return-to-service {
+            background: linear-gradient(135deg, #c6f6d5 0%, #9ae6b4 100%);
+            color: #276749;
+            border: 1px solid #68d391;
+        }
+
+        .workflow-banner.manual {
+            background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e0 100%);
+            color: #4a5568;
+            border: 1px solid #a0aec0;
+        }
+
+        .workflow-banner-icon {
+            font-size: 1.5rem;
+        }
+
+        .workflow-banner-text {
+            flex: 1;
+        }
+
+        .workflow-banner-title {
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+
+        .workflow-banner-subtitle {
+            font-size: 0.85rem;
+            font-weight: 400;
+            opacity: 0.9;
+        }
+
+        /* Validation Summary */
+        .validation-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .validation-stat {
+            text-align: center;
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .validation-stat.ready {
+            background: #c6f6d5;
+            color: #276749;
+        }
+
+        .validation-stat.already-processed {
+            background: #bee3f8;
+            color: #2a4365;
+        }
+
+        .validation-stat.manual-review {
+            background: #feebc8;
+            color: #744210;
+        }
+
+        .validation-stat.error {
+            background: #fed7d7;
+            color: #c53030;
+        }
+
+        .validation-stat-count {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .validation-stat-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 4px;
+        }
+
+        /* Space Asset Cards - Enhanced */
+        .space-asset-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+        }
+
+        .space-asset-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+
+        .space-asset-card.status-ready {
+            border-left: 4px solid #48bb78;
+        }
+
+        .space-asset-card.status-already-processed {
+            border-left: 4px solid #4299e1;
+            opacity: 0.8;
+        }
+
+        .space-asset-card.status-manual-review {
+            border-left: 4px solid #ed8936;
+        }
+
+        .space-asset-card.status-error {
+            border-left: 4px solid #f56565;
+        }
+
+        .space-asset-card.status-processing {
+            border-left: 4px solid #667eea;
+            animation: pulse-border 1.5s ease-in-out infinite;
+        }
+
+        .space-asset-card.status-completed {
+            border-left: 4px solid #48bb78;
+            background: #f0fff4;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-left-color: #667eea; }
+            50% { border-left-color: #a3bffa; }
+        }
+
+        .space-asset-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .space-asset-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .space-asset-type {
+            font-size: 0.8rem;
+            color: #718096;
+            margin-top: 2px;
+        }
+
+        /* Validation Status Badge */
+        .validation-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .validation-badge.ready {
+            background: #c6f6d5;
+            color: #276749;
+        }
+
+        .validation-badge.already-processed {
+            background: #bee3f8;
+            color: #2a4365;
+        }
+
+        .validation-badge.manual-review {
+            background: #feebc8;
+            color: #744210;
+        }
+
+        .validation-badge.error {
+            background: #fed7d7;
+            color: #c53030;
+        }
+
+        .validation-badge.processing {
+            background: #e9d8fd;
+            color: #553c9a;
+        }
+
+        .validation-badge.completed {
+            background: #c6f6d5;
+            color: #276749;
+        }
+
+        .validation-badge-icon {
+            font-size: 0.9rem;
+        }
+
+        /* Space Asset Details Grid */
+        .space-asset-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .space-asset-field {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .space-asset-field-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .space-asset-field-value {
+            font-size: 0.9rem;
+            color: #2d3748;
+            font-weight: 500;
+        }
+
+        /* Per-Asset Input Fields */
+        .space-asset-inputs {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .space-asset-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 120px;
+        }
+
+        .space-asset-input-group label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .space-asset-input-group select {
+            padding: 6px 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            background: white;
+        }
+
+        .space-asset-input-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* Validation Message */
+        .validation-message {
+            font-size: 0.85rem;
+            color: #718096;
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: #f7fafc;
+            border-radius: 4px;
+        }
+
+        /* Shared Form Section */
+        .shared-form-section {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 24px;
+        }
+
+        .shared-form-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .shared-form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        /* Process Actions Footer */
+        .process-actions-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .process-count-info {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        .process-count-info strong {
+            color: #2d3748;
+        }
+
+        .process-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* Button enhancements */
+        .btn-process {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+            padding: 14px 28px;
+            font-size: 1rem;
+        }
+
+        .btn-process:hover:not(:disabled) {
+            background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+        }
+
+        .btn-process:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-validate {
+            background: linear-gradient(135deg, #667eea 0%, #5a67d8 100%);
+            color: white;
+        }
+
+        .btn-validate:hover:not(:disabled) {
+            background: linear-gradient(135deg, #5a67d8 0%, #4c51bf 100%);
+        }
+
+        /* Progress Overlay */
+        .processing-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+
+        .processing-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .processing-modal {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .processing-modal h3 {
+            color: #2d3748;
+            margin-bottom: 20px;
+        }
+
+        .processing-progress {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+
+        .processing-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #48bb78);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .processing-status {
+            color: #718096;
+            font-size: 0.9rem;
+        }
+
+        /* No Workflow Section */
+        .no-workflow-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: #718096;
+        }
+
+        .no-workflow-message h4 {
+            color: #4a5568;
+            margin-bottom: 12px;
+        }
+
+        .no-workflow-message p {
+            max-width: 400px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
     </style>
 </head>
 <body>
@@ -587,65 +1028,128 @@
                     </div>
                 </div>
 
-                <!-- Processing Section -->
-                <div class="card process-card process-section">
+                <!-- Space Processing Section -->
+                <div class="card process-card process-section" id="spaceProcessingSection">
                     <h3 class="card-title">Process Work Order</h3>
 
-                    <div class="process-type-indicator" id="processTypeIndicator">
-                        <span id="processTypeIcon">&#9881;</span>
-                        <span id="processTypeLabel">Process Type: Loading...</span>
+                    <!-- Workflow Type Banner - dynamically set based on parent template -->
+                    <div class="workflow-banner manual" id="workflowBanner">
+                        <span class="workflow-banner-icon" id="workflowIcon">&#9881;</span>
+                        <div class="workflow-banner-text">
+                            <div class="workflow-banner-title" id="workflowTitle">Detecting workflow type...</div>
+                            <div class="workflow-banner-subtitle" id="workflowSubtitle">Loading work order details</div>
+                        </div>
+                        <button class="btn btn-validate" id="btnValidate" onclick="validateAssets()" style="display: none;">
+                            Run Validation
+                        </button>
                     </div>
 
-                    <!-- Dynamic Form Fields - will be populated based on parent template -->
-                    <div id="processFormContainer">
-                        <div class="form-row">
+                    <!-- Validation Summary - shown after validation runs -->
+                    <div class="validation-summary" id="validationSummary" style="display: none;">
+                        <div class="validation-stat ready">
+                            <div class="validation-stat-count" id="countReady">0</div>
+                            <div class="validation-stat-label">Ready</div>
+                        </div>
+                        <div class="validation-stat already-processed">
+                            <div class="validation-stat-count" id="countAlreadyProcessed">0</div>
+                            <div class="validation-stat-label">Already Processed</div>
+                        </div>
+                        <div class="validation-stat manual-review">
+                            <div class="validation-stat-count" id="countManualReview">0</div>
+                            <div class="validation-stat-label">Manual Review</div>
+                        </div>
+                        <div class="validation-stat error">
+                            <div class="validation-stat-count" id="countError">0</div>
+                            <div class="validation-stat-label">Errors</div>
+                        </div>
+                    </div>
+
+                    <!-- Space Assets List with Validation Status -->
+                    <div id="spaceAssetsList">
+                        <!-- Populated dynamically -->
+                    </div>
+
+                    <!-- Shared Form Fields (for Out of Service workflow) -->
+                    <div class="shared-form-section" id="outOfServiceForm" style="display: none;">
+                        <div class="shared-form-title">Out of Service Details (applies to all ready spaces)</div>
+                        <div class="shared-form-row">
                             <div class="form-group">
-                                <label for="selectAction">Action</label>
-                                <select id="selectAction">
-                                    <option value="">Select an action...</option>
-                                    <option value="out_of_service">Move Space Out of Service</option>
-                                    <option value="return_to_service">Return Space to Service</option>
-                                    <option value="add_asset">Add Asset to GIS</option>
-                                    <option value="remove_asset">Remove Asset from GIS</option>
-                                    <option value="update_status">Update Status Only</option>
+                                <label for="selectRevenueCollected">Revenue Collected</label>
+                                <select id="selectRevenueCollected">
+                                    <option value="">Select...</option>
+                                    <option value="Yes">Yes</option>
+                                    <option value="No">No</option>
+                                    <option value="Unknown">Unknown</option>
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label for="selectAsset">Select Asset (if applicable)</label>
-                                <select id="selectAsset">
-                                    <option value="">Select an asset...</option>
+                                <label for="selectRemovalMethod">Removal Method</label>
+                                <select id="selectRemovalMethod">
+                                    <option value="Hooded/Signed" selected>Hooded/Signed</option>
+                                    <option value="Street Closed">Street Closed</option>
+                                    <option value="Out">Out</option>
+                                    <option value="">None</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="selectReasonRemoved">Reason Removed</label>
+                                <select id="selectReasonRemoved">
+                                    <option value="">Select...</option>
+                                    <option value="Private Request">Private Request</option>
+                                    <option value="Unknown">Unknown</option>
+                                    <option value="City Project">City Project</option>
+                                    <option value="Permit Parking">Permit Parking</option>
+                                    <option value="Bus Reroute">Bus Reroute</option>
+                                    <option value="Other">Other</option>
+                                    <option value="Special Event">Special Event</option>
                                 </select>
                             </div>
                         </div>
-
-                        <div class="form-group" id="spaceIdGroup" style="display: none;">
-                            <label for="inputSpaceId">Space ID</label>
-                            <input type="text" id="inputSpaceId" placeholder="Enter space ID">
-                        </div>
-
-                        <div class="form-group" id="newStatusGroup" style="display: none;">
-                            <label for="selectNewStatus">New Status</label>
-                            <select id="selectNewStatus">
-                                <option value="">Select new status...</option>
-                                <option value="Out of Service">Out of Service</option>
-                                <option value="Active">Active</option>
-                                <option value="Pending">Pending</option>
-                            </select>
-                        </div>
-
                         <div class="form-group">
-                            <label for="inputNotes">Processing Notes</label>
-                            <textarea id="inputNotes" placeholder="Enter any notes about this action..."></textarea>
+                            <label for="inputProcessingNotes">Processing Notes</label>
+                            <textarea id="inputProcessingNotes" placeholder="Enter any notes about this processing action..."></textarea>
                         </div>
+                    </div>
 
-                        <div class="action-buttons">
-                            <button class="btn btn-primary" id="btnProcess" onclick="processWorkOrder()">
-                                Process Work Order
-                            </button>
+                    <!-- Shared Form Fields (for Return to Service workflow) -->
+                    <div class="shared-form-section" id="returnToServiceForm" style="display: none;">
+                        <div class="shared-form-title">Return to Service Details</div>
+                        <div class="form-group">
+                            <label for="inputReturnNotes">Processing Notes</label>
+                            <textarea id="inputReturnNotes" placeholder="Enter any notes about returning these spaces to service..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- No Workflow Message (for non-matching templates) -->
+                    <div class="no-workflow-message" id="noWorkflowMessage" style="display: none;">
+                        <h4>Manual Processing Required</h4>
+                        <p>This work order's parent template does not match an automated workflow. Please process this work order manually or contact your administrator.</p>
+                    </div>
+
+                    <!-- Process Actions Footer -->
+                    <div class="process-actions-footer" id="processActionsFooter" style="display: none;">
+                        <div class="process-count-info">
+                            <strong id="readyToProcessCount">0</strong> space(s) ready to process
+                        </div>
+                        <div class="process-buttons">
                             <button class="btn btn-secondary" onclick="window.location.href='/cityworks'">
                                 Cancel
                             </button>
+                            <button class="btn btn-process" id="btnProcessAll" onclick="processAllReadySpaces()" disabled>
+                                Process All Ready Spaces
+                            </button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Processing Overlay -->
+                <div class="processing-overlay" id="processingOverlay">
+                    <div class="processing-modal">
+                        <h3>Processing Spaces</h3>
+                        <div class="processing-progress">
+                            <div class="processing-progress-bar" id="processingProgressBar" style="width: 0%"></div>
+                        </div>
+                        <div class="processing-status" id="processingStatus">Initializing...</div>
                     </div>
                 </div>
             </div>
@@ -665,23 +1169,40 @@
         if (!workOrderId) {
             window.location.href = '/cityworks';
         }
-        
-        
+
+        // ==================== Constants ====================
+
+        // Parent template IDs for workflow detection
+        const HOOD_SIGN_SPACE_TEMPLATE_IDS = [214, 682, 1160, 1161];  // Out of Service
+        const HOOD_SIGN_REMOVAL_TEMPLATE_IDS = [99, 100, 101, 1162];  // Return to Service
+
+        // Space layer types
+        const SPACE_LAYER_TYPES = ['PU_METERS_ON_ST', 'PU_OFF_ST_SPACES', 'PU_LZ_ON_ST', 'PU_DISVET_ON_ST'];
+
+        // ==================== Global State ====================
+
         let workOrderData = null;
         let assetsData = [];
         let parentWorkOrderData = null;
         let instructionsData = [];
         let commentsData = [];
+        let currentUser = null;
 
-        // Load user info
+        // Workflow state
+        let workflowType = null;  // 'out_of_service', 'return_to_service', or null
+        let validationData = null;
+        let validatedAssets = [];  // Assets with validation status
+
+        // ==================== User Info ====================
+
         async function loadUserInfo() {
             try {
                 const response = await fetch('/api/v1/auth/me', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (response.ok) {
-                    const user = await response.json();
-                    document.getElementById('userName').textContent = user.full_name || user.username;
+                    currentUser = await response.json();
+                    document.getElementById('userName').textContent = currentUser.full_name || currentUser.username;
                 } else {
                     logout();
                 }
@@ -695,7 +1216,8 @@
             window.location.href = '/';
         }
 
-        // Load work order details
+        // ==================== Work Order Loading ====================
+
         async function loadWorkOrderDetails() {
             try {
                 const response = await fetch(`/api/v1/cityworks/work-orders/${workOrderId}`, {
@@ -707,15 +1229,16 @@
                 }
 
                 const data = await response.json();
-                console.log(`Work Order Data:`, data)
+                console.log('Work Order Data:', data);
+
                 workOrderData = data.work_order;
                 parentWorkOrderData = data.parent_work_order;
                 assetsData = data.assets || [];
                 instructionsData = data.instructions || '';
-                parentInstructionsData = data.parent_instructions || '';
-                allInstructions = parentInstructionsData + instructionsData;
+                const parentInstructionsData = data.parent_instructions || '';
+                const allInstructions = parentInstructionsData + instructionsData;
                 commentsData = data.comments.length === 0 ? 'No comments available' : data.comments;
-                
+
                 // Update page with work order details
                 document.getElementById('workOrderId').textContent = workOrderId;
                 document.getElementById('workOrderDescription').textContent = workOrderData.Description || 'No description';
@@ -725,7 +1248,9 @@
                 document.getElementById('detailSubmitTo').textContent = workOrderData.SubmitTo || '--';
                 document.getElementById('detailInitiateDate').textContent = formatDate(workOrderData.InitiateDate);
                 document.getElementById('detailInitiatedBy').textContent = workOrderData.InitiatedBy;
-                document.getElementById('detailParentId').innerHTML = `<a href="https://cmms.cityofmadison.com/Cityworks/Workmanagement/WoGeneralEdit.aspx?WorkOrderId=${parentWorkOrderData.WorkOrderSid}" target="_blank">${parentWorkOrderData.WorkOrderSid}</a>` || '--';
+                document.getElementById('detailParentId').innerHTML = parentWorkOrderData.WorkOrderSid
+                    ? `<a href="https://cmms.cityofmadison.com/Cityworks/Workmanagement/WoGeneralEdit.aspx?WorkOrderId=${parentWorkOrderData.WorkOrderSid}" target="_blank">${parentWorkOrderData.WorkOrderSid}</a>`
+                    : '--';
                 document.getElementById('detailParentTemplate').textContent = parentWorkOrderData.Description || '--';
                 document.getElementById('detailParentActualStartDate').textContent = formatDate(parentWorkOrderData.ActualStartDate);
                 document.getElementById('detailParentActualFinishDate').textContent = formatDate(parentWorkOrderData.ActualFinishDate);
@@ -736,17 +1261,11 @@
                 document.getElementById('detailComments').textContent = commentsData || 'No comments available.';
                 document.getElementById('detailInstructions').textContent = allInstructions || 'No instructions available.';
 
-                // Update process type indicator
-                if (data.parent_template_info && data.parent_template_info.process_type) {
-                    document.getElementById('processTypeLabel').textContent =
-                        'Process Type: ' + data.parent_template_info.process_type;
-                }
-
-                // Render assets
+                // Render assets in the original assets section
                 renderAssets(assetsData);
 
-                // Populate asset dropdown
-                populateAssetDropdown(assetsData);
+                // Detect workflow type and set up processing section
+                detectWorkflowType();
 
                 // Show content, hide loading
                 document.getElementById('loadingState').style.display = 'none';
@@ -760,42 +1279,350 @@
             }
         }
 
-        function getStatusBadge(status) {
-            if (!status) return '<span class="status-badge">Unknown</span>';
+        // ==================== Workflow Detection ====================
 
-            const statusLower = status.toLowerCase();
-            let className = 'status-badge';
+        function detectWorkflowType() {
+            const parentTemplateId = parentWorkOrderData?.WoTemplateId;
+            const banner = document.getElementById('workflowBanner');
+            const icon = document.getElementById('workflowIcon');
+            const title = document.getElementById('workflowTitle');
+            const subtitle = document.getElementById('workflowSubtitle');
+            const validateBtn = document.getElementById('btnValidate');
 
-            if (statusLower.includes('open')) className += ' status-open';
-            else if (statusLower.includes('progress')) className += ' status-in-progress';
-            else if (statusLower.includes('pending')) className += ' status-pending';
-            else if (statusLower.includes('closed') || statusLower.includes('complete')) className += ' status-closed';
+            console.log('Parent Template ID:', parentTemplateId);
 
-            return `<span class="${className}">${status}</span>`;
+            if (HOOD_SIGN_SPACE_TEMPLATE_IDS.includes(parseInt(parentTemplateId))) {
+                // Out of Service workflow
+                workflowType = 'out_of_service';
+                banner.className = 'workflow-banner out-of-service';
+                icon.innerHTML = '&#9888;';  // Warning sign
+                title.textContent = 'Hood/Sign Space - Out of Service';
+                subtitle.textContent = 'Spaces will be moved to out of service status';
+                validateBtn.style.display = 'inline-block';
+                document.getElementById('outOfServiceForm').style.display = 'block';
+                document.getElementById('returnToServiceForm').style.display = 'none';
+                document.getElementById('noWorkflowMessage').style.display = 'none';
+
+            } else if (HOOD_SIGN_REMOVAL_TEMPLATE_IDS.includes(parseInt(parentTemplateId))) {
+                // Return to Service workflow
+                workflowType = 'return_to_service';
+                banner.className = 'workflow-banner return-to-service';
+                icon.innerHTML = '&#10003;';  // Checkmark
+                title.textContent = 'Hood/Sign Removal - Return to Service';
+                subtitle.textContent = 'Spaces will be returned to active service';
+                validateBtn.style.display = 'inline-block';
+                document.getElementById('outOfServiceForm').style.display = 'none';
+                document.getElementById('returnToServiceForm').style.display = 'block';
+                document.getElementById('noWorkflowMessage').style.display = 'none';
+
+            } else {
+                // No automated workflow
+                workflowType = null;
+                banner.className = 'workflow-banner manual';
+                icon.innerHTML = '&#9881;';  // Gear
+                title.textContent = 'Manual Processing Required';
+                subtitle.textContent = `Parent template: ${parentWorkOrderData?.Description || 'Unknown'}`;
+                validateBtn.style.display = 'none';
+                document.getElementById('outOfServiceForm').style.display = 'none';
+                document.getElementById('returnToServiceForm').style.display = 'none';
+                document.getElementById('noWorkflowMessage').style.display = 'block';
+                document.getElementById('processActionsFooter').style.display = 'none';
+                return;
+            }
+
+            // Auto-run validation for supported workflows
+            validateAssets();
         }
 
-        function formatDate(dateStr) {
-            if (!dateStr) return '--';
+        // ==================== Asset Validation ====================
+
+        async function validateAssets() {
+            if (!workflowType) {
+                showMessage('No automated workflow detected for this work order.', 'error');
+                return;
+            }
+
+            const validateBtn = document.getElementById('btnValidate');
+            validateBtn.disabled = true;
+            validateBtn.textContent = 'Validating...';
+
             try {
-                const date = new Date(dateStr);
-                const datePart = date.toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
+                const response = await fetch(`/api/v1/cityworks/work-orders/${workOrderId}/validate-assets`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
-                const timePart = date.toLocaleTimeString('en-US', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: true,
-                });
-                
-                return `${datePart} at ${timePart}`;
-            } catch {
-                return dateStr;
+
+                if (!response.ok) {
+                    throw new Error('Validation failed');
+                }
+
+                validationData = await response.json();
+                console.log('Validation Data:', validationData);
+
+                validatedAssets = validationData.assets || [];
+
+                // Update validation summary
+                updateValidationSummary();
+
+                // Render space assets with validation status
+                renderSpaceAssets();
+
+                // Show the footer
+                document.getElementById('processActionsFooter').style.display = 'flex';
+
+            } catch (error) {
+                console.error('Error validating assets:', error);
+                showMessage('Error validating assets: ' + error.message, 'error');
+            } finally {
+                validateBtn.disabled = false;
+                validateBtn.textContent = 'Run Validation';
             }
         }
 
+        function updateValidationSummary() {
+            const summary = document.getElementById('validationSummary');
+
+            const counts = {
+                ready: 0,
+                already_processed: 0,
+                manual_review: 0,
+                error: 0
+            };
+
+            validatedAssets.forEach(asset => {
+                if (counts.hasOwnProperty(asset.validation_status)) {
+                    counts[asset.validation_status]++;
+                }
+            });
+
+            document.getElementById('countReady').textContent = counts.ready;
+            document.getElementById('countAlreadyProcessed').textContent = counts.already_processed;
+            document.getElementById('countManualReview').textContent = counts.manual_review;
+            document.getElementById('countError').textContent = counts.error;
+
+            // Update process button
+            document.getElementById('readyToProcessCount').textContent = counts.ready;
+            const processBtn = document.getElementById('btnProcessAll');
+            processBtn.disabled = counts.ready === 0;
+
+            summary.style.display = 'grid';
+        }
+
+        function renderSpaceAssets() {
+            const container = document.getElementById('spaceAssetsList');
+
+            if (!validatedAssets || validatedAssets.length === 0) {
+                container.innerHTML = '<div class="no-assets">No assets to process.</div>';
+                return;
+            }
+
+            let html = '';
+            validatedAssets.forEach((asset, index) => {
+                const statusClass = `status-${asset.validation_status.replace('_', '-')}`;
+                const badge = getValidationBadge(asset.validation_status);
+                const isSpace = SPACE_LAYER_TYPES.includes(asset.entity_type);
+
+                html += `
+                    <div class="space-asset-card ${statusClass}" data-entity-sid="${asset.entity_sid}" data-index="${index}">
+                        <div class="space-asset-header">
+                            <div>
+                                <div class="space-asset-title">${asset.space_name || asset.entity_uid || 'Unknown Asset'}</div>
+                                <div class="space-asset-type">${asset.entity_type}</div>
+                            </div>
+                            ${badge}
+                        </div>
+
+                        <div class="space-asset-details">
+                            <div class="space-asset-field">
+                                <span class="space-asset-field-label">Entity UID</span>
+                                <span class="space-asset-field-value">${asset.entity_uid || '--'}</span>
+                            </div>
+                            <div class="space-asset-field">
+                                <span class="space-asset-field-label">Current Status</span>
+                                <span class="space-asset-field-value">${asset.current_status || '--'}</span>
+                            </div>
+                            <div class="space-asset-field">
+                                <span class="space-asset-field-label">Object ID</span>
+                                <span class="space-asset-field-value">${asset.entity_sid || '--'}</span>
+                            </div>
+                        </div>
+
+                        ${asset.message ? `<div class="validation-message">${asset.message}</div>` : ''}
+
+                        ${workflowType === 'out_of_service' && asset.validation_status === 'ready' ? `
+                        <div class="space-asset-inputs">
+                            <div class="space-asset-input-group">
+                                <label>ADA Relocation</label>
+                                <select id="adaRelocation_${asset.entity_sid}">
+                                    <option value="Unknown" selected>Unknown</option>
+                                    <option value="Yes">Yes</option>
+                                    <option value="No">No</option>
+                                </select>
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function getValidationBadge(status) {
+            const badges = {
+                'ready': { icon: '&#10003;', text: 'Ready', class: 'ready' },
+                'already_processed': { icon: '&#8634;', text: 'Already Processed', class: 'already-processed' },
+                'manual_review': { icon: '&#9888;', text: 'Manual Review', class: 'manual-review' },
+                'error': { icon: '&#10005;', text: 'Error', class: 'error' },
+                'processing': { icon: '&#8987;', text: 'Processing...', class: 'processing' },
+                'completed': { icon: '&#10003;', text: 'Completed', class: 'completed' }
+            };
+
+            const badge = badges[status] || badges.error;
+            return `<span class="validation-badge ${badge.class}">
+                <span class="validation-badge-icon">${badge.icon}</span>
+                ${badge.text}
+            </span>`;
+        }
+
+        // ==================== Batch Processing ====================
+
+        async function processAllReadySpaces() {
+            const readyAssets = validatedAssets.filter(a => a.validation_status === 'ready');
+
+            if (readyAssets.length === 0) {
+                showMessage('No spaces are ready to process.', 'error');
+                return;
+            }
+
+            // Collect form data
+            const formData = collectFormData();
+            if (!formData) return;  // Validation failed
+
+            // Collect per-asset data (ADA Relocation for out of service)
+            const assetData = readyAssets.map(asset => {
+                const data = {
+                    entity_sid: asset.entity_sid,
+                    space_name: asset.space_name,
+                    entity_type: asset.entity_type
+                };
+
+                if (workflowType === 'out_of_service') {
+                    const adaSelect = document.getElementById(`adaRelocation_${asset.entity_sid}`);
+                    data.ada_relocation = adaSelect ? adaSelect.value : 'Unknown';
+                }
+
+                return data;
+            });
+
+            // Show processing overlay
+            showProcessingOverlay(readyAssets.length);
+
+            // Disable process button
+            const processBtn = document.getElementById('btnProcessAll');
+            processBtn.disabled = true;
+
+            try {
+                const response = await fetch(`/api/v1/cityworks/work-orders/${workOrderId}/process-spaces`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        workflow_type: workflowType,
+                        assets: assetData,
+                        ...formData
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.detail || 'Processing failed');
+                }
+
+                // Update UI with results
+                updateProcessingResults(result);
+
+                hideProcessingOverlay();
+                showMessage(`Successfully processed ${result.processed_count || readyAssets.length} space(s).`, 'success');
+
+                // Re-run validation to update statuses
+                setTimeout(() => {
+                    validateAssets();
+                }, 1000);
+
+            } catch (error) {
+                console.error('Error processing spaces:', error);
+                hideProcessingOverlay();
+                showMessage('Error processing spaces: ' + error.message, 'error');
+                processBtn.disabled = false;
+            }
+        }
+
+        function collectFormData() {
+            if (workflowType === 'out_of_service') {
+                const revenueCollected = document.getElementById('selectRevenueCollected').value;
+                const removalMethod = document.getElementById('selectRemovalMethod').value;
+                const reasonRemoved = document.getElementById('selectReasonRemoved').value;
+                const notes = document.getElementById('inputProcessingNotes').value;
+
+                if (!revenueCollected) {
+                    showMessage('Please select a value for Revenue Collected.', 'error');
+                    return null;
+                }
+                if (!reasonRemoved) {
+                    showMessage('Please select a Reason Removed.', 'error');
+                    return null;
+                }
+
+                return {
+                    revenue_collected: revenueCollected,
+                    removal_method: removalMethod,
+                    reason_removed: reasonRemoved,
+                    notes: notes
+                };
+
+            } else if (workflowType === 'return_to_service') {
+                const notes = document.getElementById('inputReturnNotes').value;
+                return { notes: notes };
+            }
+
+            return {};
+        }
+
+        function showProcessingOverlay(totalCount) {
+            document.getElementById('processingOverlay').classList.add('active');
+            document.getElementById('processingProgressBar').style.width = '0%';
+            document.getElementById('processingStatus').textContent = `Processing 0 of ${totalCount} spaces...`;
+        }
+
+        function updateProcessingProgress(current, total) {
+            const percent = Math.round((current / total) * 100);
+            document.getElementById('processingProgressBar').style.width = `${percent}%`;
+            document.getElementById('processingStatus').textContent = `Processing ${current} of ${total} spaces...`;
+        }
+
+        function hideProcessingOverlay() {
+            document.getElementById('processingOverlay').classList.remove('active');
+        }
+
+        function updateProcessingResults(result) {
+            // Update the validation status of processed assets
+            if (result.results) {
+                result.results.forEach(r => {
+                    const asset = validatedAssets.find(a => a.entity_sid === r.entity_sid);
+                    if (asset) {
+                        asset.validation_status = r.success ? 'completed' : 'error';
+                        asset.message = r.message || (r.success ? 'Processed successfully' : 'Processing failed');
+                    }
+                });
+                renderSpaceAssets();
+                updateValidationSummary();
+            }
+        }
+
+        // ==================== Asset Display (Original Section) ====================
 
         function renderAssets(assets) {
             const container = document.getElementById('assetsList');
@@ -836,86 +1663,41 @@
             container.innerHTML = html;
         }
 
-        function populateAssetDropdown(assets) {
-            const select = document.getElementById('selectAsset');
-            select.innerHTML = '<option value="">Select an asset...</option>';
+        // ==================== Utility Functions ====================
 
-            if (assets && assets.length > 0) {
-                assets.forEach((asset, index) => {
-                    const option = document.createElement('option');
-                    option.value = asset.asset_id || index;
-                    option.textContent = `${asset.asset_type || 'Asset'} - ${asset.space_id || asset.asset_id || index}`;
-                    select.appendChild(option);
-                });
-            }
+        function getStatusBadge(status) {
+            if (!status) return '<span class="status-badge">Unknown</span>';
+
+            const statusLower = status.toLowerCase();
+            let className = 'status-badge';
+
+            if (statusLower.includes('open')) className += ' status-open';
+            else if (statusLower.includes('progress')) className += ' status-in-progress';
+            else if (statusLower.includes('pending')) className += ' status-pending';
+            else if (statusLower.includes('closed') || statusLower.includes('complete')) className += ' status-closed';
+
+            return `<span class="${className}">${status}</span>`;
         }
 
-        // Handle action selection to show/hide relevant fields
-        document.getElementById('selectAction').addEventListener('change', function() {
-            const action = this.value;
-            const spaceIdGroup = document.getElementById('spaceIdGroup');
-            const newStatusGroup = document.getElementById('newStatusGroup');
-
-            // Hide all conditional fields first
-            spaceIdGroup.style.display = 'none';
-            newStatusGroup.style.display = 'none';
-
-            // Show relevant fields based on action
-            if (action === 'out_of_service' || action === 'return_to_service') {
-                spaceIdGroup.style.display = 'block';
-            }
-
-            if (action === 'update_status') {
-                newStatusGroup.style.display = 'block';
-            }
-        });
-
-        // Process work order
-        async function processWorkOrder() {
-            const action = document.getElementById('selectAction').value;
-            if (!action) {
-                showMessage('Please select an action to perform.', 'error');
-                return;
-            }
-
-            const payload = {
-                action: action,
-                space_id: document.getElementById('inputSpaceId').value || null,
-                new_status: document.getElementById('selectNewStatus').value || null,
-                notes: document.getElementById('inputNotes').value || null
-            };
-
-            const btnProcess = document.getElementById('btnProcess');
-            btnProcess.disabled = true;
-            btnProcess.textContent = 'Processing...';
-
+        function formatDate(dateStr) {
+            if (!dateStr) return '--';
             try {
-                const response = await fetch(`/api/v1/cityworks/work-orders/${workOrderId}/process?action=${action}`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
+                const date = new Date(dateStr);
+                const datePart = date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                });
+                const timePart = date.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true,
                 });
 
-                const result = await response.json();
-
-                if (response.ok && result.success) {
-                    showMessage('Work order processed successfully!', 'success');
-                    // Optionally reload the page or redirect after a delay
-                    setTimeout(() => {
-                        loadWorkOrderDetails();
-                    }, 2000);
-                } else {
-                    throw new Error(result.detail || result.message || 'Processing failed');
-                }
-            } catch (error) {
-                console.error('Error processing work order:', error);
-                showMessage('Error processing work order: ' + error.message, 'error');
-            } finally {
-                btnProcess.disabled = false;
-                btnProcess.textContent = 'Process Work Order';
+                return `${datePart} at ${timePart}`;
+            } catch {
+                return dateStr;
             }
         }
 
@@ -923,6 +1705,9 @@
             const messageBox = document.getElementById('messageBox');
             messageBox.textContent = text;
             messageBox.className = 'message ' + type;
+
+            // Scroll to top to show message
+            window.scrollTo({ top: 0, behavior: 'smooth' });
 
             // Auto-hide success messages
             if (type === 'success') {
@@ -932,7 +1717,8 @@
             }
         }
 
-        // Initialize
+        // ==================== Initialize ====================
+
         document.addEventListener('DOMContentLoaded', () => {
             loadUserInfo();
             loadWorkOrderDetails();

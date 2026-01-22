@@ -840,6 +840,26 @@
             background: linear-gradient(135deg, #5a67d8 0%, #4c51bf 100%);
         }
 
+        .btn-close-wo {
+            background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+            color: white;
+            padding: 14px 28px;
+            font-size: 1rem;
+        }
+
+        .btn-close-wo:hover:not(:disabled) {
+            background: linear-gradient(135deg, #dd6b20 0%, #c05621 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(237, 137, 54, 0.3);
+        }
+
+        .btn-close-wo:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
         /* Progress Overlay */
         .processing-overlay {
             position: fixed;
@@ -1138,6 +1158,9 @@
                             <button class="btn btn-process" id="btnProcessAll" onclick="processAllReadySpaces()" disabled>
                                 Process All Ready Spaces
                             </button>
+                            <button class="btn btn-close-wo" id="btnCloseWorkOrder" onclick="closeWorkOrder()" style="display: none;">
+                                Close Work Order
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1402,10 +1425,21 @@
             document.getElementById('countManualReview').textContent = counts.manual_review;
             document.getElementById('countError').textContent = counts.error;
 
-            // Update process button
+            // Update process button and close button visibility
             document.getElementById('readyToProcessCount').textContent = counts.ready;
             const processBtn = document.getElementById('btnProcessAll');
-            processBtn.disabled = counts.ready === 0;
+            const closeBtn = document.getElementById('btnCloseWorkOrder');
+
+            if (counts.ready === 0) {
+                // No assets ready to process - show Close Work Order button, hide Process button
+                processBtn.style.display = 'none';
+                closeBtn.style.display = 'inline-block';
+            } else {
+                // Assets ready to process - show Process button, hide Close button
+                processBtn.style.display = 'inline-block';
+                processBtn.disabled = false;
+                closeBtn.style.display = 'none';
+            }
 
             summary.style.display = 'grid';
         }
@@ -1630,6 +1664,51 @@
                 });
                 renderSpaceAssets();
                 updateValidationSummary();
+            }
+        }
+
+        // ==================== Close Work Order ====================
+
+        async function closeWorkOrder() {
+            // Confirm with user before closing
+            if (!confirm('Are you sure you want to close this work order? This action cannot be undone.')) {
+                return;
+            }
+
+            const closeBtn = document.getElementById('btnCloseWorkOrder');
+            closeBtn.disabled = true;
+            closeBtn.textContent = 'Closing...';
+
+            try {
+                const response = await fetch(`/api/v1/cityworks/work-orders/${workOrderId}/close`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.detail || 'Failed to close work order');
+                }
+
+                if (result.success) {
+                    showMessage('Work order closed successfully!', 'success');
+                    // Redirect back to work orders list after a short delay
+                    setTimeout(() => {
+                        window.location.href = '/cityworks';
+                    }, 2000);
+                } else {
+                    throw new Error(result.message || 'Failed to close work order');
+                }
+
+            } catch (error) {
+                console.error('Error closing work order:', error);
+                showMessage('Error closing work order: ' + error.message, 'error');
+                closeBtn.disabled = false;
+                closeBtn.textContent = 'Close Work Order';
             }
         }
 

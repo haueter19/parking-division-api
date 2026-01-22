@@ -8,6 +8,7 @@ from cityworks import CityworksSession, CityworksConfig
 from cityworks.api.work_order import WorkOrderAPI
 from cityworks.gis import parking
 from cityworks.gis import operations as ops
+from app.config import settings
 from app.db.session import get_db
 from app.api.dependencies import get_current_active_user, require_role, UserProxy
 from app.models.database import UserRole
@@ -670,8 +671,9 @@ async def close_work_order_endpoint(
 
         # Configure connection
         config = CityworksConfig(environment='prod')
-        from app.config import settings
+        
         password = settings.secret_password
+        
         # Create authenticated session
         with CityworksSession(config) as session:
             #session.prompt_credentials()

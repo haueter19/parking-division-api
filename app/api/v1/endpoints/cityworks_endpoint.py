@@ -630,7 +630,7 @@ async def process_work_order_spaces(
                 print(f"Inserted {records_inserted} records for space {asset.space_name}")
                 # Update SDE layer status if this is the most recent record
                 if asset.recent_space_out_of_service == 'true':
-                    update_count = parking.update_space_status(table=asset.entity_type, space_id=asset.entity_uid, status='Out of service')
+                    update_count = parking.update_space_status(table=asset.entity_type, space_id=asset.entity_uid, status='Out of service', record_data.last_edited_date, record_data.last_edited_user)
                     print(f"Updated {update_count} space status to Out of service for space {asset.space_name}")
                 result['success'] = True
                 result['message'] = f'Space {asset.space_name} moved out of service'
@@ -654,7 +654,7 @@ async def process_work_order_spaces(
                 
                 # and parking.update_space_status({'space': asset.space_name, 'layer': asset.entity_type, 'status': 'In Service'})
                 if asset.recent_space_out_of_service == 'true':
-                    update_count = parking.update_space_status(table=asset.entity_type, space_id=asset.entity_uid, status='In service')
+                    update_count = parking.update_space_status(table=asset.entity_type, space_id=asset.entity_uid, status='In service', last_edited_date=return_data['last_edited_date'], last_edited_user=return_data['last_edited_user'])
                     print(f"Updated {update_count} space status to In service for space {asset.space_name}")
 
                 result['success'] = True
@@ -704,7 +704,6 @@ async def close_work_order_endpoint(
     else:
         update_user_sid = 1629
 
-    print(update_user_sid)
     try:
         # First, update the work order with completion details
         update_data = {
@@ -717,8 +716,9 @@ async def close_work_order_endpoint(
         # Configure connection
         config = CityworksConfig(environment='prod')
         
+        # Get password from settings
         password = settings.secret_password
-        print(password)
+
         # Create authenticated session
         with CityworksSession(config) as session:
             #session.prompt_credentials()

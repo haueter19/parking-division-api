@@ -408,7 +408,7 @@ function getStatusBadge(status) {
 
     if (statusLower.includes('open')) className += ' status-open';
     else if (statusLower.includes('complete')) className += ' status-in-progress';
-    else if (statusLower.includes('pending')) className += ' status-pending';
+    else if (statusLower.includes('hold')) className += ' status-hold';
     else if (statusLower.includes('closed') || statusLower.includes('complete')) className += ' status-closed';
 
     return `<span class="${className}">${status}</span>`;

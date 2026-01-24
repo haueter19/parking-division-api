@@ -1475,7 +1475,7 @@
                             </div>
                             <div class="space-asset-field">
                                 <span class="space-asset-field-label">Current Status</span>
-                                <span class="space-asset-field-value">${asset.current_status || '--'}</span>
+                                <span class="space-asset-field-value">${asset.current_sde_status || '--'}</span>
                             </div>
                             <div class="space-asset-field">
                                 <span class="space-asset-field-label">Space Type</span>
@@ -1546,9 +1546,17 @@
             // Collect per-asset data (ADA Relocation for out of service)
             const assetData = readyAssets.map(asset => {
                 const data = {
+                    entity_uid: asset.entity_uid,
                     entity_sid: asset.entity_sid,
+                    entity_type: asset.entity_type,
                     space_name: asset.space_name,
-                    entity_type: asset.entity_type
+                    space_type: asset.space_type,
+                    x: asset.space_x,
+                    y: asset.space_y,
+                    object_id: asset.object_id,
+                    event_id: asset.event_id,
+                    current_sde_status: asset.current_sde_status,
+                    recent_space_out_of_service: asset.recent_space_out_of_service
                 };
 
                 if (workflowType === 'out_of_service') {

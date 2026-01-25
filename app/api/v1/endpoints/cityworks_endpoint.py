@@ -616,7 +616,7 @@ async def process_work_order_spaces(
                     'last_edited_user': current_user.username.upper(),
                     'created_date': datetime.now().isoformat(timespec='seconds'),
                     'last_edited_date': datetime.now().isoformat(timespec='seconds'),
-                    'notes': request.notes,
+                    'note': request.notes,
                     'revenue_collected': request.revenue_collected,
                     'removal_method': request.removal_method,
                     'removed_by': submit_to,
@@ -630,7 +630,7 @@ async def process_work_order_spaces(
                 print(f"Inserted {records_inserted} records for space {asset.space_name}")
                 # Update SDE layer status if this is the most recent record
                 if asset.recent_space_out_of_service == 'true':
-                    update_count = parking.update_space_status(table=asset.entity_type, space_id=asset.entity_uid, status='Out of service', record_data.last_edited_date, record_data.last_edited_user)
+                    update_count = parking.update_space_status(table=asset.entity_type, space_id=asset.entity_uid, status='Out of service', last_edited_date=record_data.last_edited_date, last_edited_user=record_data.last_edited_user)
                     print(f"Updated {update_count} space status to Out of service for space {asset.space_name}")
                 result['success'] = True
                 result['message'] = f'Space {asset.space_name} moved out of service'

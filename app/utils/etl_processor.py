@@ -261,7 +261,7 @@ class ETLProcessor:
                     """), {"process_date": process_date})
             
             self.db.commit()
-            records_processed = self.db.execute(text("SELECT count(*) FROM PUReporting.app.fact_transaction WHERE staging_table = 'zms_cash_regular' AND transaction_date = :process_date"), {"process_date": process_date}).scalar()
+            records_processed = self.db.execute(text("SELECT count(*) FROM PUReporting.app.fact_transaction WHERE staging_table = 'zms_cash_regular' AND transaction_date = :process_date"), {"process_date": process_date}).fetchone()[0]
             
             return {
                 "success": True,

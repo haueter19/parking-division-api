@@ -20,7 +20,6 @@ from app.models.schemas import (
 )
 from app.utils.etl_processor import ETLProcessor, DataLoader
 from app.utils import etl_cache
-from db_manager import ConnectionManager
 
 router = APIRouter()
 
@@ -110,7 +109,7 @@ async def stream_process_etl(
             yield f"data: {data}\n\n"
 
         # Ensure final event
-        yield f"data: {json.dumps({"event": "complete"})}\n\n"
+        yield f'data: {json.dumps({"event": "complete"})}\n\n'
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

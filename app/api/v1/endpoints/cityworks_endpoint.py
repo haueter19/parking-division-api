@@ -229,7 +229,7 @@ async def get_work_order_detail(
     try:
         result = db.execute(query, {"work_order_sid": work_order_id})
         rows = result.fetchall()
-
+        
         # Initialize response structure
         response = {
             "work_order": {},
@@ -240,7 +240,7 @@ async def get_work_order_detail(
             "parent_instructions": [],
             "custom_fields": {}
         }
-
+        
         # Process each result type
         for row in rows:
             result_type = row.result_type

@@ -20,8 +20,6 @@ from app.models.database import (
     IPSCreditCardStaging, IPSMobileStaging, IPSCashStaging, IPSCoinCollectorStaging, 
     SQLCashStaging, IPSStaging, ETLProcessingLog, UploadedFile
 )
-#from db_manager import ConnectionManager
-#cnxn = ConnectionManager()
 
 class ETLProcessor:
     """Main ETL processor for transforming staging data to final transactions"""

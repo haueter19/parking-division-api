@@ -1,24 +1,43 @@
+#from http import server
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, create_engine
 from sqlalchemy.orm import sessionmaker, Session
+#from sqlalchemy.engine import URL
 from typing import Generator
+#from app.models import database
 
 # Import your existing db_manager
-from db_manager import ConnectionManager
-cnxn = ConnectionManager()
+#from db_manager import ConnectionManager
+#cnxn = ConnectionManager()
+
 
 # Get the engine using your existing connection system
-engine = cnxn.get_engine('PUReporting')
+#engine = cnxn.get_engine('PUReporting')
+server1 = 'pubworksdbprd'
+database1 = 'PUReporting'
+connection_string = (
+    f"mssql+pyodbc://@{server1}/{database1}"
+    "?driver=ODBC+Driver+17+for+SQL+Server"
+    "&trusted_connection=yes"
+)
+engine = create_engine(connection_string)
+
 
 # Additional engine for external/secondary data sources (Traffic)
 # Use ConnectionManager to obtain the 'Traffic' engine. This allows
 # parts of the app (ETL, lookups) to open sessions against the Traffic DB.
-engine_traffic = cnxn.get_engine('Traffic')
-
+server2 = 'arcsde'
+database2 = 'Traffic'
+connection_string = (
+    f"mssql+pyodbc://@{server2}/{database2}"
+    "?driver=ODBC+Driver+17+for+SQL+Server"
+    "&trusted_connection=yes"
+)
+traffic_engine = create_engine(connection_string)
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-SessionLocalTraffic = sessionmaker(autocommit=False, autoflush=False, bind=engine_traffic)
+SessionLocalTraffic = sessionmaker(autocommit=False, autoflush=False, bind=traffic_engine)
 
 # Base class for declarative models
 metadata = MetaData(schema="app")

@@ -96,7 +96,7 @@ async def startup_event():
 async def root(request: Request):
     """Serve the main web interface (login page)"""
     return templates.TemplateResponse(
-        request=request,
+        context={"request": request},
         name="index.html"
     )
 
@@ -105,7 +105,7 @@ async def root(request: Request):
 async def upload_page(request: Request):
     """Serve the file upload page"""
     return templates.TemplateResponse(
-        request=request,
+        context={"request": request},
         name="upload.html"
     )
 
@@ -122,59 +122,53 @@ async def file_status_page(request: Request):
     - View detailed error messages
     """
     return templates.TemplateResponse(
-        request=request,
-        name="file_status.html"
+        name="file_status.html",
+        context={"request": request}        
     )
 
 
 @app.get("/reports", response_class=HTMLResponse)
 async def reports_page(request: Request):
     """Serve the reports hub page with links to all available reports"""
-    return templates.TemplateResponse(request=request, name="reports.html")
+    return templates.TemplateResponse(name="reports.html", context={"request":request})
 
 
 @app.get("/reports/settle", response_class=HTMLResponse)
 async def settle_report_page(request: Request):
     """Serve the settlement report page - date-range selector and results"""
-    return templates.TemplateResponse(request=request, name="settle_report.html")
+    return templates.TemplateResponse(name="settle_report.html", context={"request": request}, )
 
 
 @app.get("/reports/sources", response_class=HTMLResponse)
 async def settle_by_source_page(request: Request):
     """Serve the pivoted settled-by-source report page"""
-    return templates.TemplateResponse(request=request, name="settle_by_source.html")
+    return templates.TemplateResponse(name="settle_by_source.html", context={"request": request})
 
 
 @app.get("/reports/revenue", response_class=HTMLResponse)
 async def revenue_report_page(request: Request):
     """Serve the revenue by period report page"""
-    return templates.TemplateResponse(request=request, name="revenue_report.html")
+    return templates.TemplateResponse(name="revenue_report.html", context={"request": request})
 
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
     """Serve the admin configuration page"""
-    return templates.TemplateResponse(
-        request=request,
-        name="admin.html"
-    )
+    return templates.TemplateResponse(name="admin.html", context={"request": request})
 
 
 @app.get("/cash_variance", response_class=HTMLResponse)
 async def cash_variance_page(request: Request):
     """Serve the cash variance entry page"""
-    return templates.TemplateResponse(
-        request=request,
-        name="cash_variance.html"
-    )
+    return templates.TemplateResponse(name="cash_variance.html", context={"request": request})
 
 
 @app.get("/cityworks", response_class=HTMLResponse)
 async def cityworks_page(request: Request):
     """Serve the Cityworks work orders list page"""
     return templates.TemplateResponse(
-        request=request,
-        name="cityworks.html"
+        name="cityworks.html",
+        context={"request": request}
     )
 
 
@@ -182,8 +176,8 @@ async def cityworks_page(request: Request):
 async def cityworks_detail_page(request: Request):
     """Serve the Cityworks work order detail/processing page"""
     return templates.TemplateResponse(
-        request=request,
-        name="cityworks_detail.html"
+        name="cityworks_detail.html",
+        context={"request": request}
     )
 
 

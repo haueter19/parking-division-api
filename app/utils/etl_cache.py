@@ -9,8 +9,7 @@ import pandas as pd
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 import logging
-from db_manager import ConnectionManager
-cnxn = ConnectionManager()
+
 
 logger = logging.getLogger(__name__)
 

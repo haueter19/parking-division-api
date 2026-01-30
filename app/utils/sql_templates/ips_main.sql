@@ -48,6 +48,7 @@ INNER JOIN app.dim_payment_method pm On (
             WHEN s.card_type = 'VISA' THEN 'Visa' 
             WHEN s.card_type = 'MC' THEN 'Mastercard' 
             WHEN s.card_type = 'DISC' THEN 'Discover' 
+            WHEN s.card_type = 'AMEX' Then 'American Express'
             WHEN s.card_type IS NULL AND s.transaction_type = 'Coins' THEN 'Cash'
             WHEN s.card_type LIKE '%Remote%' THEN 'Remote/PBC'
             WHEN s.card_type LIKE '%PBC%' THEN 'Remote/PBC'
@@ -121,6 +122,7 @@ INNER JOIN app.dim_payment_method pm On (
         WHEN s.card_type = 'VISA' THEN 'Visa' 
         WHEN s.card_type = 'MC' THEN 'Mastercard' 
         WHEN s.card_type = 'DISC' THEN 'Discover' 
+        WHEN s.card_type = 'AMEX' Then 'American Express'
         ELSE s.card_type 
     END=pm.payment_method_brand
 )

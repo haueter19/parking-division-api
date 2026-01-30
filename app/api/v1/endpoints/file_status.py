@@ -213,10 +213,16 @@ async def get_files_status(
             ELSE NULL
         END AS percent_complete,
         -- Computed flags
+        /*
         CASE 
             WHEN uf.records_processed > 0 AND COALESCE(SUM(etl.records_created), 0) < uf.records_processed 
             THEN 1 ELSE 0 
         END AS needs_etl,
+        */
+        CASE
+			WHEN MAX(CASE WHEN etl.status IN ('complete', 'completed') THEN 1 ELSE 0 END) = 0 THEN 1
+			ELSE 0
+		END As needs_etl,
         CASE
             WHEN uf.records_processed > 0 AND MAX(CASE WHEN etl.status = 'running' THEN 1 ELSE 0 END) = 0
             THEN 1 ELSE 0

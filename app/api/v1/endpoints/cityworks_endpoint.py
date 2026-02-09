@@ -205,6 +205,27 @@ async def get_work_order_detail(
             FROM parent_work_order pwo
             INNER JOIN CMMS.azteca.WoCustField cf On (pwo.WorkOrderSid=cf.WorkOrderSid)
             WHERE cf.WorkOrderSid = pwo.WorkOrderSid
+        ), ActivityHierarchy AS (
+            SELECT 
+                al.SOURCEACTIVITYID,
+                al.SOURCEACTIVITYTYPE,
+                al.DESTACTIVITYID,
+                0 AS Level
+            FROM CMMS.azteca.ACTIVITYLINK al
+            WHERE al.DESTACTIVITYID = :work_order_sid
+            
+            UNION ALL
+            
+            SELECT 
+                al.SOURCEACTIVITYID,
+                al.SOURCEACTIVITYTYPE,
+                al.DESTACTIVITYID,
+                ah.Level + 1
+            FROM CMMS.azteca.ACTIVITYLINK al
+            INNER JOIN ActivityHierarchy ah 
+                ON al.DESTACTIVITYID = ah.SOURCEACTIVITYID
+            WHERE ah.SOURCEACTIVITYTYPE != 'ServiceRequest'
+                AND ah.Level < 10
         )
         -- Combine all results with identifiers
         SELECT 
@@ -238,6 +259,27 @@ async def get_work_order_detail(
         SELECT 
             'parent_custom_fields' as result_type,
             (SELECT * FROM parent_custom_fields FOR JSON PATH) as json_data
+        UNION ALL
+        SELECT
+            'service_request' as result_type,
+            (SELECT
+                r.RequestId, 
+                r.Description, 
+                r.Status, 
+                r.InitiatedBy, 
+                r.DateTimeInit,
+                (SELECT cf.CustFieldName, cf.CustFieldValue
+                FROM CMMS.azteca.ReqCustField cf
+                WHERE r.REQUESTID = cf.REQUESTID
+                FOR JSON PATH) as cf
+            FROM CMMS.azteca.Request r
+            WHERE
+                r.RequestId = (SELECT TOP 1
+                                SOURCEACTIVITYID AS ServiceRequestID
+                            FROM ActivityHierarchy
+                            WHERE SOURCEACTIVITYTYPE = 'ServiceRequest'
+                            ORDER BY Level DESC)
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) as json_data
         """)
     
     try:
@@ -253,7 +295,8 @@ async def get_work_order_detail(
             "instructions": [],
             "parent_instructions": [],
             "custom_fields": {},
-            "parent_custom_fields": {}
+            "parent_custom_fields": {},
+            "service_request": {}
         }
         
         # Process each result type
@@ -291,6 +334,19 @@ async def get_work_order_detail(
                             item['CustFieldName']: item['CustFieldValue'] 
                             for item in parsed_data
                         }
+                elif result_type == 'service_request':
+                    if isinstance(parsed_data, dict):
+                        if 'cf' in parsed_data.keys():
+                            cf = parsed_data.pop('cf')
+                            response['service_request'] = parsed_data
+                        
+                            # Convert array to flattened dict
+                            response['service_request'].update({
+                                item['CustFieldName']: item['CustFieldValue'] 
+                                for item in cf
+                            })
+                        else:
+                            response['service_request'] = parsed_data
         
         # Check if work order was found
         if not response['work_order']:
@@ -415,6 +471,7 @@ async def process_work_order(
 # Parent template IDs for workflow detection
 HOOD_SIGN_SPACE_TEMPLATE_IDS = [214, 682, 1160, 1161]  # Out of Service
 HOOD_SIGN_REMOVAL_TEMPLATE_IDS = [99, 100, 101, 1162]  # Return to Service
+NO_PARKING_SIGN_CHECK = [85] # Metered space will go out of service
 
 # Space layer types that can be processed
 SPACE_LAYER_TYPES = ['PU_METERS_ON_ST', 'PU_OFF_ST_SPACES', 'PU_LZ_ON_ST', 'PU_DISVET_ON_ST']

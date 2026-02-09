@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cash Variance - Parking Division</title>
+    <title>Cash Variance Entry - Parking Division</title>
+    <link rel="stylesheet" href="/static/shared_styles.css">
     <style>
+        /* Page structure - matches other pages */
         * {
             margin: 0;
             padding: 0;
@@ -88,7 +90,29 @@
             margin: 0 auto;
         }
 
-        /* Form styles */
+        /* Messages */
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .message.show { display: block; }
+
+        .message.success {
+            background: #d1fae5;
+            color: #059669;
+            border-left: 4px solid #10b981;
+        }
+
+        .message.error {
+            background: #fee2e2;
+            color: #dc2626;
+            border-left: 4px solid #f56565;
+        }
+
+        /* Form sections */
         .form-section {
             background: #f7fafc;
             padding: 20px;
@@ -104,7 +128,7 @@
 
         .form-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 15px;
         }
 
@@ -142,10 +166,6 @@
             border-color: #667eea;
         }
 
-        input.error, select.error {
-            border-color: #f56565;
-        }
-
         button {
             padding: 12px 24px;
             border: none;
@@ -181,153 +201,11 @@
             margin-top: 15px;
         }
 
-        /* Table styles */
-        .table-container {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-
-        thead {
-            background: #f7fafc;
-        }
-
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        th {
-            font-weight: 700;
-            color: #2d3748;
-            white-space: nowrap;
-        }
-
-        tbody tr:hover {
-            background: #f7fafc;
-        }
-
-        .action-btn {
-            padding: 6px 12px;
-            font-size: 0.85rem;
-            margin-right: 5px;
-        }
-
-        /* Messages */
-        .message {
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            display: none;
-        }
-
-        .message.show {
-            display: block;
-        }
-
-        .message.success {
-            background: #d1fae5;
-            color: #059669;
-            border-left: 4px solid #10b981;
-        }
-
-        .message.error {
-            background: #fee2e2;
-            color: #dc2626;
-            border-left: 4px solid #f56565;
-        }
-
-        /* Badge */
-        .badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            font-weight: 600;
-        }
-
-        .badge-regular {
-            background: #dbeafe;
-            color: #2563eb;
-        }
-
-        .badge-special_event {
-            background: #fef3c7;
-            color: #d97706;
-        }
-
-        /* Loading */
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-            color: #6b7280;
-        }
-
-        .loading.show {
-            display: block;
-        }
-
-        /* Modal */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .modal.show {
-            display: flex;
-        }
-
-        .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-            max-width: 800px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .modal-header h2 {
-            color: #2d3748;
-        }
-
-        .close-modal {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: #6b7280;
-            padding: 0;
-            width: 30px;
-            height: 30px;
-        }
-
         /* Filter section */
         .filter-section {
             background: #e6f2ff;
             border-left: 4px solid #667eea;
-            padding: 15px 20px;
+            padding: 20px;
             border-radius: 8px;
             margin-bottom: 20px;
         }
@@ -375,14 +253,148 @@
             display: block;
         }
 
-        /* Amount styling */
-        .amount {
-            font-family: 'Courier New', monospace;
+        /* Tables */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        thead {
+            background: #f7fafc;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        th {
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        tbody tr:hover {
+            background: #f7fafc;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #6b7280;
+        }
+
+        .loading.show { display: block; }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
             font-weight: 600;
         }
 
-        .amount.positive {
-            color: #059669;
+        .badge-regular {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+
+        .badge-special_event {
+            background: #fef3c7;
+            color: #b45309;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+
+        .amount {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            text-align: right;
+        }
+
+        /* Field groups for exceptions/manuals */
+        .field-group {
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: white;
+        }
+
+        .field-group legend {
+            font-weight: 600;
+            color: #374151;
+            padding: 0 0.5rem;
+        }
+
+        .field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .help-text {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-top: 0.25rem;
+            font-style: italic;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 2rem;
+            cursor: pointer;
+            color: #6b7280;
+        }
+
+        .close-modal:hover {
+            color: #1f2937;
         }
 
         /* Responsive */
@@ -471,27 +483,66 @@
                             <label>Amount ($)</label>
                             <input type="number" name="amount" step="0.01" min="0" placeholder="0.00">
                         </div>
+                    </div>
 
-                        <div class="form-group">
-                            <label>Turnarounds</label>
-                            <input type="number" name="turnarounds" min="0" value="0">
+                    <!-- Exceptions Section -->
+                    <fieldset class="field-group">
+                        <legend>Exceptions (Subtractions from Cash)</legend>
+                        
+                        <div class="field-row">
+                            <div class="form-group">
+                                <label>Turnaround Count</label>
+                                <input type="number" name="turnaround_count" min="0" value="0" tabindex="1">
+                                <span class="help-text">Number of turnarounds</span>
+                            </div>
+                            <div class="form-group">
+                                <label>Turnaround Value ($)</label>
+                                <input type="number" name="turnaround_value" step="0.01" min="0" value="0" placeholder="0.00" tabindex="2">
+                                <span class="help-text">Total value of turnarounds</span>
+                            </div>
+                        </div>
+
+                        <div class="field-row">
+                            <div class="form-group">
+                                <label>Coupon Count</label>
+                                <input type="number" name="coupon_count" min="0" value="0" tabindex="3">
+                                <span class="help-text">Number of coupons used</span>
+                            </div>
+                            <div class="form-group">
+                                <label>Coupon Value ($)</label>
+                                <input type="number" name="coupon_value" step="0.01" min="0" value="0" placeholder="0.00" tabindex="4">
+                                <span class="help-text">Total value of coupons</span>
+                            </div>
                         </div>
 
                         <div class="form-group">
                             <label>FTP Count (Failure to Pay)</label>
-                            <input type="number" name="ftp_count" min="0" value="0">
-                        </div>
-
-                        <div class="form-group">
-                            <label>Coupons ($)</label>
-                            <input type="number" name="coupons" step="0.01" min="0" value="0" placeholder="0.00">
+                            <input type="number" name="ftp_count" min="0" value="0" tabindex="5">
                         </div>
 
                         <div class="form-group">
                             <label>Other Non-Paying</label>
-                            <input type="number" name="other_non_paying" min="0" value="0">
+                            <input type="number" name="other_non_paying" min="0" value="0" tabindex="6">
                         </div>
-                    </div>
+                    </fieldset>
+
+                    <!-- Manuals Section -->
+                    <fieldset class="field-group">
+                        <legend>Manuals (Additions to Cash)</legend>
+                        
+                        <div class="field-row">
+                            <div class="form-group">
+                                <label>Manual Count</label>
+                                <input type="number" name="manual_count" min="0" value="0" tabindex="7">
+                                <span class="help-text">Number of manual transactions</span>
+                            </div>
+                            <div class="form-group">
+                                <label>Manual Value ($)</label>
+                                <input type="number" name="manual_value" step="0.01" min="0" value="0" placeholder="0.00" tabindex="8">
+                                <span class="help-text">Total value of manual transactions</span>
+                            </div>
+                        </div>
+                    </fieldset>
 
                     <div class="btn-group">
                         <button type="submit" class="btn-primary">Create Entry</button>
@@ -545,8 +596,9 @@
                         <th>Station</th>
                         <th>Amount</th>
                         <th>Turnarounds</th>
-                        <th>FTP</th>
                         <th>Coupons</th>
+                        <th>Manuals</th>
+                        <th>FTP</th>
                         <th>Other</th>
                         <th>Created By</th>
                         <th>Actions</th>
@@ -566,7 +618,7 @@
             </div>
             <form id="editForm">
                 <input type="hidden" name="entry_id">
-                <div class="form-grid" id="editFormFields">
+                <div id="editFormFields">
                     <!-- Fields will be populated by JavaScript -->
                 </div>
                 <div class="btn-group">

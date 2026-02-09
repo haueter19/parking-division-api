@@ -100,23 +100,26 @@ async function loadEntries() {
     const params = new URLSearchParams();
 
     const startDate = document.getElementById('filterStartDate').value;
-    const endDate = document.getElementById('filterEndDate').value;
-    const cashierNumber = document.getElementById('filterCashierNumber').value;
-    const facilityId = document.getElementById('filterLocation').value;
+    if (startDate) params.append('start_date', new Date(startDate).toISOString());
 
-    if (startDate) params.append('start_date', startDate + 'T00:00:00');
-    if (endDate) params.append('end_date', endDate + 'T23:59:59');
+    const endDate = document.getElementById('filterEndDate').value;
+    if (endDate) params.append('end_date', new Date(endDate).toISOString());
+
+    const cashierNumber = document.getElementById('filterCashierNumber').value;
     if (cashierNumber) params.append('cashier_number', cashierNumber);
-    if (facilityId) params.append('facility_id', facilityId);
+
+    const locationId = document.getElementById('filterLocation').value;
+    if (locationId) params.append('location_id', locationId);
 
     try {
-        const response = await fetch(`/api/v1/cash-variance?${params.toString()}`, {
+        const response = await fetch(`/api/v1/cash-variance?${params}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (response.ok) {
             allEntries = await response.json();
             renderEntries(allEntries);
+            document.getElementById('entryCount').textContent = `(${allEntries.length} entries)`;
         } else {
             showMessage('Failed to load entries', 'error');
         }
@@ -131,12 +134,9 @@ async function loadEntries() {
 
 function renderEntries(entries) {
     const tbody = document.getElementById('entriesTableBody');
-    const countEl = document.getElementById('entryCount');
 
-    countEl.textContent = `(${entries.length} entries)`;
-
-    if (!entries || entries.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: #6b7280;">No entries found</td></tr>';
+    if (entries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="14" style="text-align: center; color: #6b7280;">No entries found</td></tr>';
         return;
     }
 
@@ -149,9 +149,10 @@ function renderEntries(entries) {
             <td>${entry.location_name || '-'}</td>
             <td>${entry.device_terminal_id || '-'}</td>
             <td class="amount">$${formatAmount(entry.amount)}</td>
-            <td>${entry.turnarounds}</td>
+            <td>${entry.turnaround_count} / $${formatAmount(entry.turnaround_value)}</td>
+            <td>${entry.coupon_count} / $${formatAmount(entry.coupon_value)}</td>
+            <td>${entry.manual_count} / $${formatAmount(entry.manual_value)}</td>
             <td>${entry.ftp_count}</td>
-            <td class="amount">$${formatAmount(entry.coupons)}</td>
             <td>${entry.other_non_paying}</td>
             <td>${entry.created_by_name || '-'}</td>
             <td>
@@ -176,9 +177,13 @@ function setupFormHandlers() {
             location_id: formData.get('location_id') ? parseInt(formData.get('location_id')) : null,
             device_id: formData.get('device_id') ? parseInt(formData.get('device_id')) : null,
             amount: formData.get('amount') ? parseFloat(formData.get('amount')) : null,
-            turnarounds: parseInt(formData.get('turnarounds')) || 0,
+            turnaround_count: parseInt(formData.get('turnaround_count')) || 0,
+            turnaround_value: formData.get('turnaround_value') ? parseFloat(formData.get('turnaround_value')) : 0,
             ftp_count: parseInt(formData.get('ftp_count')) || 0,
-            coupons: formData.get('coupons') ? parseFloat(formData.get('coupons')) : 0,
+            coupon_count: parseInt(formData.get('coupon_count')) || 0,
+            coupon_value: formData.get('coupon_value') ? parseFloat(formData.get('coupon_value')) : 0,
+            manual_count: parseInt(formData.get('manual_count')) || 0,
+            manual_value: formData.get('manual_value') ? parseFloat(formData.get('manual_value')) : 0,
             other_non_paying: parseInt(formData.get('other_non_paying')) || 0
         };
 
@@ -220,9 +225,13 @@ function setupFormHandlers() {
             location_id: formData.get('location_id') ? parseInt(formData.get('location_id')) : null,
             device_id: formData.get('device_id') ? parseInt(formData.get('device_id')) : null,
             amount: formData.get('amount') ? parseFloat(formData.get('amount')) : null,
-            turnarounds: parseInt(formData.get('turnarounds')) || 0,
+            turnaround_count: parseInt(formData.get('turnaround_count')) || 0,
+            turnaround_value: formData.get('turnaround_value') ? parseFloat(formData.get('turnaround_value')) : 0,
             ftp_count: parseInt(formData.get('ftp_count')) || 0,
-            coupons: formData.get('coupons') ? parseFloat(formData.get('coupons')) : 0,
+            coupon_count: parseInt(formData.get('coupon_count')) || 0,
+            coupon_value: formData.get('coupon_value') ? parseFloat(formData.get('coupon_value')) : 0,
+            manual_count: parseInt(formData.get('manual_count')) || 0,
+            manual_value: formData.get('manual_value') ? parseFloat(formData.get('manual_value')) : 0,
             other_non_paying: parseInt(formData.get('other_non_paying')) || 0
         };
 
@@ -250,23 +259,28 @@ function setupFormHandlers() {
     });
 }
 
-// ============= Filter Functions =============
-function clearFilters() {
-    document.getElementById('filterStartDate').value = '';
-    document.getElementById('filterEndDate').value = '';
-    document.getElementById('filterCashierNumber').value = '';
-    document.getElementById('filterLocation').value = '';
-    loadEntries();
+// ============= Edit Entry =============
+async function editEntry(entryId) {
+    try {
+        const response = await fetch(`/api/v1/cash-variance/${entryId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+            showMessage('Failed to load entry', 'error');
+            return;
+        }
+
+        const entry = await response.json();
+        populateEditForm(entry);
+        document.getElementById('editModal').classList.add('show');
+    } catch (error) {
+        console.error('Error loading entry:', error);
+        showMessage('Error loading entry', 'error');
+    }
 }
 
-// ============= Edit Modal =============
-function editEntry(entryId) {
-    const entry = allEntries.find(e => e.id === entryId);
-    if (!entry) {
-        showMessage('Entry not found', 'error');
-        return;
-    }
-
+function populateEditForm(entry) {
     // Build location options
     const locationOptions = '<option value="">Select location...</option>' +
         metadata.facilities.map(f =>
@@ -283,79 +297,137 @@ function editEntry(entryId) {
     const formFields = document.getElementById('editFormFields');
     formFields.innerHTML = `
         <input type="hidden" name="entry_id" value="${entry.id}">
-        <div class="form-group">
-            <label>Date <span class="required">*</span></label>
-            <input type="datetime-local" name="date" required value="${formatDateTimeLocal(new Date(entry.date))}">
+        
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Date <span class="required">*</span></label>
+                <input type="datetime-local" name="date" required value="${formatDateTimeLocal(new Date(entry.date))}">
+            </div>
+            <div class="form-group">
+                <label>Cashier Number <span class="required">*</span></label>
+                <input type="text" name="cashier_number" required value="${entry.cashier_number}">
+            </div>
+            <div class="form-group">
+                <label>Bag Number <span class="required">*</span></label>
+                <input type="text" name="bag_number" required value="${entry.bag_number}">
+            </div>
+            <div class="form-group">
+                <label>Bag Type <span class="required">*</span></label>
+                <select name="bag_type" required>
+                    <option value="regular" ${entry.bag_type === 'regular' ? 'selected' : ''}>Regular</option>
+                    <option value="special_event" ${entry.bag_type === 'special_event' ? 'selected' : ''}>Special Event</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Location</label>
+                <select name="location_id">${locationOptions}</select>
+            </div>
+            <div class="form-group">
+                <label>Station/Device</label>
+                <select name="device_id">${deviceOptions}</select>
+            </div>
+            <div class="form-group">
+                <label>Amount ($)</label>
+                <input type="number" name="amount" step="0.01" min="0" value="${entry.amount || ''}">
+            </div>
         </div>
-        <div class="form-group">
-            <label>Cashier Number <span class="required">*</span></label>
-            <input type="text" name="cashier_number" required value="${entry.cashier_number}">
-        </div>
-        <div class="form-group">
-            <label>Bag Number <span class="required">*</span></label>
-            <input type="text" name="bag_number" required value="${entry.bag_number}">
-        </div>
-        <div class="form-group">
-            <label>Bag Type <span class="required">*</span></label>
-            <select name="bag_type" required>
-                <option value="regular" ${entry.bag_type === 'regular' ? 'selected' : ''}>Regular</option>
-                <option value="special_event" ${entry.bag_type === 'special_event' ? 'selected' : ''}>Special Event</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label>Location</label>
-            <select name="location_id">${locationOptions}</select>
-        </div>
-        <div class="form-group">
-            <label>Station/Device</label>
-            <select name="device_id">${deviceOptions}</select>
-        </div>
-        <div class="form-group">
-            <label>Amount ($)</label>
-            <input type="number" name="amount" step="0.01" min="0" value="${entry.amount || ''}">
-        </div>
-        <div class="form-group">
-            <label>Turnarounds</label>
-            <input type="number" name="turnarounds" min="0" value="${entry.turnarounds}">
-        </div>
-        <div class="form-group">
-            <label>FTP Count</label>
-            <input type="number" name="ftp_count" min="0" value="${entry.ftp_count}">
-        </div>
-        <div class="form-group">
-            <label>Coupons ($)</label>
-            <input type="number" name="coupons" step="0.01" min="0" value="${entry.coupons}">
-        </div>
-        <div class="form-group">
-            <label>Other Non-Paying</label>
-            <input type="number" name="other_non_paying" min="0" value="${entry.other_non_paying}">
-        </div>
-    `;
 
-    document.getElementById('editModal').classList.add('show');
+        <fieldset class="field-group">
+            <legend>Exceptions (Subtractions from Cash)</legend>
+            
+            <div class="field-row">
+                <div class="form-group">
+                    <label>Turnaround Count</label>
+                    <input type="number" name="turnaround_count" min="0" value="${entry.turnaround_count}">
+                </div>
+                <div class="form-group">
+                    <label>Turnaround Value ($)</label>
+                    <input type="number" name="turnaround_value" step="0.01" min="0" value="${entry.turnaround_value}">
+                </div>
+            </div>
+
+            <div class="field-row">
+                <div class="form-group">
+                    <label>Coupon Count</label>
+                    <input type="number" name="coupon_count" min="0" value="${entry.coupon_count}">
+                </div>
+                <div class="form-group">
+                    <label>Coupon Value ($)</label>
+                    <input type="number" name="coupon_value" step="0.01" min="0" value="${entry.coupon_value}">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>FTP Count</label>
+                <input type="number" name="ftp_count" min="0" value="${entry.ftp_count}">
+            </div>
+
+            <div class="form-group">
+                <label>Other Non-Paying</label>
+                <input type="number" name="other_non_paying" min="0" value="${entry.other_non_paying}">
+            </div>
+        </fieldset>
+
+        <fieldset class="field-group">
+            <legend>Manuals (Additions to Cash)</legend>
+            
+            <div class="field-row">
+                <div class="form-group">
+                    <label>Manual Count</label>
+                    <input type="number" name="manual_count" min="0" value="${entry.manual_count}">
+                </div>
+                <div class="form-group">
+                    <label>Manual Value ($)</label>
+                    <input type="number" name="manual_value" step="0.01" min="0" value="${entry.manual_value}">
+                </div>
+            </div>
+        </fieldset>
+    `;
 }
 
 function closeEditModal() {
     document.getElementById('editModal').classList.remove('show');
 }
 
-// ============= Utility Functions =============
-function showMessage(text, type) {
-    const message = document.getElementById('message');
-    message.textContent = text;
-    message.className = `message show ${type}`;
+// ============= Filter Functions =============
+function clearFilters() {
+    document.getElementById('filterStartDate').value = '';
+    document.getElementById('filterEndDate').value = '';
+    document.getElementById('filterCashierNumber').value = '';
+    document.getElementById('filterLocation').value = '';
+    loadEntries();
+}
 
+// ============= UI Helpers =============
+function toggleFormSection(header) {
+    const content = header.nextElementSibling;
+    const icon = header.querySelector('.toggle-icon');
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        icon.textContent = '+';
+    } else {
+        content.classList.add('expanded');
+        icon.textContent = '−';
+    }
+}
+
+function showMessage(message, type = 'info') {
+    const messageDiv = document.getElementById('message');
+    messageDiv.textContent = message;
+    messageDiv.className = `message ${type} show`;
+    
     setTimeout(() => {
-        message.classList.remove('show');
+        messageDiv.classList.remove('show');
     }, 5000);
 }
 
+// ============= Formatters =============
 function formatDate(dateString) {
-    if (!dateString) return '-';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
+    return date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
@@ -368,6 +440,7 @@ function formatDateTimeLocal(date) {
     const day = String(date.getDate()).padStart(2, '0');
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
+    
     return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
@@ -376,28 +449,6 @@ function formatAmount(amount) {
     return parseFloat(amount).toFixed(2);
 }
 
-function formatBagType(bagType) {
-    if (bagType === 'special_event') return 'Special Event';
-    return 'Regular';
+function formatBagType(type) {
+    return type === 'special_event' ? 'Special Event' : 'Regular';
 }
-
-function toggleFormSection(header) {
-    const content = header.nextElementSibling;
-    const icon = header.querySelector('.toggle-icon');
-
-    if (content.classList.contains('expanded')) {
-        content.classList.remove('expanded');
-        icon.textContent = '+';
-    } else {
-        content.classList.add('expanded');
-        icon.textContent = '-';
-    }
-}
-
-// Close modal when clicking outside
-window.addEventListener('click', (event) => {
-    const modal = document.getElementById('editModal');
-    if (event.target === modal) {
-        closeEditModal();
-    }
-});

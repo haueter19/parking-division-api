@@ -27,76 +27,79 @@ async def get_cash_variance_metadata(
     Get metadata for cash variance form dropdowns.
     Returns locations (garages) and devices (Cashier, Exit, Entrance types).
     """
-    # Get facilities where facility_type = 'garage'
-    facilities_q = text("""
-        SELECT
-            facility_id,
-            facility_name
+    
+    # Get facilities (garages)
+    facilities_query = text("""
+        SELECT facility_id, facility_name
         FROM app.dim_facility
-        WHERE facility_type = 'garage'
+        WHERE facility_status = 'Active'
         ORDER BY facility_name
     """)
-    facilities = [dict(r._mapping) for r in db.execute(facilities_q).fetchall()]
-
-    # Get devices where device_type IN ('Cashier', 'Exit', 'Entrance')
-    devices_q = text("""
-        SELECT
-            device_id,
-            device_terminal_id,
-            device_type
+    facilities = db.execute(facilities_query).fetchall()
+    
+    # Get devices (Cashier, Exit, Entrance)
+    devices_query = text("""
+        SELECT device_id, device_terminal_id, device_type
         FROM app.dim_device
         WHERE device_type IN ('Cashier', 'Exit', 'Entrance')
-        ORDER BY device_type, device_terminal_id
+        ORDER BY device_terminal_id
     """)
-    devices = [dict(r._mapping) for r in db.execute(devices_q).fetchall()]
-
+    devices = db.execute(devices_query).fetchall()
+    
     return {
-        "facilities": facilities,
-        "devices": devices,
-        "bag_types": [
-            {"value": "regular", "label": "Regular"},
-            {"value": "special_event", "label": "Special Event"}
-        ]
+        "facilities": [
+            {"facility_id": f.facility_id, "facility_name": f.facility_name}
+            for f in facilities
+        ],
+        "devices": [
+            {"device_id": d.device_id, "device_terminal_id": d.device_terminal_id, "device_type": d.device_type}
+            for d in devices
+        ],
+        "bag_types": ["regular", "special_event"]
     }
 
 
 @router.get("", response_model=List[CashVarianceResponse])
-async def list_cash_variance_entries(
+async def get_cash_variance_entries(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     cashier_number: Optional[str] = None,
-    facility_id: Optional[int] = None,
-    skip: int = 0,
-    limit: int = 100,
+    location_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: UserProxy = Depends(get_current_active_user)
 ):
-    """List cash variance entries with optional filtering"""
-
+    """Get all cash variance entries with optional filters"""
+    
     where_clauses = ["1=1"]
     params = {"skip": skip, "limit": limit}
-
+    
     if start_date:
         where_clauses.append("cv.date >= :start_date")
         params["start_date"] = start_date
-
+    
     if end_date:
         where_clauses.append("cv.date <= :end_date")
         params["end_date"] = end_date
-
+    
     if cashier_number:
         where_clauses.append("cv.cashier_number LIKE :cashier_number")
         params["cashier_number"] = f"%{cashier_number}%"
-
-    if facility_id:
-        where_clauses.append("cv.location_id = :facility_id")
-        params["facility_id"] = facility_id
-
+    
+    if location_id:
+        where_clauses.append("cv.location_id = :location_id")
+        params["location_id"] = location_id
+    
     query = text(f"""
         SELECT
             cv.id, cv.date, cv.cashier_number, cv.bag_number, cv.bag_type,
-            cv.location_id, cv.device_id, cv.amount, cv.turnarounds,
-            cv.ftp_count, cv.coupons, cv.other_non_paying,
+            cv.location_id, cv.device_id, cv.amount, 
+            cv.turnaround_count, cv.turnaround_value,
+            cv.ftp_count, 
+            cv.coupon_count, cv.coupon_value,
+            cv.manual_count, cv.manual_value,
+            cv.other_non_paying,
             cv.created_by, cv.created_at, cv.updated_by, cv.updated_at,
             f.facility_name as location_name,
             d.device_terminal_id,
@@ -110,9 +113,9 @@ async def list_cash_variance_entries(
         OFFSET :skip ROWS
         FETCH NEXT :limit ROWS ONLY
     """)
-
+    
     results = db.execute(query, params).fetchall()
-
+    
     return [
         CashVarianceResponse(
             id=r.id,
@@ -123,9 +126,13 @@ async def list_cash_variance_entries(
             location_id=r.location_id,
             device_id=r.device_id,
             amount=float(r.amount) if r.amount else None,
-            turnarounds=r.turnarounds or 0,
+            turnaround_count=r.turnaround_count or 0,
+            turnaround_value=float(r.turnaround_value) if r.turnaround_value else 0,
             ftp_count=r.ftp_count or 0,
-            coupons=float(r.coupons) if r.coupons else 0,
+            coupon_count=r.coupon_count or 0,
+            coupon_value=float(r.coupon_value) if r.coupon_value else 0,
+            manual_count=r.manual_count or 0,
+            manual_value=float(r.manual_value) if r.manual_value else 0,
             other_non_paying=r.other_non_paying or 0,
             created_by=r.created_by,
             created_at=r.created_at,
@@ -146,12 +153,16 @@ async def get_cash_variance_entry(
     current_user: UserProxy = Depends(get_current_active_user)
 ):
     """Get a specific cash variance entry by ID"""
-
+    
     query = text("""
         SELECT
             cv.id, cv.date, cv.cashier_number, cv.bag_number, cv.bag_type,
-            cv.location_id, cv.device_id, cv.amount, cv.turnarounds,
-            cv.ftp_count, cv.coupons, cv.other_non_paying,
+            cv.location_id, cv.device_id, cv.amount, 
+            cv.turnaround_count, cv.turnaround_value,
+            cv.ftp_count,
+            cv.coupon_count, cv.coupon_value,
+            cv.manual_count, cv.manual_value,
+            cv.other_non_paying,
             cv.created_by, cv.created_at, cv.updated_by, cv.updated_at,
             f.facility_name as location_name,
             d.device_terminal_id,
@@ -162,15 +173,15 @@ async def get_cash_variance_entry(
         LEFT JOIN pt.employees e ON cv.created_by = e.employee_id
         WHERE cv.id = :entry_id
     """)
-
+    
     result = db.execute(query, {"entry_id": entry_id}).first()
-
+    
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Cash variance entry {entry_id} not found"
         )
-
+    
     return CashVarianceResponse(
         id=result.id,
         date=result.date,
@@ -180,9 +191,13 @@ async def get_cash_variance_entry(
         location_id=result.location_id,
         device_id=result.device_id,
         amount=float(result.amount) if result.amount else None,
-        turnarounds=result.turnarounds or 0,
+        turnaround_count=result.turnaround_count or 0,
+        turnaround_value=float(result.turnaround_value) if result.turnaround_value else 0,
         ftp_count=result.ftp_count or 0,
-        coupons=float(result.coupons) if result.coupons else 0,
+        coupon_count=result.coupon_count or 0,
+        coupon_value=float(result.coupon_value) if result.coupon_value else 0,
+        manual_count=result.manual_count or 0,
+        manual_value=float(result.manual_value) if result.manual_value else 0,
         other_non_paying=result.other_non_paying or 0,
         created_by=result.created_by,
         created_at=result.created_at,
@@ -201,21 +216,29 @@ async def create_cash_variance_entry(
     current_user: UserProxy = Depends(get_current_active_user)
 ):
     """Create a new cash variance entry (any authenticated user)"""
-
+    
     insert_sql = text("""
         INSERT INTO app.cash_variance (
             date, cashier_number, bag_number, bag_type,
-            location_id, device_id, amount, turnarounds,
-            ftp_count, coupons, other_non_paying, created_by
+            location_id, device_id, amount, 
+            turnaround_count, turnaround_value,
+            ftp_count, 
+            coupon_count, coupon_value,
+            manual_count, manual_value,
+            other_non_paying, created_by
         )
         OUTPUT INSERTED.id
         VALUES (
             :date, :cashier_number, :bag_number, :bag_type,
-            :location_id, :device_id, :amount, :turnarounds,
-            :ftp_count, :coupons, :other_non_paying, :created_by
+            :location_id, :device_id, :amount, 
+            :turnaround_count, :turnaround_value,
+            :ftp_count, 
+            :coupon_count, :coupon_value,
+            :manual_count, :manual_value,
+            :other_non_paying, :created_by
         )
     """)
-
+    
     result = db.execute(insert_sql, {
         "date": entry_data.date,
         "cashier_number": entry_data.cashier_number,
@@ -224,16 +247,20 @@ async def create_cash_variance_entry(
         "location_id": entry_data.location_id,
         "device_id": entry_data.device_id,
         "amount": entry_data.amount,
-        "turnarounds": entry_data.turnarounds,
+        "turnaround_count": entry_data.turnaround_count,
+        "turnaround_value": entry_data.turnaround_value,
         "ftp_count": entry_data.ftp_count,
-        "coupons": entry_data.coupons,
+        "coupon_count": entry_data.coupon_count,
+        "coupon_value": entry_data.coupon_value,
+        "manual_count": entry_data.manual_count,
+        "manual_value": entry_data.manual_value,
         "other_non_paying": entry_data.other_non_paying,
         "created_by": current_user.employee_id
     })
-
+    
     new_id = result.scalar()
     db.commit()
-
+    
     # Fetch and return the created entry
     return await get_cash_variance_entry(new_id, db, current_user)
 
@@ -246,86 +273,102 @@ async def update_cash_variance_entry(
     current_user: UserProxy = Depends(get_current_active_user)
 ):
     """Update an existing cash variance entry (any authenticated user)"""
-
+    
     # Check if entry exists
     existing = db.execute(
         text("SELECT id FROM app.cash_variance WHERE id = :entry_id"),
         {"entry_id": entry_id}
     ).first()
-
+    
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Cash variance entry {entry_id} not found"
         )
-
+    
     # Build dynamic update query
     update_fields = []
     params = {"entry_id": entry_id, "updated_by": current_user.employee_id}
-
+    
     if entry_data.date is not None:
         update_fields.append("date = :date")
         params["date"] = entry_data.date
-
+    
     if entry_data.cashier_number is not None:
         update_fields.append("cashier_number = :cashier_number")
         params["cashier_number"] = entry_data.cashier_number
-
+    
     if entry_data.bag_number is not None:
         update_fields.append("bag_number = :bag_number")
         params["bag_number"] = entry_data.bag_number
-
+    
     if entry_data.bag_type is not None:
         update_fields.append("bag_type = :bag_type")
         params["bag_type"] = entry_data.bag_type.value
-
+    
     if entry_data.location_id is not None:
         update_fields.append("location_id = :location_id")
         params["location_id"] = entry_data.location_id
-
+    
     if entry_data.device_id is not None:
         update_fields.append("device_id = :device_id")
         params["device_id"] = entry_data.device_id
-
+    
     if entry_data.amount is not None:
         update_fields.append("amount = :amount")
         params["amount"] = entry_data.amount
-
-    if entry_data.turnarounds is not None:
-        update_fields.append("turnarounds = :turnarounds")
-        params["turnarounds"] = entry_data.turnarounds
-
+    
+    if entry_data.turnaround_count is not None:
+        update_fields.append("turnaround_count = :turnaround_count")
+        params["turnaround_count"] = entry_data.turnaround_count
+    
+    if entry_data.turnaround_value is not None:
+        update_fields.append("turnaround_value = :turnaround_value")
+        params["turnaround_value"] = entry_data.turnaround_value
+    
     if entry_data.ftp_count is not None:
         update_fields.append("ftp_count = :ftp_count")
         params["ftp_count"] = entry_data.ftp_count
-
-    if entry_data.coupons is not None:
-        update_fields.append("coupons = :coupons")
-        params["coupons"] = entry_data.coupons
-
+    
+    if entry_data.coupon_count is not None:
+        update_fields.append("coupon_count = :coupon_count")
+        params["coupon_count"] = entry_data.coupon_count
+    
+    if entry_data.coupon_value is not None:
+        update_fields.append("coupon_value = :coupon_value")
+        params["coupon_value"] = entry_data.coupon_value
+    
+    if entry_data.manual_count is not None:
+        update_fields.append("manual_count = :manual_count")
+        params["manual_count"] = entry_data.manual_count
+    
+    if entry_data.manual_value is not None:
+        update_fields.append("manual_value = :manual_value")
+        params["manual_value"] = entry_data.manual_value
+    
     if entry_data.other_non_paying is not None:
         update_fields.append("other_non_paying = :other_non_paying")
         params["other_non_paying"] = entry_data.other_non_paying
-
+    
     if not update_fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No fields to update"
         )
-
+    
     # Add audit fields
     update_fields.append("updated_at = GETUTCDATE()")
     update_fields.append("updated_by = :updated_by")
-
+    
     update_sql = text(f"""
         UPDATE app.cash_variance
         SET {', '.join(update_fields)}
         WHERE id = :entry_id
     """)
-
+    
     db.execute(update_sql, params)
     db.commit()
-
+    
     # Fetch and return the updated entry
     return await get_cash_variance_entry(entry_id, db, current_user)
 
@@ -337,23 +380,23 @@ async def delete_cash_variance_entry(
     current_user: UserProxy = Depends(get_current_active_user)
 ):
     """Delete a cash variance entry (any authenticated user)"""
-
+    
     # Check if entry exists
     existing = db.execute(
         text("SELECT id FROM app.cash_variance WHERE id = :entry_id"),
         {"entry_id": entry_id}
     ).first()
-
+    
     if not existing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Cash variance entry {entry_id} not found"
         )
-
+    
     db.execute(
         text("DELETE FROM app.cash_variance WHERE id = :entry_id"),
         {"entry_id": entry_id}
     )
     db.commit()
-
+    
     return {"success": True, "message": f"Cash variance entry {entry_id} deleted"}

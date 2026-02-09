@@ -590,10 +590,15 @@ class CashVarianceBase(BaseModel):
     location_id: Optional[int] = None
     device_id: Optional[int] = None
     amount: Optional[float] = None
-    turnarounds: int = 0
+    turnaround_count: int = 0
+    turnaround_value: Optional[float] = 0
     ftp_count: int = 0
-    coupons: Optional[float] = 0
+    coupon_count: int = 0
+    coupon_value: Optional[float] = 0
+    manual_count: int = 0
+    manual_value: Optional[float] = 0
     other_non_paying: int = 0
+
 
 
 class CashVarianceCreate(CashVarianceBase):
@@ -610,9 +615,13 @@ class CashVarianceUpdate(BaseModel):
     location_id: Optional[int] = None
     device_id: Optional[int] = None
     amount: Optional[float] = None
-    turnarounds: Optional[int] = None
+    turnaround_count: Optional[int] = None
+    turnaround_value: Optional[float] = None
     ftp_count: Optional[int] = None
-    coupons: Optional[float] = None
+    coupon_count: Optional[int] = None
+    coupon_value: Optional[float] = None
+    manual_count: Optional[int] = None
+    manual_value: Optional[float] = None
     other_non_paying: Optional[int] = None
 
 

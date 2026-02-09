@@ -195,6 +195,16 @@ async def get_work_order_detail(
             SELECT WorkOrderSid, WorkOrderId, CustFieldId, CustFieldName, CustFieldValue
             FROM CMMS.azteca.WoCustField
             WHERE WorkOrderSid = :work_order_sid
+        ),
+        parent_custom_fields AS (
+            --
+            SELECT 
+                CustFieldId,
+                CustFieldName,
+                CustFieldValue
+            FROM parent_work_order pwo
+            INNER JOIN CMMS.azteca.WoCustField cf On (pwo.WorkOrderSid=cf.WorkOrderSid)
+            WHERE cf.WorkOrderSid = pwo.WorkOrderSid
         )
         -- Combine all results with identifiers
         SELECT 
@@ -224,6 +234,10 @@ async def get_work_order_detail(
         SELECT 
             'custom_fields' as result_type,
             (SELECT * FROM custom_fields FOR JSON PATH) as json_data
+        UNION ALL
+        SELECT 
+            'parent_custom_fields' as result_type,
+            (SELECT * FROM parent_custom_fields FOR JSON PATH) as json_data
         """)
     
     try:
@@ -238,7 +252,8 @@ async def get_work_order_detail(
             "comments": [],
             "instructions": [],
             "parent_instructions": [],
-            "custom_fields": {}
+            "custom_fields": {},
+            "parent_custom_fields": {}
         }
         
         # Process each result type
@@ -266,6 +281,13 @@ async def get_work_order_detail(
                     # Convert array to flattened dict
                     if isinstance(parsed_data, list):
                         response['custom_fields'] = {
+                            item['CustFieldName']: item['CustFieldValue'] 
+                            for item in parsed_data
+                        }
+                elif result_type == 'parent_custom_fields':
+                    # Convert array to flattened dict
+                    if isinstance(parsed_data, list):
+                        response['parent_custom_fields'] = {
                             item['CustFieldName']: item['CustFieldValue'] 
                             for item in parsed_data
                         }

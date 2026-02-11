@@ -1266,7 +1266,7 @@
                 commentsData = data.comments.length === 0 ? 'No comments available' : data.comments;
 
                 // Update page with work order details
-                document.getElementById('workOrderId').textContent = workOrderId;
+                document.getElementById('workOrderId').innerHTML = `<a href="https://cmms.cityofmadison.com/Cityworks/Workmanagement/WoGeneralEdit.aspx?WorkOrderId=${workOrderId}" target="_blank">${workOrderId}</a>`;
                 document.getElementById('workOrderDescription').textContent = workOrderData.Description || 'No description';
 
                 // Update detail fields

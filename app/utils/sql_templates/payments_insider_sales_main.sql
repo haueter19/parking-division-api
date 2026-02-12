@@ -15,7 +15,7 @@ INSERT INTO app.fact_transaction (
     charge_code_id,
     reference_number
 )
-SELECT 
+SELECT --DISTINCT --THere was once two transactions with same card and same auth code in the same minute. Both seemed legit, but not sure how to verify.
     CONVERT(DATETIME, CONVERT(VARCHAR, CAST(s.transaction_date AS DATE), 120) + ' ' + s.transaction_time) transaction_date, 
     s.transaction_amount, 
     p.payment_date settle_date, 

@@ -1059,8 +1059,8 @@
                             <div class="workflow-banner-title" id="workflowTitle">Detecting workflow type...</div>
                             <div class="workflow-banner-subtitle" id="workflowSubtitle">Loading work order details</div>
                         </div>
-                        <button class="btn btn-validate" id="btnValidate" onclick="validateAssets()" style="display: none;">
-                            Run Validation
+                        <button class="btn btn-validate" id="btnRefresh" onclick="refreshWorkOrder()" style="display: none;">
+                            Refresh
                         </button>
                     </div>
 
@@ -1196,15 +1196,6 @@
         // Set document title
         document.title = 'Work Order: '+workOrderId
 
-        // ==================== Constants ====================
-
-        // Parent template IDs for workflow detection
-        const HOOD_SIGN_SPACE_TEMPLATE_IDS = [214, 682, 1160, 1161];  // Out of Service
-        const HOOD_SIGN_REMOVAL_TEMPLATE_IDS = [99, 100, 101, 1162];  // Return to Service
-
-        // Space layer types
-        const SPACE_LAYER_TYPES = ['PU_METERS_ON_ST', 'PU_OFF_ST_SPACES', 'PU_LZ_ON_ST', 'PU_DISVET_ON_ST'];
-
         // ==================== Global State ====================
 
         let workOrderData = null;
@@ -1214,10 +1205,9 @@
         let commentsData = [];
         let currentUser = null;
 
-        // Workflow state
-        let workflowType = null;  // 'out_of_service', 'return_to_service', or null
-        let validationData = null;
-        let validatedAssets = [];  // Assets with validation status
+        // Workflow state (driven by backend response)
+        let workflowName = null;  // e.g. 'space_out_of_service', 'return_space_to_service', etc.
+        let validatedAssets = [];  // Assets with validation status and per-asset actions
 
         // ==================== User Info ====================
 
@@ -1260,6 +1250,8 @@
                 workOrderData = data.work_order;
                 parentWorkOrderData = data.parent_work_order;
                 assetsData = data.assets || [];
+                validatedAssets = data.assets || [];  // Assets now come pre-validated
+                workflowName = data.workflow_name || null;
                 instructionsData = data.instructions || '';
                 const parentInstructionsData = data.parent_instructions || '';
                 const allInstructions = parentInstructionsData + instructionsData;
@@ -1290,8 +1282,8 @@
                 // Render assets in the original assets section
                 renderAssets(assetsData);
 
-                // Detect workflow type and set up processing section
-                detectWorkflowType();
+                // Set up workflow UI from backend response (validation already done)
+                setupWorkflowUI();
 
                 // Show content, hide loading
                 document.getElementById('loadingState').style.display = 'none';
@@ -1305,50 +1297,65 @@
             }
         }
 
-        // ==================== Workflow Detection ====================
+        // ==================== Workflow UI Setup ====================
 
-        function detectWorkflowType() {
-            const parentTemplateId = parentWorkOrderData?.WoTemplateId;
+        function setupWorkflowUI() {
             const banner = document.getElementById('workflowBanner');
             const icon = document.getElementById('workflowIcon');
             const title = document.getElementById('workflowTitle');
             const subtitle = document.getElementById('workflowSubtitle');
-            const validateBtn = document.getElementById('btnValidate');
+            const refreshBtn = document.getElementById('btnRefresh');
 
-            console.log('Parent Template ID:', parentTemplateId);
+            console.log('Workflow name:', workflowName);
 
-            if (HOOD_SIGN_SPACE_TEMPLATE_IDS.includes(parseInt(parentTemplateId))) {
-                // Out of Service workflow
-                workflowType = 'out_of_service';
+            if (workflowName === 'space_out_of_service') {
                 banner.className = 'workflow-banner out-of-service';
-                icon.innerHTML = '&#9888;';  // Warning sign
+                icon.innerHTML = '&#9888;';
                 title.textContent = 'Hood/Sign Space - Out of Service';
                 subtitle.textContent = 'Spaces will be moved to out of service status';
-                validateBtn.style.display = 'inline-block';
+                refreshBtn.style.display = 'inline-block';
                 document.getElementById('outOfServiceForm').style.display = 'block';
                 document.getElementById('returnToServiceForm').style.display = 'none';
                 document.getElementById('noWorkflowMessage').style.display = 'none';
 
-            } else if (HOOD_SIGN_REMOVAL_TEMPLATE_IDS.includes(parseInt(parentTemplateId))) {
-                // Return to Service workflow
-                workflowType = 'return_to_service';
+            } else if (workflowName === 'return_space_to_service' || workflowName === 'return_to_service') {
                 banner.className = 'workflow-banner return-to-service';
-                icon.innerHTML = '&#10003;';  // Checkmark
+                icon.innerHTML = '&#10003;';
                 title.textContent = 'Hood/Sign Removal - Return to Service';
                 subtitle.textContent = 'Spaces will be returned to active service';
-                validateBtn.style.display = 'inline-block';
+                refreshBtn.style.display = 'inline-block';
                 document.getElementById('outOfServiceForm').style.display = 'none';
                 document.getElementById('returnToServiceForm').style.display = 'block';
                 document.getElementById('noWorkflowMessage').style.display = 'none';
 
-            } else {
-                // No automated workflow
-                workflowType = null;
+            } else if (workflowName === 'space_out_of_service_and_return') {
+                banner.className = 'workflow-banner out-of-service';
+                icon.innerHTML = '&#9888;';
+                title.textContent = 'Temporary No Parking Sign - Out & Return';
+                subtitle.textContent = 'Spaces will be moved out of and returned to service';
+                refreshBtn.style.display = 'inline-block';
+                document.getElementById('outOfServiceForm').style.display = 'block';
+                document.getElementById('returnToServiceForm').style.display = 'none';
+                document.getElementById('noWorkflowMessage').style.display = 'none';
+
+            } else if (workflowName) {
+                // Other recognized workflow (cc_terminal_*, etc.)
                 banner.className = 'workflow-banner manual';
-                icon.innerHTML = '&#9881;';  // Gear
+                icon.innerHTML = '&#9881;';
+                title.textContent = `Workflow: ${workflowName}`;
+                subtitle.textContent = `Parent template: ${parentWorkOrderData?.Description || 'Unknown'}`;
+                refreshBtn.style.display = 'inline-block';
+                document.getElementById('outOfServiceForm').style.display = 'none';
+                document.getElementById('returnToServiceForm').style.display = 'none';
+                document.getElementById('noWorkflowMessage').style.display = 'none';
+
+            } else {
+                // No workflow detected
+                banner.className = 'workflow-banner manual';
+                icon.innerHTML = '&#9881;';
                 title.textContent = 'Manual Processing Required';
                 subtitle.textContent = `Parent template: ${parentWorkOrderData?.Description || 'Unknown'}`;
-                validateBtn.style.display = 'none';
+                refreshBtn.style.display = 'none';
                 document.getElementById('outOfServiceForm').style.display = 'none';
                 document.getElementById('returnToServiceForm').style.display = 'none';
                 document.getElementById('noWorkflowMessage').style.display = 'block';
@@ -1356,52 +1363,16 @@
                 return;
             }
 
-            // Auto-run validation for supported workflows
-            validateAssets();
+            // Assets are already validated — render directly
+            updateValidationSummary();
+            renderSpaceAssets();
+            document.getElementById('processActionsFooter').style.display = 'flex';
         }
 
-        // ==================== Asset Validation ====================
-
-        async function validateAssets() {
-            if (!workflowType) {
-                showMessage('No automated workflow detected for this work order.', 'error');
-                return;
-            }
-
-            const validateBtn = document.getElementById('btnValidate');
-            validateBtn.disabled = true;
-            validateBtn.textContent = 'Validating...';
-
-            try {
-                const response = await fetch(`/api/v1/cityworks/work-orders/${workOrderId}/validate-assets`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
-                if (!response.ok) {
-                    throw new Error('Validation failed');
-                }
-
-                validationData = await response.json();
-                console.log('Validation Data:', validationData);
-
-                validatedAssets = validationData.assets || [];
-
-                // Update validation summary
-                updateValidationSummary();
-
-                // Render space assets with validation status
-                renderSpaceAssets();
-
-                // Show the footer
-                document.getElementById('processActionsFooter').style.display = 'flex';
-
-            } catch (error) {
-                console.error('Error validating assets:', error);
-                showMessage('Error validating assets: ' + error.message, 'error');
-            } finally {
-                validateBtn.disabled = false;
-                validateBtn.textContent = 'Run Validation';
-            }
+        async function refreshWorkOrder() {
+            document.getElementById('loadingState').style.display = 'block';
+            document.getElementById('contentArea').style.display = 'none';
+            await loadWorkOrderDetails();
         }
 
         function updateValidationSummary() {
@@ -1456,14 +1427,15 @@
             validatedAssets.forEach((asset, index) => {
                 const statusClass = `status-${asset.validation_status.replace('_', '-')}`;
                 const badge = getValidationBadge(asset.validation_status);
-                const isSpace = SPACE_LAYER_TYPES.includes(asset.entity_type);
+                const hasActions = asset.actions && asset.actions.length > 0;
+                const showOosInputs = hasActions && asset.actions.includes('space_out_of_service') && asset.validation_status === 'ready';
 
                 html += `
-                    <div class="space-asset-card ${statusClass}" data-entity-sid="${asset.entity_sid}" data-index="${index}">
+                    <div class="space-asset-card ${statusClass}" data-entity-sid="${asset.EntitySid}" data-index="${index}">
                         <div class="space-asset-header">
                             <div>
-                                <div class="space-asset-title">${asset.space_name || asset.entity_uid || 'Unknown Asset'}</div>
-                                <div class="space-asset-type">${asset.entity_type}</div>
+                                <div class="space-asset-title">${asset.SpaceName || asset.EntityUid || 'Unknown Asset'}</div>
+                                <div class="space-asset-type">${asset.EntityType}</div>
                             </div>
                             ${badge}
                         </div>
@@ -1471,33 +1443,33 @@
                         <div class="space-asset-details">
                             <div class="space-asset-field">
                                 <span class="space-asset-field-label">Entity UID</span>
-                                <span class="space-asset-field-value">${asset.entity_uid || '--'}</span>
+                                <span class="space-asset-field-value">${asset.EntityUid || '--'}</span>
                             </div>
                             <div class="space-asset-field">
                                 <span class="space-asset-field-label">Current Status</span>
-                                <span class="space-asset-field-value">${asset.current_sde_status || '--'}</span>
+                                <span class="space-asset-field-value">${asset.Status || '--'}</span>
                             </div>
                             <div class="space-asset-field">
                                 <span class="space-asset-field-label">Space Type</span>
-                                <span class="space-asset-field-value">${asset.space_type || '--'}</span>
+                                <span class="space-asset-field-value">${asset.Space_Type || '--'}</span>
                             </div>
                             <div class="space-asset-field">
-                                <span class="space-asset-field-label">BLock</span>
-                                <span class="space-asset-field-value">${asset.space_block || '--'}</span>
+                                <span class="space-asset-field-label">Block</span>
+                                <span class="space-asset-field-value">${asset.Address || '--'}</span>
                             </div>
                             <div class="space-asset-field">
                                 <span class="space-asset-field-label">Object ID</span>
-                                <span class="space-asset-field-value">${asset.entity_sid || '--'}</span>
+                                <span class="space-asset-field-value">${asset.EntitySid || '--'}</span>
                             </div>
                         </div>
 
-                        ${asset.message ? `<div class="validation-message">${asset.message}</div>` : ''}
+                        ${asset.validation_message ? `<div class="validation-message">${asset.validation_message}</div>` : ''}
 
-                        ${workflowType === 'out_of_service' && asset.validation_status === 'ready' ? `
+                        ${showOosInputs ? `
                         <div class="space-asset-inputs">
                             <div class="space-asset-input-group">
                                 <label>ADA Relocation</label>
-                                <select id="adaRelocation_${asset.entity_sid}">
+                                <select id="adaRelocation_${asset.EntitySid}">
                                     <option value="Unknown" selected>Unknown</option>
                                     <option value="Yes">Yes</option>
                                     <option value="No">No</option>
@@ -1531,6 +1503,14 @@
 
         // ==================== Batch Processing ====================
 
+        // Map backend workflow names to process endpoint workflow_type values
+        const WORKFLOW_TYPE_MAP = {
+            'space_out_of_service': 'out_of_service',
+            'return_space_to_service': 'return_to_service',
+            'return_to_service': 'return_to_service',
+            'space_out_of_service_and_return': 'out_of_service',
+        };
+
         async function processAllReadySpaces() {
             const readyAssets = validatedAssets.filter(a => a.validation_status === 'ready');
 
@@ -1546,21 +1526,21 @@
             // Collect per-asset data (ADA Relocation for out of service)
             const assetData = readyAssets.map(asset => {
                 const data = {
-                    entity_uid: asset.entity_uid,
-                    entity_sid: asset.entity_sid,
-                    entity_type: asset.entity_type,
-                    space_name: asset.space_name,
-                    space_type: asset.space_type,
-                    x: asset.space_x,
-                    y: asset.space_y,
+                    entity_uid: asset.EntityUid,
+                    entity_sid: asset.EntitySid,
+                    entity_type: asset.EntityType,
+                    space_name: asset.SpaceName,
+                    space_type: asset.Space_Type,
+                    x: asset.X,
+                    y: asset.Y,
                     object_id: asset.object_id,
                     event_id: asset.event_id,
-                    current_sde_status: asset.current_sde_status,
+                    current_sde_status: asset.Status,
                     recent_space_out_of_service: asset.recent_space_out_of_service
                 };
 
-                if (workflowType === 'out_of_service') {
-                    const adaSelect = document.getElementById(`adaRelocation_${asset.entity_sid}`);
+                if (asset.actions && asset.actions.includes('space_out_of_service')) {
+                    const adaSelect = document.getElementById(`adaRelocation_${asset.EntitySid}`);
                     data.ada_relocation = adaSelect ? adaSelect.value : 'Unknown';
                 }
 
@@ -1574,6 +1554,8 @@
             const processBtn = document.getElementById('btnProcessAll');
             processBtn.disabled = true;
 
+            const processWorkflowType = WORKFLOW_TYPE_MAP[workflowName] || workflowName;
+
             try {
                 const response = await fetch(`/api/v1/cityworks/work-orders/${workOrderId}/process-spaces`, {
                     method: 'POST',
@@ -1582,7 +1564,7 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        workflow_type: workflowType,
+                        workflow_type: processWorkflowType,
                         assets: assetData,
                         ...formData
                     })
@@ -1600,9 +1582,9 @@
                 hideProcessingOverlay();
                 showMessage(`Successfully processed ${result.processed_count || readyAssets.length} space(s).`, 'success');
 
-                // Re-run validation to update statuses
+                // Re-load work order to refresh validation statuses
                 setTimeout(() => {
-                    validateAssets();
+                    loadWorkOrderDetails();
                 }, 1000);
 
             } catch (error) {
@@ -1614,7 +1596,9 @@
         }
 
         function collectFormData() {
-            if (workflowType === 'out_of_service') {
+            const processType = WORKFLOW_TYPE_MAP[workflowName] || workflowName;
+
+            if (processType === 'out_of_service') {
                 const revenueCollected = document.getElementById('selectRevenueCollected').value;
                 const removalMethod = document.getElementById('selectRemovalMethod').value;
                 const reasonRemoved = document.getElementById('selectReasonRemoved').value;
@@ -1636,7 +1620,7 @@
                     notes: notes
                 };
 
-            } else if (workflowType === 'return_to_service') {
+            } else if (processType === 'return_to_service') {
                 const notes = document.getElementById('inputReturnNotes').value;
                 return { notes: notes };
             }
@@ -1664,10 +1648,10 @@
             // Update the validation status of processed assets
             if (result.results) {
                 result.results.forEach(r => {
-                    const asset = validatedAssets.find(a => a.entity_sid === r.entity_sid);
+                    const asset = validatedAssets.find(a => a.EntityUid === r.entity_uid);
                     if (asset) {
                         asset.validation_status = r.success ? 'completed' : 'error';
-                        asset.message = r.message || (r.success ? 'Processed successfully' : 'Processing failed');
+                        asset.validation_message = r.message || (r.success ? 'Processed successfully' : 'Processing failed');
                     }
                 });
                 renderSpaceAssets();

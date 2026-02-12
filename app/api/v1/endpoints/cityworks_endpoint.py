@@ -298,12 +298,19 @@ async def validate_work_order_assets(
     assets = detail_response.get('assets', [])
 
     # Determine workflow type
-    if parent_template_id and int(parent_template_id) in HOOD_SIGN_SPACE_TEMPLATE_IDS:
-        workflow_type = 'out_of_service'
-    elif parent_template_id and int(parent_template_id) in HOOD_SIGN_REMOVAL_TEMPLATE_IDS:
-        workflow_type = 'return_to_service'
-    else:
-        workflow_type = None
+    steps = parking.get_workflow(description=detail_response['parent_work_order']['Description'])
+    for action, applicable_types in steps:
+        for asset in assets:
+            if asset['EntityType'] in applicable_types:
+                # call the right function
+                asset['workflow_action'] = action
+                print(f"Asset with CW ID {asset['EntityUid']} is eligible for the {action} action")
+    #if parent_template_id and int(parent_template_id) in HOOD_SIGN_SPACE_TEMPLATE_IDS:
+    #    workflow_type = 'out_of_service'
+    #elif parent_template_id and int(parent_template_id) in HOOD_SIGN_REMOVAL_TEMPLATE_IDS:
+    #    workflow_type = 'return_to_service'
+    #else:
+    #    workflow_type = None
 
     validated_assets = []
 

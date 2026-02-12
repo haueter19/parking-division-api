@@ -131,7 +131,6 @@ async def get_work_order_detail(
     """
 
     try:
-        # Get work order details from the cityworks package
         response = get_work_order_details_json(work_order_id)
 
         if not response['work_order']:
@@ -140,48 +139,8 @@ async def get_work_order_detail(
                 detail=f"Work order {work_order_id} not found"
             )
 
-        # Resolve workflow from the parent work order
-        parent_wo = response.get('parent_work_order', {}) or {}
-        template_id = parent_wo.get('WoTemplateId')
-        description = parent_wo.get('Description')
-        parent_actual_finish_date = parent_wo.get('ActualFinishDate')
-
-        workflow_name = parking.get_workflow_name(
-            template_id=int(template_id) if template_id else None,
-            description=description,
-        )
-        response['workflow_name'] = workflow_name
-
-        # Enrich space assets with SDE data (Status, SpaceName, Space_Type, Address)
-        has_spaces = any(
-            a['EntityType'] in parking.SPACE_LAYERS for a in response['assets']
-        )
-        if has_spaces:
-            spaces = parking.get_spaces_from_work_order(response)
-            spaces.fillna({'Status': '', 'SpaceName': '', 'Space_Type': ''}, inplace=True)
-            if spaces.shape[0] > 0:
-                for asset in response['assets']:
-                    match = spaces[spaces['cwAssetID'] == asset['EntityUid']]
-                    if match.shape[0] > 0:
-                        asset.update(
-                            match[['Status', 'SpaceName', 'Space_Type', 'Address']]
-                            .to_dict(orient='records')[0]
-                        )
-
-        # Compute per-asset actions from the workflow registry
-        for asset in response['assets']:
-            asset['actions'] = parking.get_asset_actions(
-                entity_type=asset['EntityType'],
-                template_id=int(template_id) if template_id else None,
-                description=description,
-            )
-
-        # Validate assets against OOS records
-        response['assets'] = parking.validate_space_assets(
-            assets=response['assets'],
-            parent_actual_finish_date=parent_actual_finish_date,
-            workflow_name=workflow_name,
-        )
+        # Enrich with workflow, SDE space data, per-asset actions, and validation
+        parking.prepare_work_order(response)
 
         return response
 

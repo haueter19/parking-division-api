@@ -1206,8 +1206,10 @@
         let currentUser = null;
 
         // Workflow state (driven by backend response)
-        let workflowName = null;  // e.g. 'space_out_of_service', 'return_space_to_service', etc.
+        let workflowName = null;  // e.g. 'space_out_of_service', 'return_to_service', etc.
         let validatedAssets = [];  // Assets with validation status and per-asset actions
+        let signStartDate = null;  // For sign workflows
+        let signEndDate = null;
 
         // ==================== User Info ====================
 
@@ -1252,6 +1254,8 @@
                 assetsData = data.assets || [];
                 validatedAssets = data.assets || [];  // Assets now come pre-validated
                 workflowName = data.workflow_name || null;
+                signStartDate = data.sign_start_date || null;
+                signEndDate = data.sign_end_date || null;
                 instructionsData = data.instructions || '';
                 const parentInstructionsData = data.parent_instructions || '';
                 const allInstructions = parentInstructionsData + instructionsData;
@@ -1318,7 +1322,7 @@
                 document.getElementById('returnToServiceForm').style.display = 'none';
                 document.getElementById('noWorkflowMessage').style.display = 'none';
 
-            } else if (workflowName === 'return_space_to_service' || workflowName === 'return_to_service') {
+            } else if (workflowName === 'return_to_service') {
                 banner.className = 'workflow-banner return-to-service';
                 icon.innerHTML = '&#10003;';
                 title.textContent = 'Hood/Sign Removal - Return to Service';
@@ -1332,7 +1336,12 @@
                 banner.className = 'workflow-banner out-of-service';
                 icon.innerHTML = '&#9888;';
                 title.textContent = 'Temporary No Parking Sign - Out & Return';
-                subtitle.textContent = 'Spaces will be moved out of and returned to service';
+                const dateRange = signStartDate && signEndDate
+                    ? `Sign posting: ${formatDate(signStartDate)} to ${formatDate(signEndDate)}`
+                    : signStartDate
+                        ? `Sign posting from: ${formatDate(signStartDate)}`
+                        : 'Sign posting dates not found';
+                subtitle.textContent = dateRange;
                 refreshBtn.style.display = 'inline-block';
                 document.getElementById('outOfServiceForm').style.display = 'block';
                 document.getElementById('returnToServiceForm').style.display = 'none';
@@ -1428,6 +1437,7 @@
                 const statusClass = `status-${asset.validation_status.replace('_', '-')}`;
                 const badge = getValidationBadge(asset.validation_status);
                 const hasActions = asset.actions && asset.actions.length > 0;
+                const isSignWorkflow = workflowName === 'space_out_of_service_and_return';
                 const showOosInputs = hasActions && asset.actions.includes('space_out_of_service') && asset.validation_status === 'ready';
 
                 html += `
@@ -1461,6 +1471,16 @@
                                 <span class="space-asset-field-label">Object ID</span>
                                 <span class="space-asset-field-value">${asset.EntitySid || '--'}</span>
                             </div>
+                            ${isSignWorkflow && signStartDate ? `
+                            <div class="space-asset-field">
+                                <span class="space-asset-field-label">Sign Start</span>
+                                <span class="space-asset-field-value">${formatDate(signStartDate)}</span>
+                            </div>
+                            <div class="space-asset-field">
+                                <span class="space-asset-field-label">Sign End</span>
+                                <span class="space-asset-field-value">${signEndDate ? formatDate(signEndDate) : '--'}</span>
+                            </div>
+                            ` : ''}
                         </div>
 
                         ${asset.validation_message ? `<div class="validation-message">${asset.validation_message}</div>` : ''}
@@ -1506,9 +1526,8 @@
         // Map backend workflow names to process endpoint workflow_type values
         const WORKFLOW_TYPE_MAP = {
             'space_out_of_service': 'out_of_service',
-            'return_space_to_service': 'return_to_service',
             'return_to_service': 'return_to_service',
-            'space_out_of_service_and_return': 'out_of_service',
+            'space_out_of_service_and_return': 'out_of_service_and_return',
         };
 
         async function processAllReadySpaces() {
@@ -1542,6 +1561,14 @@
                 if (asset.actions && asset.actions.includes('space_out_of_service')) {
                     const adaSelect = document.getElementById(`adaRelocation_${asset.EntitySid}`);
                     data.ada_relocation = adaSelect ? adaSelect.value : 'Unknown';
+                }
+
+                // Include sign dates for sign workflows
+                if (signStartDate) {
+                    data.sign_start_date = signStartDate;
+                }
+                if (signEndDate) {
+                    data.sign_end_date = signEndDate;
                 }
 
                 return data;
@@ -1598,7 +1625,7 @@
         function collectFormData() {
             const processType = WORKFLOW_TYPE_MAP[workflowName] || workflowName;
 
-            if (processType === 'out_of_service') {
+            if (processType === 'out_of_service' || processType === 'out_of_service_and_return') {
                 const revenueCollected = document.getElementById('selectRevenueCollected').value;
                 const removalMethod = document.getElementById('selectRemovalMethod').value;
                 const reasonRemoved = document.getElementById('selectReasonRemoved').value;

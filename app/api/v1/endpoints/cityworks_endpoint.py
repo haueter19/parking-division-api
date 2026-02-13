@@ -30,10 +30,12 @@ class AssetProcessData(BaseModel):
     date_returned: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None
+    sign_start_date: Optional[str] = None
+    sign_end_date: Optional[str] = None
 
 
 class ProcessSpacesRequest(BaseModel):
-    workflow_type: str  # 'out_of_service' or 'return_to_service'
+    workflow_type: str  # 'out_of_service', 'return_to_service', or 'out_of_service_and_return'
     assets: List[AssetProcessData]
     # Out of service fields
     revenue_collected: Optional[str] = None
@@ -261,81 +263,124 @@ async def process_work_order_spaces(
     parent_actual_finish_date = parent_wo.get('ActualFinishDate')
     submit_to = parent_wo.get('SubmitTo')
 
+    now = datetime.now().isoformat(timespec='seconds')
+    username = current_user.username.upper()
+
     results = []
     processed_count = 0
     for asset in request.assets:
         result = {
             'entity_uid': asset.entity_uid,
             'space_name': asset.space_name,
-            #'object_id': asset.object_id,
-            #'event_id': asset.event_id,
             'success': False,
             'message': None
         }
 
         try:
-            if request.workflow_type in ('out_of_service', 'space_out_of_service'):
-                # Prepare data for PU_SPACESOUTOFSERVICE insert
-                # TODO: Replace with actual implementation using parking.add_space_out_of_service()
-                
+            if request.workflow_type == 'out_of_service':
                 record_data = {
                     'space_number': asset.space_name,
                     'date_out': parent_actual_finish_date,
-                    'meter_type': asset.space_type,  # Would come from asset JSON
+                    'meter_type': asset.space_type,
                     'x': asset.x,
                     'y': asset.y,
-                    'created_user': current_user.username.upper(),
-                    'last_edited_user': current_user.username.upper(),
-                    'created_date': datetime.now().isoformat(timespec='seconds'),
-                    'last_edited_date': datetime.now().isoformat(timespec='seconds'),
+                    'created_user': username,
+                    'last_edited_user': username,
+                    'created_date': now,
+                    'last_edited_date': now,
                     'note': request.notes,
                     'revenue_collected': request.revenue_collected,
                     'removal_method': request.removal_method,
                     'removed_by': submit_to,
                     'reason_removed': request.reason_removed,
                     'ada_relocation': asset.ada_relocation,
-                    'entity_type': asset.entity_type  # For determining the layer
                 }
-                
-                # Add record to PU_SPACESOUTOFSERVICE
+
                 records_inserted = parking.add_space_out_of_service([record_data])
                 print(f"Inserted {records_inserted} records for space {asset.space_name}")
-                # Update SDE layer status if this is the most recent record
+
                 if asset.recent_space_out_of_service == 'true':
-                    update_count = parking.update_space_status(table=asset.entity_type, space_id=asset.entity_uid, status='Out of service', last_edited_date=record_data.last_edited_date, last_edited_user=record_data.last_edited_user)
-                    print(f"Updated {update_count} space status to Out of service for space {asset.space_name}")
+                    parking.update_space_status(
+                        table=asset.entity_type, space_id=asset.entity_uid,
+                        status='Out of service', last_edited_date=now, last_edited_user=username,
+                    )
+
                 result['success'] = True
                 result['message'] = f'Space {asset.space_name} moved out of service'
                 processed_count += records_inserted
-                
-            elif request.workflow_type in ('return_to_service', 'return_space_to_service'):
-                # Validate required fields for return to service
+
+            elif request.workflow_type == 'return_to_service':
                 if asset.object_id is None or asset.event_id is None:
                     raise ValueError(f"Missing object_id or event_id for space {asset.space_name}")
-                
+
                 return_data = {
                     'object_id': asset.object_id,
                     'event_id': asset.event_id,
                     'date_returned': parent_actual_finish_date,
-                    'last_edited_user': current_user.username.upper(),
-                    'last_edited_date': datetime.now().isoformat(timespec='seconds')
+                    'last_edited_user': username,
+                    'last_edited_date': now,
                 }
-                
+
                 return_count = parking.return_space_to_service(return_data)
                 print(f"Updated: {return_count} record for {asset.space_name} returned to service")
-                
-                # and parking.update_space_status({'space': asset.space_name, 'layer': asset.entity_type, 'status': 'In Service'})
+
                 if asset.recent_space_out_of_service == 'true':
-                    update_count = parking.update_space_status(table=asset.entity_type, space_id=asset.entity_uid, status='In service', last_edited_date=return_data['last_edited_date'], last_edited_user=return_data['last_edited_user'])
-                    print(f"Updated {update_count} space status to In service for space {asset.space_name}")
+                    parking.update_space_status(
+                        table=asset.entity_type, space_id=asset.entity_uid,
+                        status='In service', last_edited_date=now, last_edited_user=username,
+                    )
 
                 result['success'] = True
-                result['message'] = f'Space {asset.space_name} returned to service (STUB)'
+                result['message'] = f'Space {asset.space_name} returned to service'
                 processed_count += 1
+
+            elif request.workflow_type == 'out_of_service_and_return':
+                # Temporary No Parking Sign: single INSERT with both dates
+                if not asset.sign_start_date:
+                    raise ValueError(f"Missing sign_start_date for space {asset.space_name}")
+
+                record_data = {
+                    'space_number': asset.space_name,
+                    'date_out': asset.sign_start_date,
+                    'date_returned': asset.sign_end_date,
+                    'meter_type': asset.space_type,
+                    'x': asset.x,
+                    'y': asset.y,
+                    'created_user': username,
+                    'last_edited_user': username,
+                    'created_date': now,
+                    'last_edited_date': now,
+                    'note': request.notes,
+                    'revenue_collected': request.revenue_collected,
+                    'removal_method': request.removal_method or 'Signed',
+                    'removed_by': submit_to,
+                    'reason_removed': request.reason_removed,
+                    'ada_relocation': asset.ada_relocation,
+                }
+
+                records_inserted = parking.add_space_out_of_service([record_data])
+                print(f"Inserted {records_inserted} sign OOS records for space {asset.space_name}")
+
+                # Determine SDE status: if sign end is past → In service, else Out of service
+                if asset.recent_space_out_of_service == 'true':
+                    target_status = 'Out of service'
+                    if asset.sign_end_date:
+                        end_dt = datetime.fromisoformat(asset.sign_end_date.replace('Z', '+00:00'))
+                        if end_dt < datetime.now(end_dt.tzinfo):
+                            target_status = 'In service'
+
+                    parking.update_space_status(
+                        table=asset.entity_type, space_id=asset.entity_uid,
+                        status=target_status, last_edited_date=now, last_edited_user=username,
+                    )
+
+                result['success'] = True
+                result['message'] = f'Space {asset.space_name} sign OOS record created'
+                processed_count += records_inserted
 
             else:
                 result['message'] = f'Unknown workflow type: {request.workflow_type}'
-                print("unknown workflow type")
+                print(f"Unknown workflow type: {request.workflow_type}")
 
         except Exception as e:
             result['message'] = f'Error processing space: {str(e)}'

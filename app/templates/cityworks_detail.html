@@ -1039,15 +1039,6 @@
                     </div>
                 </div>
                 
-
-                <!-- Assets Section -->
-                <div class="card" style="grid-column: 1 / -1;">
-                    <h3 class="card-title">Attached Assets</h3>
-                    <div class="assets-list" id="assetsList">
-                        <div class="no-assets">Loading assets...</div>
-                    </div>
-                </div>
-
                 <!-- Space Processing Section -->
                 <div class="card process-card process-section" id="spaceProcessingSection">
                     <h3 class="card-title">Process Work Order</h3>
@@ -1282,9 +1273,6 @@
                 document.getElementById('detailRequestedBy').textContent = workOrderData.RequestedBy || '--';
                 document.getElementById('detailComments').textContent = commentsData || 'No comments available.';
                 document.getElementById('detailInstructions').textContent = allInstructions || 'No instructions available.';
-
-                // Render assets in the original assets section
-                renderAssets(assetsData);
 
                 // Set up workflow UI from backend response (validation already done)
                 setupWorkflowUI();

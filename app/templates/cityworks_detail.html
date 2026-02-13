@@ -1096,10 +1096,11 @@
                             <div class="form-group">
                                 <label for="selectRemovalMethod">Removal Method</label>
                                 <select id="selectRemovalMethod">
-                                    <option value="Hooded/Signed" selected>Hooded/Signed</option>
+                                    <option value="">Select...</option>
+                                    <option value="Hooded">Hooded</option>
+                                    <option value="Signed">Signed</option>
                                     <option value="Street Closed">Street Closed</option>
                                     <option value="Out">Out</option>
-                                    <option value="">None</option>
                                 </select>
                             </div>
                             <div class="form-group">
@@ -1201,6 +1202,7 @@
         let validatedAssets = [];  // Assets with validation status and per-asset actions
         let signStartDate = null;  // For sign workflows
         let signEndDate = null;
+        let serviceRequestData = null;  // SR data for form defaults
 
         // ==================== User Info ====================
 
@@ -1247,6 +1249,7 @@
                 workflowName = data.workflow_name || null;
                 signStartDate = data.sign_start_date || null;
                 signEndDate = data.sign_end_date || null;
+                serviceRequestData = data.service_request || null;
                 instructionsData = data.instructions || '';
                 const parentInstructionsData = data.parent_instructions || '';
                 const allInstructions = parentInstructionsData + instructionsData;
@@ -1363,7 +1366,49 @@
             // Assets are already validated — render directly
             updateValidationSummary();
             renderSpaceAssets();
+            prefillFormDefaults();
             document.getElementById('processActionsFooter').style.display = 'flex';
+        }
+
+        function prefillFormDefaults() {
+            // Default Removal Method based on workflow/parent template
+            const removalMethodSelect = document.getElementById('selectRemovalMethod');
+            if (workflowName === 'space_out_of_service_and_return') {
+                removalMethodSelect.value = 'Signed';
+            } else if (parentWorkOrderData?.Description) {
+                const desc = parentWorkOrderData.Description.toLowerCase();
+                if (desc.includes('hood')) {
+                    removalMethodSelect.value = 'Hooded';
+                } else if (desc.includes('sign')) {
+                    removalMethodSelect.value = 'Signed';
+                }
+            }
+
+            // Prefill from service request when available
+            if (serviceRequestData && typeof serviceRequestData === 'object') {
+                const revenueCollected = serviceRequestData['Revenue Collected'];
+                if (revenueCollected) {
+                    const revenueSelect = document.getElementById('selectRevenueCollected');
+                    // Match case-insensitively against existing options
+                    for (const opt of revenueSelect.options) {
+                        if (opt.value.toLowerCase() === revenueCollected.toLowerCase()) {
+                            revenueSelect.value = opt.value;
+                            break;
+                        }
+                    }
+                }
+
+                const reason = serviceRequestData['Reason'];
+                if (reason) {
+                    const reasonSelect = document.getElementById('selectReasonRemoved');
+                    for (const opt of reasonSelect.options) {
+                        if (opt.value.toLowerCase() === reason.toLowerCase()) {
+                            reasonSelect.value = opt.value;
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         async function refreshWorkOrder() {

@@ -1085,13 +1085,8 @@
                         <div class="shared-form-title">Out of Service Details (applies to all ready spaces)</div>
                         <div class="shared-form-row">
                             <div class="form-group">
-                                <label for="selectRevenueCollected">Revenue Collected</label>
-                                <select id="selectRevenueCollected">
-                                    <option value="">Select...</option>
-                                    <option value="Yes">Yes</option>
-                                    <option value="No">No</option>
-                                    <option value="Unknown">Unknown</option>
-                                </select>
+                                <label for="inputRevenueCollected">Revenue Collected</label>
+                                <input type="text" id="inputRevenueCollected" value="Unknown" placeholder="Dollar amount or Unknown">
                             </div>
                             <div class="form-group">
                                 <label for="selectRemovalMethod">Removal Method</label>
@@ -1397,15 +1392,8 @@
             // Prefill from service request when available
             if (serviceRequestData && typeof serviceRequestData === 'object') {
                 const revenueCollected = serviceRequestData['Revenue Collected'];
-                if (revenueCollected) {
-                    const revenueSelect = document.getElementById('selectRevenueCollected');
-                    // Match case-insensitively against existing options
-                    for (const opt of revenueSelect.options) {
-                        if (opt.value.toLowerCase() === revenueCollected.toLowerCase()) {
-                            revenueSelect.value = opt.value;
-                            break;
-                        }
-                    }
+                if (revenueCollected !== undefined && revenueCollected !== null) {
+                    document.getElementById('inputRevenueCollected').value = revenueCollected;
                 }
 
                 const reason = serviceRequestData['Reason'];
@@ -1669,15 +1657,10 @@
             const processType = WORKFLOW_TYPE_MAP[workflowName] || workflowName;
 
             if (processType === 'out_of_service' || processType === 'out_of_service_and_return') {
-                const revenueCollected = document.getElementById('selectRevenueCollected').value;
+                const revenueCollected = document.getElementById('inputRevenueCollected').value || 'Unknown';
                 const removalMethod = document.getElementById('selectRemovalMethod').value;
                 const reasonRemoved = document.getElementById('selectReasonRemoved').value;
                 const notes = document.getElementById('inputProcessingNotes').value;
-
-                if (!revenueCollected) {
-                    showMessage('Please select a value for Revenue Collected.', 'error');
-                    return null;
-                }
                 if (!reasonRemoved) {
                     showMessage('Please select a Reason Removed.', 'error');
                     return null;

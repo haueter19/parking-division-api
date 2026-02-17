@@ -192,47 +192,6 @@ async def get_filter_options(
     return filters
 
 
-@router.post("/work-orders/{work_order_id}/process")
-async def process_work_order(
-    work_order_id: str,
-    action: str,  # "out_of_service", "return_to_service", "add_asset", "remove_asset", "update_status"
-    space_id: Optional[str] = None,
-    new_status: Optional[str] = None,
-    notes: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: UserProxy = Depends(require_role([UserRole.MANAGER, UserRole.ADMIN]))
-):
-    """
-    Process a work order action. Actions depend on the parent template type.
-
-    Actions:
-    - out_of_service: Move a space to the spaces out of service layer in SDE
-    - return_to_service: Return a space to active service
-    - add_asset: Add a new asset to the GIS SDE
-    - remove_asset: Remove an asset from the GIS SDE
-    - update_status: Update the work order status
-
-    Parameters:
-    - work_order_id: The work order being processed
-    - action: The action to perform
-    - space_id: Space ID (required for space-related actions)
-    - new_status: New status value (required for status updates)
-    - notes: Optional notes for the action
-    """
-    # TODO: Implement actual processing logic
-    # This will integrate with:
-    # 1. Cityworks API (via cityworks python package) for work order updates
-    # 2. GIS SDE for spatial data updates
-
-    return {
-        "success": True,
-        "message": f"Action '{action}' queued for work order {work_order_id}",
-        "action": action,
-        "work_order_id": work_order_id,
-        "processed_by": current_user.username,
-        "timestamp": datetime.now().isoformat()
-    }
-
 
 # ==================== Space Processing Endpoints ====================
 

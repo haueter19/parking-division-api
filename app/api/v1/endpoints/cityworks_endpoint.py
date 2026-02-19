@@ -71,28 +71,29 @@ async def get_work_orders(
     - parent_template: Filter by parent template description
     - requested_by: Filter by requesting user
     """
-    # TODO: Replace with actual SQL query provided by user
-    # Placeholder query structure - will be updated with actual Cityworks SQL
+
     query = text("""
         SELECT 
             wo.WorkOrderId, wo.WorkOrderSid, wo.Description, wo.Status, wo.Supervisor, wo.RequestedBy, wo.InitiatedBy, wo.InitiateDate, wo.SubmitTo, wo.DateSubmitTo, wo.DateSubmitToOpen, wo.WorkCompletedBy, 
             wo.Location, wo.WoAddress, wo.ProjStartDate, wo.ProjFinishDate, wo.ActualStartDate, wo.ActualFinishDate, wo.Cancel, wo.WoXCoordinate x_coord, wo.WOYCOORDINATE y_coord, 
             wo.SupervisorSid, wo.RequestedBySid, wo.InitiatedBySid, wo.SubmitToSid, wo.SubmitToOpenBySid, wo.WorkCompletedBySid,
-            COALESCE(pa.DESCRIPTION, 'TE Signing') ParentTemplateDescription --, al.*
+            CASE
+                WHEN pa.Description IS NULL AND wo.WOTemplateId = '1586' THEN 'Portable CC Reader Move'
+                WHEN pa.Description IS NULL AND wo.WOTemplateId = '217' THEN 'TE Signing'
+                ELSE pa.Description
+            END As ParentTemplateDescription
         FROM CMMS.azteca.WorkOrder wo
-        left join CMMS.azteca.ActivityLink al On (wo.WorkorderId=al.DESTACTIVITYID)
+        left join CMMS.azteca.ActivityLink al On (wo.WorkorderId=al.DESTACTIVITYID AND al.DestActivityType!='Inspection')
         left join CMMS.azteca.WorkOrder pa On (al.SOURCEACTIVITYID=pa.WorkOrderId)
         WHERE
             wo.DomainID = 3
-            AND wo.WOTEMPLATEID = '217'
+            AND wo.WOTEMPLATEID IN ('217', '1586')
             AND wo.Status IN ('OPEN', 'HOLD')
             AND (al.LINKTYPE = 'Parent' or al.LINKTYPE IS NULL)
             AND (al.SOURCEACTIVITYTYPE IN ('WorkOrder', 'ServiceRequest') Or al.SOURCEACTIVITYTYPE IS NULL)
         ORDER BY 1 DESC
     """)
 
-    # Note: Filters will be added dynamically once the actual query is provided
-    
     try:
         rows = db.execute(query).fetchall()
         

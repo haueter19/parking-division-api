@@ -252,8 +252,8 @@ async def process_work_order_spaces(
                     'note': request.notes,
                     'revenue_collected': request.revenue_collected,
                     'removal_method': request.removal_method,
-                    'removed_by': submit_to,
-                    'reason_removed': request.reason_removed,
+                    'removed_by': submit_to[:19] if submit_to else None,
+                    'reason_removed': request.reason_removed[:25] if request.reason_removed else None,
                     'ada_relocation': asset.ada_relocation,
                 }
 
@@ -314,8 +314,8 @@ async def process_work_order_spaces(
                     'note': request.notes,
                     'revenue_collected': request.revenue_collected,
                     'removal_method': request.removal_method or 'Signed',
-                    'removed_by': submit_to,
-                    'reason_removed': request.reason_removed,
+                    'removed_by': submit_to[:19] if submit_to else None,
+                    'reason_removed': request.reason_removed[:25] if request.reason_removed else None,
                     'ada_relocation': asset.ada_relocation,
                 }
 

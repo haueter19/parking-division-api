@@ -185,6 +185,7 @@ async def get_filter_options(
     parent_template_results = db.execute(parent_templates).fetchall()
 
     result_list = [tuple(row)[0] for row in parent_template_results]
+    result_list.append('Portable CC Reasder Move')
 
     filters['statuses'] = ['OPEN', 'HOLD', 'CLOSED', 'CANCEL', 'COMPLETE', 'FINALREV', 'FINANCE']  # Distinct work order statuses
     filters['submit_to_options'] = ["Schmitt, KILEY G", "Haueter, Daniel", "Little, Calla", "Moseson, Hannah"]  # Distinct submit to values

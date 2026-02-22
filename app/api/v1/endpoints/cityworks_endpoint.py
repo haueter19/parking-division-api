@@ -337,8 +337,8 @@ async def process_work_order_spaces(
 
                 result['success'] = True
                 result['message'] = f'Space {asset.space_name} sign OOS record created'
-                processed_count += records_inserted
-
+                processed_count += records_inserted            
+            
             else:
                 result['message'] = f'Unknown workflow type: {request.workflow_type}'
                 print(f"Unknown workflow type: {request.workflow_type}")

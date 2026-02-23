@@ -585,7 +585,7 @@ class CashVarianceBase(BaseModel):
     """Base schema for cash variance entries"""
     date: datetime
     cashier_number: str = Field(..., min_length=1, max_length=50)
-    bag_number: str = Field(..., min_length=1, max_length=50)
+    bag_number: Optional[str] = Field(None, min_length=1, max_length=50)
     bag_type: BagType = BagType.REGULAR
     location_id: Optional[int] = None
     device_id: Optional[int] = None
@@ -593,11 +593,13 @@ class CashVarianceBase(BaseModel):
     turnaround_count: int = 0
     turnaround_value: Optional[float] = 0
     ftp_count: int = 0
+    ftp_value: Optional[float] = 0
     coupon_count: int = 0
     coupon_value: Optional[float] = 0
     manual_count: int = 0
     manual_value: Optional[float] = 0
     other_non_paying: int = 0
+    other_non_paying_value: Optional[float] = 0
 
 
 
@@ -618,11 +620,13 @@ class CashVarianceUpdate(BaseModel):
     turnaround_count: Optional[int] = None
     turnaround_value: Optional[float] = None
     ftp_count: Optional[int] = None
+    ftp_value: Optional[float] = None
     coupon_count: Optional[int] = None
     coupon_value: Optional[float] = None
     manual_count: Optional[int] = None
     manual_value: Optional[float] = None
     other_non_paying: Optional[int] = None
+    other_non_paying_value: Optional[float] = None
 
 
 class CashVarianceResponse(CashVarianceBase):

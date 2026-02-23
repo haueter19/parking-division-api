@@ -453,8 +453,8 @@
                         </div>
 
                         <div class="form-group">
-                            <label>Bag Number <span class="required">*</span></label>
-                            <input type="text" name="bag_number" required placeholder="e.g., BAG-12345">
+                            <label>Bag Number</label>
+                            <input type="text" name="bag_number" placeholder="e.g., BAG-12345">
                         </div>
 
                         <div class="form-group">
@@ -515,14 +515,30 @@
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label>FTP Count (Failure to Pay)</label>
-                            <input type="number" name="ftp_count" min="0" value="0" tabindex="5">
+                        <div class="field-row">
+                            <div class="form-group">
+                                <label>FTP Count (Failure to Pay)</label>
+                                <input type="number" name="ftp_count" min="0" value="0" tabindex="5">
+                                <span class="help-text">Number of FTP transactions</span>
+                            </div>
+                            <div class="form-group">
+                                <label>FTP Value ($)</label>
+                                <input type="number" name="ftp_value" step="0.01" min="0" value="0" placeholder="0.00" tabindex="6">
+                                <span class="help-text">Total value of FTP transactions</span>
+                            </div>
                         </div>
 
-                        <div class="form-group">
-                            <label>Other Non-Paying</label>
-                            <input type="number" name="other_non_paying" min="0" value="0" tabindex="6">
+                        <div class="field-row">
+                            <div class="form-group">
+                                <label>Other Non-Paying</label>
+                                <input type="number" name="other_non_paying" min="0" value="0" tabindex="7">
+                                <span class="help-text">Number of other non-paying</span>
+                            </div>
+                            <div class="form-group">
+                                <label>Other Non-Paying Value ($)</label>
+                                <input type="number" name="other_non_paying_value" step="0.01" min="0" value="0" placeholder="0.00" tabindex="8">
+                                <span class="help-text">Total value of other non-paying</span>
+                            </div>
                         </div>
                     </fieldset>
 
@@ -533,12 +549,12 @@
                         <div class="field-row">
                             <div class="form-group">
                                 <label>Manual Count</label>
-                                <input type="number" name="manual_count" min="0" value="0" tabindex="7">
+                                <input type="number" name="manual_count" min="0" value="0" tabindex="9">
                                 <span class="help-text">Number of manual transactions</span>
                             </div>
                             <div class="form-group">
                                 <label>Manual Value ($)</label>
-                                <input type="number" name="manual_value" step="0.01" min="0" value="0" placeholder="0.00" tabindex="8">
+                                <input type="number" name="manual_value" step="0.01" min="0" value="0" placeholder="0.00" tabindex="10">
                                 <span class="help-text">Total value of manual transactions</span>
                             </div>
                         </div>

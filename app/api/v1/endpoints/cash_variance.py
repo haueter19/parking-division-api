@@ -96,10 +96,10 @@ async def get_cash_variance_entries(
             cv.id, cv.date, cv.cashier_number, cv.bag_number, cv.bag_type,
             cv.location_id, cv.device_id, cv.amount, 
             cv.turnaround_count, cv.turnaround_value,
-            cv.ftp_count, 
+            cv.ftp_count, cv.ftp_value,
             cv.coupon_count, cv.coupon_value,
             cv.manual_count, cv.manual_value,
-            cv.other_non_paying,
+            cv.other_non_paying, cv.other_non_paying_value,
             cv.created_by, cv.created_at, cv.updated_by, cv.updated_at,
             f.facility_name as location_name,
             d.device_terminal_id,
@@ -129,11 +129,13 @@ async def get_cash_variance_entries(
             turnaround_count=r.turnaround_count or 0,
             turnaround_value=float(r.turnaround_value) if r.turnaround_value else 0,
             ftp_count=r.ftp_count or 0,
+            ftp_value=float(r.ftp_value) if r.ftp_value else 0,
             coupon_count=r.coupon_count or 0,
             coupon_value=float(r.coupon_value) if r.coupon_value else 0,
             manual_count=r.manual_count or 0,
             manual_value=float(r.manual_value) if r.manual_value else 0,
             other_non_paying=r.other_non_paying or 0,
+            other_non_paying_value=float(r.other_non_paying_value) if r.other_non_paying_value else 0,
             created_by=r.created_by,
             created_at=r.created_at,
             updated_by=r.updated_by,
@@ -159,10 +161,10 @@ async def get_cash_variance_entry(
             cv.id, cv.date, cv.cashier_number, cv.bag_number, cv.bag_type,
             cv.location_id, cv.device_id, cv.amount, 
             cv.turnaround_count, cv.turnaround_value,
-            cv.ftp_count,
+            cv.ftp_count, cv.ftp_value,
             cv.coupon_count, cv.coupon_value,
             cv.manual_count, cv.manual_value,
-            cv.other_non_paying,
+            cv.other_non_paying, cv.other_non_paying_value,
             cv.created_by, cv.created_at, cv.updated_by, cv.updated_at,
             f.facility_name as location_name,
             d.device_terminal_id,
@@ -194,11 +196,13 @@ async def get_cash_variance_entry(
         turnaround_count=result.turnaround_count or 0,
         turnaround_value=float(result.turnaround_value) if result.turnaround_value else 0,
         ftp_count=result.ftp_count or 0,
+        ftp_value=float(result.ftp_value) if result.ftp_value else 0,
         coupon_count=result.coupon_count or 0,
         coupon_value=float(result.coupon_value) if result.coupon_value else 0,
         manual_count=result.manual_count or 0,
         manual_value=float(result.manual_value) if result.manual_value else 0,
         other_non_paying=result.other_non_paying or 0,
+        other_non_paying_value=float(result.other_non_paying_value) if result.other_non_paying_value else 0,
         created_by=result.created_by,
         created_at=result.created_at,
         updated_by=result.updated_by,
@@ -220,22 +224,22 @@ async def create_cash_variance_entry(
     insert_sql = text("""
         INSERT INTO app.cash_variance (
             date, cashier_number, bag_number, bag_type,
-            location_id, device_id, amount, 
+            location_id, device_id, amount,
             turnaround_count, turnaround_value,
-            ftp_count, 
+            ftp_count, ftp_value,
             coupon_count, coupon_value,
             manual_count, manual_value,
-            other_non_paying, created_by
+            other_non_paying, other_non_paying_value, created_by
         )
         OUTPUT INSERTED.id
         VALUES (
             :date, :cashier_number, :bag_number, :bag_type,
-            :location_id, :device_id, :amount, 
+            :location_id, :device_id, :amount,
             :turnaround_count, :turnaround_value,
-            :ftp_count, 
+            :ftp_count, :ftp_value,
             :coupon_count, :coupon_value,
             :manual_count, :manual_value,
-            :other_non_paying, :created_by
+            :other_non_paying, :other_non_paying_value, :created_by
         )
     """)
     
@@ -250,11 +254,13 @@ async def create_cash_variance_entry(
         "turnaround_count": entry_data.turnaround_count,
         "turnaround_value": entry_data.turnaround_value,
         "ftp_count": entry_data.ftp_count,
+        "ftp_value": entry_data.ftp_value,
         "coupon_count": entry_data.coupon_count,
         "coupon_value": entry_data.coupon_value,
         "manual_count": entry_data.manual_count,
         "manual_value": entry_data.manual_value,
         "other_non_paying": entry_data.other_non_paying,
+        "other_non_paying_value": entry_data.other_non_paying_value,
         "created_by": current_user.employee_id
     })
     
@@ -329,7 +335,11 @@ async def update_cash_variance_entry(
     if entry_data.ftp_count is not None:
         update_fields.append("ftp_count = :ftp_count")
         params["ftp_count"] = entry_data.ftp_count
-    
+
+    if entry_data.ftp_value is not None:
+        update_fields.append("ftp_value = :ftp_value")
+        params["ftp_value"] = entry_data.ftp_value
+
     if entry_data.coupon_count is not None:
         update_fields.append("coupon_count = :coupon_count")
         params["coupon_count"] = entry_data.coupon_count
@@ -349,7 +359,11 @@ async def update_cash_variance_entry(
     if entry_data.other_non_paying is not None:
         update_fields.append("other_non_paying = :other_non_paying")
         params["other_non_paying"] = entry_data.other_non_paying
-    
+
+    if entry_data.other_non_paying_value is not None:
+        update_fields.append("other_non_paying_value = :other_non_paying_value")
+        params["other_non_paying_value"] = entry_data.other_non_paying_value
+
     if not update_fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

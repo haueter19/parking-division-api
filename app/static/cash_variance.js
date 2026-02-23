@@ -152,8 +152,8 @@ function renderEntries(entries) {
             <td>${entry.turnaround_count} / $${formatAmount(entry.turnaround_value)}</td>
             <td>${entry.coupon_count} / $${formatAmount(entry.coupon_value)}</td>
             <td>${entry.manual_count} / $${formatAmount(entry.manual_value)}</td>
-            <td>${entry.ftp_count}</td>
-            <td>${entry.other_non_paying}</td>
+            <td>${entry.ftp_count} / $${formatAmount(entry.ftp_value)}</td>
+            <td>${entry.other_non_paying} / $${formatAmount(entry.other_non_paying_value)}</td>
             <td>${entry.created_by_name || '-'}</td>
             <td>
                 <button class="btn-secondary action-btn" onclick="editEntry(${entry.id})">Edit</button>
@@ -180,11 +180,13 @@ function setupFormHandlers() {
             turnaround_count: parseInt(formData.get('turnaround_count')) || 0,
             turnaround_value: formData.get('turnaround_value') ? parseFloat(formData.get('turnaround_value')) : 0,
             ftp_count: parseInt(formData.get('ftp_count')) || 0,
+            ftp_value: formData.get('ftp_value') ? parseFloat(formData.get('ftp_value')) : 0,
             coupon_count: parseInt(formData.get('coupon_count')) || 0,
             coupon_value: formData.get('coupon_value') ? parseFloat(formData.get('coupon_value')) : 0,
             manual_count: parseInt(formData.get('manual_count')) || 0,
             manual_value: formData.get('manual_value') ? parseFloat(formData.get('manual_value')) : 0,
-            other_non_paying: parseInt(formData.get('other_non_paying')) || 0
+            other_non_paying: parseInt(formData.get('other_non_paying')) || 0,
+            other_non_paying_value: formData.get('other_non_paying_value') ? parseFloat(formData.get('other_non_paying_value')) : 0
         };
 
         try {
@@ -228,11 +230,13 @@ function setupFormHandlers() {
             turnaround_count: parseInt(formData.get('turnaround_count')) || 0,
             turnaround_value: formData.get('turnaround_value') ? parseFloat(formData.get('turnaround_value')) : 0,
             ftp_count: parseInt(formData.get('ftp_count')) || 0,
+            ftp_value: formData.get('ftp_value') ? parseFloat(formData.get('ftp_value')) : 0,
             coupon_count: parseInt(formData.get('coupon_count')) || 0,
             coupon_value: formData.get('coupon_value') ? parseFloat(formData.get('coupon_value')) : 0,
             manual_count: parseInt(formData.get('manual_count')) || 0,
             manual_value: formData.get('manual_value') ? parseFloat(formData.get('manual_value')) : 0,
-            other_non_paying: parseInt(formData.get('other_non_paying')) || 0
+            other_non_paying: parseInt(formData.get('other_non_paying')) || 0,
+            other_non_paying_value: formData.get('other_non_paying_value') ? parseFloat(formData.get('other_non_paying_value')) : 0
         };
 
         try {
@@ -308,8 +312,8 @@ function populateEditForm(entry) {
                 <input type="text" name="cashier_number" required value="${entry.cashier_number}">
             </div>
             <div class="form-group">
-                <label>Bag Number <span class="required">*</span></label>
-                <input type="text" name="bag_number" required value="${entry.bag_number}">
+                <label>Bag Number</label>
+                <input type="text" name="bag_number" value="${entry.bag_number || ''}">
             </div>
             <div class="form-group">
                 <label>Bag Type <span class="required">*</span></label>
@@ -357,14 +361,26 @@ function populateEditForm(entry) {
                 </div>
             </div>
 
-            <div class="form-group">
-                <label>FTP Count</label>
-                <input type="number" name="ftp_count" min="0" value="${entry.ftp_count}">
+            <div class="field-row">
+                <div class="form-group">
+                    <label>FTP Count (Failure to Pay)</label>
+                    <input type="number" name="ftp_count" min="0" value="${entry.ftp_count}">
+                </div>
+                <div class="form-group">
+                    <label>FTP Value ($)</label>
+                    <input type="number" name="ftp_value" step="0.01" min="0" value="${entry.ftp_value}">
+                </div>
             </div>
 
-            <div class="form-group">
-                <label>Other Non-Paying</label>
-                <input type="number" name="other_non_paying" min="0" value="${entry.other_non_paying}">
+            <div class="field-row">
+                <div class="form-group">
+                    <label>Other Non-Paying</label>
+                    <input type="number" name="other_non_paying" min="0" value="${entry.other_non_paying}">
+                </div>
+                <div class="form-group">
+                    <label>Other Non-Paying Value ($)</label>
+                    <input type="number" name="other_non_paying_value" step="0.01" min="0" value="${entry.other_non_paying_value}">
+                </div>
             </div>
         </fieldset>
 

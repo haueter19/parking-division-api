@@ -1268,6 +1268,9 @@
                 if (key === 'Status') {
                     display = getStatusBadge(raw);
                     isHtml = true;
+                } else if (key === 'RequestId' && raw) {
+                    display = `<a href="http://cmms.cityofmadison.com/Cityworks/Workmanagement/RequestEdit.aspx?RequestId=${raw}" target="_blank">${raw}</a>`;
+                    isHtml = true;
                 } else if (dateKeys.has(key)) {
                     display = formatDate(raw);
                 } else {

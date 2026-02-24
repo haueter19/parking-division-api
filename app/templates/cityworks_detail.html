@@ -882,6 +882,7 @@
                     <div class="detail-grid" id="woInfoGrid">
                         <!-- populated by JS -->
                     </div>
+                    <div id="woCustomFieldsInline"></div>
                 </div>
 
                 <!-- Parent Work Order Card -->
@@ -890,6 +891,7 @@
                     <div class="detail-grid" id="parentWoInfoGrid">
                         <!-- populated by JS -->
                     </div>
+                    <div id="parentCustomFieldsInline"></div>
                 </div>
 
                 <!-- Service Request Card -->
@@ -917,27 +919,6 @@
                 <div class="card">
                     <h3 class="card-title">Comments / Notes</h3>
                     <div class="comments-box" id="detailComments">No comments available.</div>
-                </div>
-
-            </div>
-
-            <!-- ===== Custom Fields ===== -->
-            <div class="content-grid">
-
-                <!-- WO Custom Fields -->
-                <div class="card">
-                    <h3 class="card-title">Work Order Custom Fields</h3>
-                    <div id="woCustomFields">
-                        <span class="empty-text">No custom fields available.</span>
-                    </div>
-                </div>
-
-                <!-- Parent Custom Fields -->
-                <div class="card">
-                    <h3 class="card-title">Parent Custom Fields</h3>
-                    <div id="parentCustomFields">
-                        <span class="empty-text">No custom fields available.</span>
-                    </div>
                 </div>
 
             </div>
@@ -1170,8 +1151,8 @@
                 renderServiceRequestInfo(serviceRequestData);
                 renderInstructions(parentInstructionsData, instructionsData);
                 document.getElementById('detailComments').textContent = commentsData || 'No comments available.';
-                renderCustomFields(data.custom_fields, 'woCustomFields');
-                renderCustomFields(data.parent_custom_fields, 'parentCustomFields');
+                renderCustomFields(data.custom_fields, 'woCustomFieldsInline');
+                renderCustomFields(data.parent_custom_fields, 'parentCustomFieldsInline');
 
                 // Set up workflow processing UI
                 setupWorkflowUI();
@@ -1358,11 +1339,12 @@
                 || (typeof customFields === 'object' && !Array.isArray(customFields) && Object.keys(customFields).length === 0);
 
             if (isEmpty) {
-                container.innerHTML = '<span class="empty-text">No custom fields available.</span>';
+                container.innerHTML = '';
                 return;
             }
 
-            let html = '<div class="detail-grid">';
+            let html = '<div class="section-divider"><span>Custom Fields</span></div>';
+            html += '<div class="detail-grid">';
 
             if (Array.isArray(customFields)) {
                 // Array format: [{Key: 'x', Value: 'y'}, ...]

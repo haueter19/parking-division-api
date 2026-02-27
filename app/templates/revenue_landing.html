@@ -227,7 +227,7 @@
 
     <!-- Facility totals -->
     <div class="card">
-        <h2>Settled by Facility <span style="font-size:0.78rem;color:#9ca3af;font-weight:400">(last 30 days)</span></h2>
+        <h2>Settled by Facility <span style="font-size:0.78rem;color:#9ca3af;font-weight:400">(last 7 day change)</span></h2>
         <div id="facilityContainer"><div class="loading">Loading…</div></div>
     </div>
 
@@ -318,11 +318,13 @@ async function loadLanding() {
                 <td style="color:#6b7280">${f.facility_type || '—'}</td>
                 <td>${fmtN(f.transaction_count)}</td>
                 <td>${fmt$(f.total_settled)}</td>
+                <td style="color:${f.raw_change < 0 ? '#dc2626' : f.raw_change > 0 ? '#16a34a' : '#6b7280'}">${fmt$(f.raw_change)}</td>
+                <td style="color:${f.percent_change < 0 ? '#dc2626' : f.percent_change > 0 ? '#16a34a' : '#6b7280'}">${f.percent_change != null ? f.percent_change + '%' : '—'}</td>
             </tr>`).join('');
         document.getElementById('facilityContainer').innerHTML = `
             <table class="facility-table">
                 <thead><tr>
-                    <th>Facility</th><th>Type</th><th>Txns</th><th style="text-align:right">Settled</th>
+                    <th>Facility</th><th>Type</th><th>Txns</th><th>Settled</th><th>Diff</th><th style="text-align:right">% Change</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;

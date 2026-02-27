@@ -495,7 +495,7 @@ async def revenue_landing_data(
     """
     from datetime import timedelta
 
-    today = datetime.utcnow().date()
+    today = datetime.now().date()
     yesterday = today - timedelta(days=1)
     seven_days_ago = today - timedelta(days=7)
     thirty_days_ago = today - timedelta(days=30)
@@ -586,28 +586,61 @@ async def revenue_landing_data(
 
     # ── 3. Facility totals – last 30 days ─────────────────────
     facility_sql = text("""
+        WITH recent_week AS (
+            SELECT
+                f.facility_name,
+                f.facility_type,
+                COUNT(*) AS txns,
+                SUM(t.settle_amount) AS settled
+            FROM app.fact_transaction t
+            INNER JOIN app.dim_location l ON t.location_id = l.location_id
+            INNER JOIN app.dim_facility f ON l.facility_id = f.facility_id
+            WHERE t.settle_date >= :seven_days_ago
+            AND t.settle_date <= :yesterday
+            GROUP BY f.facility_name, f.facility_type
+        ),
+        prior_week AS (
+            SELECT
+                f.facility_name,
+                f.facility_type,
+                SUM(t.settle_amount) AS settled
+            FROM app.fact_transaction t
+            INNER JOIN app.dim_location l ON t.location_id = l.location_id
+            INNER JOIN app.dim_facility f ON l.facility_id = f.facility_id
+            WHERE t.settle_date >= :fourteen_days_ago
+            AND t.settle_date <= :eight_days_ago
+            GROUP BY f.facility_name, f.facility_type
+        )
         SELECT
-            f.facility_name,
-            f.facility_type,
-            COUNT(*) AS transaction_count,
-            SUM(t.settle_amount) AS total_settled
-        FROM app.fact_transaction t
-        INNER JOIN app.dim_location l ON t.location_id = l.location_id
-        INNER JOIN app.dim_facility f ON l.facility_id = f.facility_id
-        WHERE t.settle_date >= :thirty_days_ago
-          AND t.settle_date <= :yesterday
-        GROUP BY f.facility_name, f.facility_type
-        ORDER BY total_settled DESC
+            r.facility_name        AS facility_name,
+            r.facility_type        AS facility_type,
+            r.txns                 AS transaction_count,
+            r.settled              AS total_settled,
+            r.settled - p.settled as raw_change,
+            CASE
+                WHEN p.settled IS NULL OR p.settled = 0 THEN NULL
+                ELSE ROUND((r.settled - p.settled) / ABS(p.settled) * 100, 1)
+            END                    AS Change
+
+        FROM recent_week r
+        LEFT JOIN prior_week p
+            ON r.facility_name = p.facility_name
+        AND r.facility_type = p.facility_type
+        ORDER BY r.settled DESC
     """)
     facility_rows = db.execute(facility_sql, {
-        "thirty_days_ago": thirty_days_ago.strftime('%Y-%m-%d') + 'T00:00:00',
-        "yesterday": yesterday.strftime('%Y-%m-%d') + 'T23:59:59'
+        "seven_days_ago": seven_days_ago.strftime('%Y-%m-%d') + 'T00:00:00',
+        "yesterday": yesterday.strftime('%Y-%m-%d') + 'T23:59:59',
+        "fourteen_days_ago": (datetime.now()-timedelta(days=14)).strftime('%Y-%m-%d') + 'T00:00:00',
+        "eight_days_ago": (datetime.now()-timedelta(days=8)).strftime('%Y-%m-%d') + 'T00:00:00',
     }).fetchall()
     facility_totals = [{
         "facility_name": r.facility_name,
         "facility_type": r.facility_type,
         "transaction_count": int(r.transaction_count),
-        "total_settled": float(r.total_settled or 0)
+        "total_settled": float(r.total_settled or 0),
+        "raw_change": float(r.raw_change) if r.raw_change is not None else None,
+        "percent_change": float(r.Change) if r.Change is not None else None
     } for r in facility_rows]
 
     # ── 4. 30-day summary ─────────────────────────────────────
@@ -621,7 +654,7 @@ async def revenue_landing_data(
           AND t.settle_date <= :yesterday
     """)
     summary_row = db.execute(summary_sql, {
-        "thirty_days_ago": thirty_days_ago.strftime('%Y-%m-%d') + 'T00:00:00',
+        "thirty_days_ago": seven_days_ago.strftime('%Y-%m-%d') + 'T00:00:00',
         "yesterday": yesterday.strftime('%Y-%m-%d') + 'T23:59:59'
     }).fetchone()
 

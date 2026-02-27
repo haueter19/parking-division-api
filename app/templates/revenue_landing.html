@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% set current_section = "revenue" %}
+
+{% block title %}Revenue – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
+    .section-header {
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    .section-header h1 { font-size: 1.5rem; color: #1e2a3a; font-weight: 700; }
+    .section-header .period-note { color: #6b7280; font-size: 0.9rem; }
+
+    .quick-links {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 28px;
+        flex-wrap: wrap;
+    }
+    .quick-links a {
+        background: #2563eb;
+        color: #fff;
+        text-decoration: none;
+        padding: 8px 18px;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        transition: background 0.15s;
+    }
+    .quick-links a:hover { background: #1d4ed8; }
+    .quick-links a.secondary {
+        background: #fff;
+        color: #2563eb;
+        border: 1px solid #93c5fd;
+    }
+    .quick-links a.secondary:hover { background: #eff6ff; }
+
+    /* Summary metric cards */
+    .metrics-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 28px;
+    }
+    .metric-card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 18px 20px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+        border-top: 4px solid #2563eb;
+    }
+    .metric-card .metric-label {
+        font-size: 0.78rem;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 6px;
+    }
+    .metric-card .metric-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1e2a3a;
+    }
+    .metric-card .metric-sub {
+        font-size: 0.78rem;
+        color: #9ca3af;
+        margin-top: 4px;
+    }
+
+    /* Two-column layout */
+    .landing-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    @media (max-width: 900px) {
+        .landing-grid { grid-template-columns: 1fr; }
+    }
+    .landing-grid .full-width { grid-column: 1 / -1; }
+
+    /* Cards */
+    .card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 20px 22px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+    }
+    .card h2 {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #374151;
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .card h2 a {
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: #2563eb;
+        text-decoration: none;
+    }
+    .card h2 a:hover { text-decoration: underline; }
+
+    /* Recent uploads table */
+    .uploads-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+    }
+    .uploads-table th {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 2px solid #e5e7eb;
+        color: #6b7280;
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .uploads-table td {
+        padding: 7px 8px;
+        border-bottom: 1px solid #f3f4f6;
+        color: #374151;
+        vertical-align: middle;
+    }
+    .uploads-table tr:last-child td { border-bottom: none; }
+    .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+    .badge-processed { background: #d1fae5; color: #065f46; }
+    .badge-pending   { background: #fef3c7; color: #92400e; }
+
+    /* Source pivot table */
+    .pivot-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+    }
+    .pivot-table th {
+        text-align: center;
+        padding: 6px 6px;
+        border-bottom: 2px solid #e5e7eb;
+        color: #6b7280;
+        font-weight: 600;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+    .pivot-table th:first-child { text-align: left; }
+    .pivot-table td {
+        padding: 7px 6px;
+        border-bottom: 1px solid #f3f4f6;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+    .pivot-table td:first-child { text-align: left; color: #374151; }
+    .pivot-table tr:last-child td { border-bottom: none; }
+    .cell-zero { color: #ef4444; font-weight: 600; background: #fef2f2; }
+    .cell-pos  { color: #059669; font-weight: 600; }
+
+    /* Facility totals */
+    .facility-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+    }
+    .facility-table th {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 2px solid #e5e7eb;
+        color: #6b7280;
+        font-weight: 600;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .facility-table th:last-child { text-align: right; }
+    .facility-table td {
+        padding: 7px 8px;
+        border-bottom: 1px solid #f3f4f6;
+        color: #374151;
+    }
+    .facility-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+    .facility-table tr:last-child td { border-bottom: none; }
+
+    .loading { color: #9ca3af; font-size: 0.875rem; padding: 12px 0; }
+    .error   { color: #ef4444; font-size: 0.875rem; padding: 12px 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Revenue</h1>
+    <span class="period-note">Last 30 days</span>
+</div>
+
+<div class="quick-links">
+    <a href="/revenue/upload">Upload Data</a>
+    <a href="/revenue/files/status" class="secondary">File Status</a>
+    <a href="/revenue/cash-variance" class="secondary">Cash Variance</a>
+    <a href="/revenue/reports" class="secondary">Reports</a>
+</div>
+
+<!-- Summary metrics -->
+<div class="metrics-row" id="metricsRow">
+    <div class="metric-card"><div class="metric-label">Total Settled (30d)</div><div class="metric-value loading" id="metricTotal">—</div></div>
+    <div class="metric-card"><div class="metric-label">Transactions (30d)</div><div class="metric-value loading" id="metricCount">—</div></div>
+    <div class="metric-card"><div class="metric-label">Last Settle Date</div><div class="metric-value loading" id="metricLastDate">—</div></div>
+    <div class="metric-card"><div class="metric-label">Recent Uploads</div><div class="metric-value loading" id="metricUploads">—</div></div>
+</div>
+
+<div class="landing-grid">
+
+    <!-- Recent uploads -->
+    <div class="card">
+        <h2>Recent Uploads <a href="/revenue/files/status">View All →</a></h2>
+        <div id="uploadsContainer"><div class="loading">Loading…</div></div>
+    </div>
+
+    <!-- Facility totals -->
+    <div class="card">
+        <h2>Settled by Facility <span style="font-size:0.78rem;color:#9ca3af;font-weight:400">(last 30 days)</span></h2>
+        <div id="facilityContainer"><div class="loading">Loading…</div></div>
+    </div>
+
+    <!-- Source pivot -->
+    <div class="card full-width">
+        <h2>Settled Transactions by Source <span style="font-size:0.78rem;color:#9ca3af;font-weight:400">(last 7 days)</span> <a href="/revenue/reports/sources">Full Report →</a></h2>
+        <div id="pivotContainer"><div class="loading">Loading…</div></div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const token = localStorage.getItem('access_token');
+const SOURCE_LABELS = {
+    'windcave_staging': 'Windcave',
+    'payments_insider_sales_staging': 'Payments Insider',
+    'ips_staging': 'IPS',
+    'zms_cash_regular': 'ZMS Cash'
+};
+
+function fmt$(v) {
+    return '$' + (v || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+function fmtN(v) {
+    return (v || 0).toLocaleString('en-US');
+}
+function fmtDate(s) {
+    if (!s) return '—';
+    const d = new Date(s + (s.includes('T') ? '' : 'T00:00:00'));
+    return d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'});
+}
+
+async function loadLanding() {
+    let data;
+    try {
+        const resp = await fetch('/api/v1/reports/revenue-landing', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!resp.ok) {
+            const msg = await resp.text();
+            document.getElementById('uploadsContainer').innerHTML = `<div class="error">Error loading data: ${msg}</div>`;
+            return;
+        }
+        data = await resp.json();
+    } catch(e) {
+        document.getElementById('uploadsContainer').innerHTML = `<div class="error">Network error: ${e.message}</div>`;
+        return;
+    }
+
+    const { recent_uploads, source_pivot, facility_totals, summary } = data;
+
+    // Metrics
+    document.getElementById('metricTotal').textContent = fmt$(summary.total_settled);
+    document.getElementById('metricCount').textContent = fmtN(summary.total_transactions);
+    document.getElementById('metricLastDate').textContent = fmtDate(summary.last_settle_date);
+    document.getElementById('metricUploads').textContent = recent_uploads.length;
+
+    // Recent uploads table
+    if (!recent_uploads.length) {
+        document.getElementById('uploadsContainer').innerHTML = '<div class="loading">No recent uploads.</div>';
+    } else {
+        let rows = recent_uploads.map(u => `
+            <tr>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${u.filename}">${u.filename}</td>
+                <td>${u.source_type}</td>
+                <td>${fmtDate(u.upload_date)}</td>
+                <td><span class="badge ${u.is_processed ? 'badge-processed' : 'badge-pending'}">${u.is_processed ? 'Processed' : 'Pending'}</span></td>
+                <td style="text-align:right">${u.records_processed != null ? fmtN(u.records_processed) : '—'}</td>
+            </tr>`).join('');
+        document.getElementById('uploadsContainer').innerHTML = `
+            <table class="uploads-table">
+                <thead><tr>
+                    <th>File</th><th>Source</th><th>Uploaded</th><th>Status</th><th style="text-align:right">Records</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+    }
+
+    // Facility totals
+    if (!facility_totals.length) {
+        document.getElementById('facilityContainer').innerHTML = '<div class="loading">No data available.</div>';
+    } else {
+        let rows = facility_totals.map(f => `
+            <tr>
+                <td>${f.facility_name || '—'}</td>
+                <td style="color:#6b7280">${f.facility_type || '—'}</td>
+                <td>${fmtN(f.transaction_count)}</td>
+                <td>${fmt$(f.total_settled)}</td>
+            </tr>`).join('');
+        document.getElementById('facilityContainer').innerHTML = `
+            <table class="facility-table">
+                <thead><tr>
+                    <th>Facility</th><th>Type</th><th>Txns</th><th style="text-align:right">Settled</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+    }
+
+    // Source pivot
+    const pivotCols = ['windcave_staging', 'payments_insider_sales_staging', 'ips_staging', 'zms_cash_regular'];
+    let headerCols = pivotCols.map(c => `<th>${SOURCE_LABELS[c]}</th>`).join('');
+    let pivotRows = source_pivot.map(row => {
+        let cells = pivotCols.map(c => {
+            const v = row[c] || 0;
+            return `<td class="${v === 0 ? 'cell-zero' : 'cell-pos'}">${v}</td>`;
+        }).join('');
+        return `<tr><td>${row.settle_date}</td>${cells}</tr>`;
+    }).join('');
+    document.getElementById('pivotContainer').innerHTML = `
+        <table class="pivot-table">
+            <thead><tr><th>Date</th>${headerCols}</tr></thead>
+            <tbody>${pivotRows}</tbody>
+        </table>`;
+}
+
+loadLanding();
+</script>
+{% endblock %}

@@ -1,10 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Configuration - Parking Division</title>
-    <style>
+{% extends "base.html" %}
+{% set current_section = "admin" %}
+
+{% block title %}Admin Configuration – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
@@ -553,23 +553,10 @@
             display: block;
         }
     </style>
-</head>
-<body>
-    <div class="header">
-        <h1>⚙️ Admin Configuration</h1>
-        <div class="header-nav">
-            <a href="/upload">Upload Files</a>
-            <a href="/files/status">File Status</a>
-            <a href="/cash_variance">Cash Variance</a>
-            <a href="/reports">Reports</a>
-            <div class="user-info">
-                <span class="user-name" id="userName">Loading...</span>
-                <button class="logout-btn" onclick="logout()">Logout</button>
-            </div>
-        </div>
-    </div>
+{% endblock %}
 
-    <div class="container">
+{% block content %}
+<div class="container">
         <div id="message" class="message"></div>
 
         <!-- Tabs -->
@@ -1375,5 +1362,4 @@
     </div>
 
     <script src="/static/admin.js"></script>
-</body>
-</html>
+{% endblock %}

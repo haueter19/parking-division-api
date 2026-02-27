@@ -178,7 +178,7 @@ function renderWorkOrders() {
 }
 
 function openWorkOrder(workOrderId) {
-    window.location.href = `/cityworks/detail?id=${workOrderId}`;
+    window.location.href = `/cityworks/work-orders/detail?id=${workOrderId}`;
 }
 
 // ==================== Filtering ====================

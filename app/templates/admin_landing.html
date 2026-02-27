@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% set current_section = "admin" %}
+
+{% block title %}Admin – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
+    .section-header { margin-bottom: 24px; }
+    .section-header h1 { font-size: 1.5rem; color: #1e2a3a; font-weight: 700; }
+
+    .admin-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 16px;
+    }
+    .admin-card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 22px 20px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+        border-top: 4px solid #7c3aed;
+        text-decoration: none;
+        display: block;
+        transition: box-shadow 0.2s, transform 0.15s;
+    }
+    .admin-card:hover {
+        box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+    .admin-card .card-icon { font-size: 1.6rem; margin-bottom: 8px; }
+    .admin-card .card-title { font-size: 1rem; font-weight: 700; color: #1e2a3a; margin-bottom: 6px; }
+    .admin-card .card-desc { font-size: 0.85rem; color: #6b7280; line-height: 1.5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Admin</h1>
+    <p style="color:#6b7280;margin-top:4px;font-size:0.95rem">System configuration and administration.</p>
+</div>
+
+<div class="admin-grid">
+    <a class="admin-card" href="/admin/config">
+        <div class="card-icon">⚙️</div>
+        <div class="card-title">Configuration</div>
+        <div class="card-desc">Manage system settings, data source mappings, and application configuration.</div>
+    </a>
+</div>
+{% endblock %}

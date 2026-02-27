@@ -157,6 +157,70 @@ async def get_work_order_detail(
 
 
 
+@router.get("/stats")
+async def get_cityworks_stats(
+    db: Session = Depends(get_db),
+    current_user: UserProxy = Depends(require_role([UserRole.CITYWORKS, UserRole.MANAGER, UserRole.ADMIN]))
+):
+    """
+    Return summary stats for the Cityworks landing page.
+
+    Returns:
+    - open_count: Current open/hold Update GIS work orders
+    - assigned_last_week: Work orders with DateSubmitToOpen in last 7 days
+    - closed_last_week: Work orders closed/completed in last 7 days
+    - avg_days_to_complete: Moving average (last 90 days) of InitiateDate → ActualFinishDate
+    """
+    stats_sql = text("""
+        SELECT
+            -- Open ticket count
+            SUM(CASE WHEN wo.Status IN ('OPEN', 'HOLD') THEN 1 ELSE 0 END) AS open_count,
+
+            -- Assigned last 7 days (DateSubmitToOpen populated in last week)
+            SUM(CASE
+                WHEN wo.DateSubmitToOpen >= DATEADD(DAY, -7, GETDATE())
+                     AND wo.DateSubmitToOpen < GETDATE()
+                THEN 1 ELSE 0
+            END) AS assigned_last_week,
+
+            -- Closed/completed last 7 days
+            SUM(CASE
+                WHEN wo.Status IN ('CLOSED', 'COMPLETE', 'FINALREV', 'FINANCE')
+                     AND wo.ActualFinishDate >= DATEADD(DAY, -7, GETDATE())
+                     AND wo.ActualFinishDate < GETDATE()
+                THEN 1 ELSE 0
+            END) AS closed_last_week,
+
+            -- Moving average days to complete (last 90 days of closed tickets)
+            AVG(CASE
+                WHEN wo.Status IN ('CLOSED', 'COMPLETE', 'FINALREV', 'FINANCE')
+                     AND wo.ActualFinishDate IS NOT NULL
+                     AND wo.InitiateDate IS NOT NULL
+                     AND wo.ActualFinishDate >= DATEADD(DAY, -90, GETDATE())
+                THEN CAST(DATEDIFF(DAY, wo.InitiateDate, wo.ActualFinishDate) AS FLOAT)
+                ELSE NULL
+            END) AS avg_days_to_complete
+
+        FROM CMMS.azteca.WorkOrder wo
+        WHERE wo.DomainID = 3
+          AND wo.WOTEMPLATEID IN ('217', '1586')
+    """)
+
+    try:
+        row = db.execute(stats_sql).fetchone()
+        return {
+            "open_count": int(row.open_count or 0),
+            "assigned_last_week": int(row.assigned_last_week or 0),
+            "closed_last_week": int(row.closed_last_week or 0),
+            "avg_days_to_complete": round(float(row.avg_days_to_complete), 1) if row.avg_days_to_complete is not None else None
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching Cityworks stats: {str(e)}"
+        )
+
+
 @router.get("/filter-options")
 async def get_filter_options(
     db: Session = Depends(get_db),

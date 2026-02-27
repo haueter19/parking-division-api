@@ -1,507 +1,220 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Upload - Parking Division</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+{% extends "base.html" %}
+{% set current_section = "revenue" %}
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
+{% block title %}Upload Data – Parking Division{% endblock %}
 
-        .header {
-            background: white;
-            border-radius: 12px;
-            padding: 20px 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+{% block head_extra %}
+<style>
+    .container {
+        background: white;
+        border-radius: 12px;
+        padding: 32px;
+        max-width: 800px;
+        margin: 0 auto;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+    .container h2 { color: #1e2a3a; margin-bottom: 24px; font-size: 1.25rem; }
 
-        .header h1 {
-            color: #2d3748;
-            font-size: 1.5rem;
-        }
+    .upload-area {
+        border: 3px dashed #cbd5e0; border-radius: 12px; padding: 60px 20px;
+        text-align: center; cursor: pointer; transition: all 0.3s ease; margin-bottom: 24px;
+    }
+    .upload-area.dragover { border-color: #2563eb; background: #eff6ff; }
+    .upload-area:hover { border-color: #2563eb; }
+    .upload-icon { font-size: 3rem; margin-bottom: 15px; }
+    .upload-text { color: #4a5568; font-size: 1.1rem; margin-bottom: 10px; }
+    .upload-subtext { color: #a0aec0; font-size: 0.9rem; }
 
-        .header-nav {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; color: #4a5568; font-weight: 600; margin-bottom: 8px; }
+    select, textarea {
+        width: 100%; padding: 12px; border: 2px solid #e2e8f0;
+        border-radius: 8px; font-size: 1rem; transition: border-color 0.3s ease;
+    }
+    select:focus, textarea:focus { outline: none; border-color: #2563eb; }
+    textarea { resize: vertical; min-height: 80px; }
 
-        .header-nav a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-            padding: 8px 16px;
-            border-radius: 6px;
-            transition: background 0.2s;
-        }
+    .file-info { background: #f7fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; }
+    .file-info.show { display: block; }
+    .file-name { color: #2d3748; font-weight: 600; margin-bottom: 5px; }
+    .file-size { color: #718096; font-size: 0.9rem; }
 
-        .header-nav a:hover {
-            background: #f0f4ff;
-        }
+    .upload-btn {
+        width: 100%; background: #2563eb; color: white; padding: 14px;
+        border: none; border-radius: 8px; font-size: 1rem; font-weight: 600;
+        cursor: pointer; transition: background 0.2s;
+    }
+    .upload-btn:hover:not(:disabled) { background: #1d4ed8; }
+    .upload-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
+    .message { padding: 12px; border-radius: 8px; margin-bottom: 20px; display: none; }
+    .message.show { display: block; }
+    .message.error { background: #fff5f5; color: #c53030; border-left: 4px solid #fc8181; }
+    .message.success { background: #f0fff4; color: #22543d; border-left: 4px solid #68d391; }
 
-        .user-name {
-            color: #4a5568;
-            font-weight: 600;
-        }
+    .recent-uploads { margin-top: 32px; }
+    .recent-uploads h3 { color: #1e2a3a; margin-bottom: 16px; font-size: 1rem; }
+    .upload-item {
+        background: #f7fafc; padding: 15px; border-radius: 8px;
+        margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .upload-item-title { color: #2d3748; font-weight: 600; margin-bottom: 5px; }
+    .upload-item-meta { color: #718096; font-size: 0.85rem; }
+    .badge {
+        display: inline-block; padding: 4px 8px; background: #2563eb;
+        color: white; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+    }
+    input[type="file"] { display: none; }
+</style>
+{% endblock %}
 
-        .logout-btn {
-            background: #f56565;
-            color: white;
-            padding: 8px 16px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: background 0.2s;
-        }
+{% block content %}
+<div class="container">
+    <h2>Upload Data File</h2>
 
-        .logout-btn:hover {
-            background: #e53e3e;
-        }
+    <div id="message" class="message"></div>
 
-        .container {
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            max-width: 800px;
-            margin: 0 auto;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
+    <form id="uploadForm">
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">Drag and drop your file here</div>
+            <div class="upload-subtext">or click to browse</div>
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.pdf,.txt,.doc,.docx">
+        </div>
 
-        h2 {
-            color: #2d3748;
-            margin-bottom: 30px;
-            text-align: center;
-        }
+        <div id="fileInfo" class="file-info">
+            <div class="file-name" id="fileName"></div>
+            <div class="file-size" id="fileSize"></div>
+        </div>
 
-        .upload-area {
-            border: 3px dashed #cbd5e0;
-            border-radius: 12px;
-            padding: 60px 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 30px;
-        }
+        <div class="form-group">
+            <label for="description">Description (Optional)</label>
+            <textarea id="description" placeholder="Add any notes about this file..."></textarea>
+        </div>
 
-        .upload-area.dragover {
-            border-color: #667eea;
-            background: #f7fafc;
-        }
+        <button type="submit" class="upload-btn" id="uploadBtn">Upload File</button>
+    </form>
 
-        .upload-area:hover {
-            border-color: #667eea;
-        }
-
-        .upload-icon {
-            font-size: 3rem;
-            margin-bottom: 15px;
-        }
-
-        .upload-text {
-            color: #4a5568;
-            font-size: 1.1rem;
-            margin-bottom: 10px;
-        }
-
-        .upload-subtext {
-            color: #a0aec0;
-            font-size: 0.9rem;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            color: #4a5568;
-            font-weight: 600;
-            margin-bottom: 8px;
-        }
-
-        select, textarea {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: border-color 0.3s ease;
-        }
-
-        select:focus, textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        textarea {
-            resize: vertical;
-            min-height: 80px;
-        }
-
-        .file-info {
-            background: #f7fafc;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            display: none;
-        }
-
-        .file-info.show {
-            display: block;
-        }
-
-        .file-name {
-            color: #2d3748;
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .file-size {
-            color: #718096;
-            font-size: 0.9rem;
-        }
-
-        .upload-btn {
-            width: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 14px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s ease;
-        }
-
-        .upload-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-        }
-
-        .upload-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .message {
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            display: none;
-        }
-
-        .message.show {
-            display: block;
-        }
-
-        .message.error {
-            background: #fff5f5;
-            color: #c53030;
-            border-left: 4px solid #fc8181;
-        }
-
-        .message.success {
-            background: #f0fff4;
-            color: #22543d;
-            border-left: 4px solid #68d391;
-        }
-
-        .recent-uploads {
-            margin-top: 40px;
-        }
-
-        .recent-uploads h3 {
-            color: #2d3748;
-            margin-bottom: 20px;
-        }
-
-        .upload-item {
-            background: #f7fafc;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .upload-item-info {
-            flex: 1;
-        }
-
-        .upload-item-title {
-            color: #2d3748;
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .upload-item-meta {
-            color: #718096;
-            font-size: 0.85rem;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 4px 8px;
-            background: #667eea;
-            color: white;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        input[type="file"] {
-            display: none;
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>🚗 File Upload</h1>
-        <div class="header-nav">
-            <a href="/files/status?sort_by=id&sort_order=desc">File Status</a>
-            <a href="/cash_variance">Cash Variance</a>
-            <a href="/reports">Reports</a>
-            <a href="/admin">Admin Config</a>
-            <div class="user-info">
-                <span class="user-name" id="userName">Loading...</span>
-                <button class="logout-btn" onclick="logout()">Logout</button>
-            </div>
+    <div class="recent-uploads">
+        <h3>Recent Uploads</h3>
+        <div id="recentUploads">
+            <p style="color:#a0aec0;text-align:center">Loading...</p>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <div class="container">
-        <h2>Upload Data File</h2>
+{% block scripts %}
+<script>
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const uploadForm = document.getElementById('uploadForm');
+    const message = document.getElementById('message');
+    const uploadBtn = document.getElementById('uploadBtn');
+    let selectedFile = null;
 
-        <div id="message" class="message"></div>
+    const token = localStorage.getItem('access_token');
 
-        <form id="uploadForm">
-            <div class="upload-area" id="uploadArea">
-                <div class="upload-icon">📁</div>
-                <div class="upload-text">Drag and drop your file here</div>
-                <div class="upload-subtext">or click to browse</div>
-                <input type="file" id="fileInput" accept=".csv,.xlsx,.xls,.pdf,.txt,.doc,.docx">
-            </div>
-
-            <div id="fileInfo" class="file-info">
-                <div class="file-name" id="fileName"></div>
-                <div class="file-size" id="fileSize"></div>
-            </div>
-
-            <div class="form-group">
-                <label for="description">Description (Optional)</label>
-                <textarea id="description" placeholder="Add any notes about this file..."></textarea>
-            </div>
-
-            <button type="submit" class="upload-btn" id="uploadBtn">Upload File</button>
-        </form>
-
-        <div class="recent-uploads">
-            <h3>Recent Uploads</h3>
-            <div id="recentUploads">
-                <p style="color: #a0aec0; text-align: center;">Loading...</p>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        const fileInfo = document.getElementById('fileInfo');
-        const fileName = document.getElementById('fileName');
-        const fileSize = document.getElementById('fileSize');
-        const uploadForm = document.getElementById('uploadForm');
-        const message = document.getElementById('message');
-        const uploadBtn = document.getElementById('uploadBtn');
-        let selectedFile = null;
-
-        // Check authentication
-        const token = localStorage.getItem('access_token');
-        if (!token) {
-            window.location.href = '/';
-        }
-
-        // Load user info
-        async function loadUserInfo() {
-            try {
-                const response = await fetch('/api/v1/auth/me', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (response.ok) {
-                    const user = await response.json();
-                    document.getElementById('userName').textContent = user.full_name || user.username;
-                } else {
-                    logout();
+    async function loadRecentUploads() {
+        try {
+            const response = await fetch('/api/v1/files/uploads?limit=5', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const uploads = await response.json();
+                const container = document.getElementById('recentUploads');
+                if (uploads.length === 0) {
+                    container.innerHTML = '<p style="color:#a0aec0;text-align:center">No uploads yet</p>';
+                    return;
                 }
-            } catch (error) {
-                console.error('Error loading user info:', error);
-            }
-        }
-
-        // Load recent uploads
-        async function loadRecentUploads() {
-            try {
-                const response = await fetch('/api/v1/files/uploads?limit=5', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (response.ok) {
-                    const uploads = await response.json();
-                    const container = document.getElementById('recentUploads');
-                    
-                    if (uploads.length === 0) {
-                        container.innerHTML = '<p style="color: #a0aec0; text-align: center;">No uploads yet</p>';
-                        return;
-                    }
-
-                    container.innerHTML = uploads.map(upload => `
-                        <div class="upload-item">
-                            <div class="upload-item-info">
-                                <div class="upload-item-title">${upload.original_filename}</div>
-                                <div class="upload-item-meta">
-                                    <span class="badge">${upload.data_source_type.replace(/_/g, ' ').toUpperCase()}</span>
-                                    Uploaded by ${upload.uploaded_by_user.username} on ${new Date(upload.upload_date).toLocaleDateString()} 
-                                    <span class="badge">${upload.records_processed}</span> records processed
-                                </div>
+                container.innerHTML = uploads.map(upload => `
+                    <div class="upload-item">
+                        <div>
+                            <div class="upload-item-title">${upload.original_filename}</div>
+                            <div class="upload-item-meta">
+                                <span class="badge">${upload.data_source_type.replace(/_/g, ' ').toUpperCase()}</span>
+                                Uploaded by ${upload.uploaded_by_user.username} on ${new Date(upload.upload_date).toLocaleDateString()}
+                                &nbsp;<span class="badge">${upload.records_processed}</span> records processed
                             </div>
                         </div>
-                    `).join('');
-                }
-            } catch (error) {
-                console.error('Error loading recent uploads:', error);
+                    </div>`).join('');
             }
+        } catch (error) {
+            console.error('Error loading recent uploads:', error);
         }
+    }
 
-        function logout() {
-            localStorage.removeItem('access_token');
-            window.location.href = '/';
+    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        if (e.dataTransfer.files.length) handleFileSelect(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) handleFileSelect(e.target.files[0]);
+    });
+
+    function handleFileSelect(file) {
+        selectedFile = file;
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        fileInfo.classList.add('show');
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' bytes';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    function showMessage(text, type) {
+        message.textContent = text;
+        message.className = `message show ${type}`;
+        setTimeout(() => message.classList.remove('show'), 5000);
+    }
+
+    uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!selectedFile) { showMessage('Please select a file', 'error'); return; }
+
+        const description = document.getElementById('description').value;
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        if (description) formData.append('description', description);
+
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Uploading...';
+
+        try {
+            const response = await fetch('/api/v1/files/upload', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+            if (response.ok) {
+                const result = await response.json();
+                showMessage(`Successfully uploaded file with ${result.records_processed} rows!`, 'success');
+                uploadForm.reset();
+                fileInfo.classList.remove('show');
+                selectedFile = null;
+                loadRecentUploads();
+            } else {
+                const error = await response.json();
+                showMessage(error.detail || 'Upload failed', 'error');
+            }
+        } catch (error) {
+            showMessage('An error occurred during upload', 'error');
+        } finally {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = 'Upload File';
         }
+    });
 
-        // Drag and drop handlers
-        uploadArea.addEventListener('click', () => fileInput.click());
-
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            
-            if (e.dataTransfer.files.length) {
-                handleFileSelect(e.dataTransfer.files[0]);
-            }
-        });
-
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length) {
-                handleFileSelect(e.target.files[0]);
-            }
-        });
-
-        function handleFileSelect(file) {
-            selectedFile = file;
-            fileName.textContent = file.name;
-            fileSize.textContent = formatFileSize(file.size);
-            fileInfo.classList.add('show');
-        }
-
-        function formatFileSize(bytes) {
-            if (bytes < 1024) return bytes + ' bytes';
-            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
-            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-        }
-
-        function showMessage(text, type) {
-            message.textContent = text;
-            message.className = `message show ${type}`;
-            setTimeout(() => {
-                message.classList.remove('show');
-            }, 5000);
-        }
-
-        uploadForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            if (!selectedFile) {
-                showMessage('Please select a file', 'error');
-                return;
-            }
-
-            const description = document.getElementById('description').value;
-
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-            if (description) {
-                formData.append('description', description);
-            }
-
-            uploadBtn.disabled = true;
-            uploadBtn.textContent = 'Uploading...';
-
-            try {
-                const response = await fetch('/api/v1/files/upload', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: formData
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    showMessage(`Successfully uploaded file with ${result.records_processed} rows! `, 'success');
-                    console.log('Upload response:', result);
-                    uploadForm.reset();
-                    fileInfo.classList.remove('show');
-                    selectedFile = null;
-                    loadRecentUploads();
-                } else {
-                    const error = await response.json();
-                    showMessage(error.detail || 'Upload failed', 'error');
-                }
-            } catch (error) {
-                showMessage('An error occurred during upload', 'error');
-            } finally {
-                uploadBtn.disabled = false;
-                uploadBtn.textContent = 'Upload File';
-            }
-        });
-
-        // Initial load
-        loadUserInfo();
-        loadRecentUploads();
-    </script>
-</body>
-</html>
+    loadRecentUploads();
+</script>
+{% endblock %}

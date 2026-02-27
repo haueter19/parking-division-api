@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
+    .dashboard-header {
+        margin-bottom: 28px;
+    }
+
+    .dashboard-header h1 {
+        font-size: 1.6rem;
+        color: #1e2a3a;
+        font-weight: 700;
+    }
+
+    .dashboard-header p {
+        color: #6b7280;
+        margin-top: 4px;
+        font-size: 0.95rem;
+    }
+
+    .section-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 20px;
+    }
+
+    .section-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 28px 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        text-decoration: none;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        border-left: 5px solid transparent;
+        transition: box-shadow 0.2s, transform 0.15s;
+        cursor: pointer;
+    }
+
+    .section-card:hover {
+        box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+
+    .section-card .card-icon {
+        font-size: 2rem;
+        line-height: 1;
+    }
+
+    .section-card .card-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1e2a3a;
+    }
+
+    .section-card .card-desc {
+        font-size: 0.85rem;
+        color: #6b7280;
+        line-height: 1.5;
+    }
+
+    .section-card .card-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 6px;
+    }
+
+    .section-card .card-links a {
+        font-size: 0.78rem;
+        color: #2563eb;
+        text-decoration: none;
+        background: #eff6ff;
+        padding: 3px 9px;
+        border-radius: 4px;
+        font-weight: 500;
+    }
+
+    .section-card .card-links a:hover {
+        background: #dbeafe;
+    }
+
+    .card-revenue    { border-left-color: #2563eb; }
+    .card-operations { border-left-color: #16a34a; }
+    .card-cityworks  { border-left-color: #d97706; }
+    .card-enforcement{ border-left-color: #dc2626; }
+    .card-admin      { border-left-color: #7c3aed; }
+    .card-tdm        { border-left-color: #0891b2; }
+    .card-analytics  { border-left-color: #db2777; }
+
+    .coming-badge {
+        display: inline-block;
+        font-size: 0.7rem;
+        background: #f3f4f6;
+        color: #9ca3af;
+        padding: 2px 7px;
+        border-radius: 4px;
+        margin-left: 6px;
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1>Dashboard</h1>
+    <p>Select a section to get started.</p>
+</div>
+
+<div class="section-grid" id="sectionGrid">
+
+    <a class="section-card card-revenue nav-section-revenue hidden" href="/revenue" data-roles="revenue,manager,admin">
+        <div class="card-icon">💰</div>
+        <div class="card-title">Revenue</div>
+        <div class="card-desc">Upload data, monitor file processing status, record cash variance, and view financial reports.</div>
+        <div class="card-links">
+            <a href="/revenue/upload">Upload</a>
+            <a href="/revenue/files/status">File Status</a>
+            <a href="/revenue/cash-variance">Cash Variance</a>
+            <a href="/revenue/reports">Reports</a>
+        </div>
+    </a>
+
+    <a class="section-card card-operations nav-section-operations hidden" href="/operations" data-roles="all">
+        <div class="card-icon">📋</div>
+        <div class="card-title">Operations</div>
+        <div class="card-desc">Manage staff schedules, time-off requests, and operational reporting.<span class="coming-badge">Coming Soon</span></div>
+        <div class="card-links"></div>
+    </a>
+
+    <a class="section-card card-cityworks nav-section-cityworks hidden" href="/cityworks" data-roles="cityworks,manager,admin">
+        <div class="card-icon">🔧</div>
+        <div class="card-title">Cityworks</div>
+        <div class="card-desc">Process GIS update work orders and track field operations metrics.</div>
+        <div class="card-links">
+            <a href="/cityworks/work-orders">Work Orders</a>
+        </div>
+    </a>
+
+    <a class="section-card card-enforcement nav-section-enforcement hidden" href="/enforcement" data-roles="enforcement,manager,admin">
+        <div class="card-icon">🚔</div>
+        <div class="card-title">Enforcement</div>
+        <div class="card-desc">Enforcement operations and reporting.<span class="coming-badge">Coming Soon</span></div>
+        <div class="card-links"></div>
+    </a>
+
+    <a class="section-card card-admin nav-section-admin hidden" href="/admin" data-roles="admin">
+        <div class="card-icon">⚙️</div>
+        <div class="card-title">Admin</div>
+        <div class="card-desc">System configuration, user management, and administrative settings.</div>
+        <div class="card-links">
+            <a href="/admin/config">Configuration</a>
+        </div>
+    </a>
+
+    <a class="section-card card-tdm nav-section-tdm hidden" href="/tdm" data-roles="tdm,manager,admin">
+        <div class="card-icon">🚶</div>
+        <div class="card-title">TDM</div>
+        <div class="card-desc">Transportation Demand Management programs and data.<span class="coming-badge">Coming Soon</span></div>
+        <div class="card-links"></div>
+    </a>
+
+    <a class="section-card card-analytics nav-section-analytics hidden" href="/analytics" data-roles="cityworks,manager,admin">
+        <div class="card-icon">📊</div>
+        <div class="card-title">Data & Analytics</div>
+        <div class="card-desc">Visualizations, trend analysis, and cross-section reporting.<span class="coming-badge">Coming Soon</span></div>
+        <div class="card-links"></div>
+    </a>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Show cards matching user role (same logic as base nav)
+    (function() {
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+        let payload = {};
+        try {
+            const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+            payload = JSON.parse(atob(b64));
+        } catch(e) {}
+        const role = (payload.role || '').toLowerCase();
+
+        document.querySelectorAll('#sectionGrid .section-card').forEach(card => {
+            const allowed = (card.dataset.roles || '').split(',').map(r => r.trim());
+            if (allowed.includes('all') || allowed.includes(role)) {
+                card.classList.remove('hidden');
+            }
+        });
+    })();
+</script>
+{% endblock %}

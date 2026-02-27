@@ -1,10 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Work Order Details - Parking Division</title>
-    <style>
+{% extends "base.html" %}
+{% set current_section = "cityworks" %}
+
+{% block title %}Work Order Detail – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
         * {
             margin: 0;
             padding: 0;
@@ -840,23 +840,11 @@
         .no-workflow-message h4 { color: #4a5568; margin-bottom: 12px; }
         .no-workflow-message p { max-width: 400px; margin: 0 auto; line-height: 1.6; }
     </style>
-</head>
-<body>
-    <div class="header">
-        <h1>Work Order Details</h1>
-        <div class="header-nav">
-            <a href="/cityworks">Work Orders</a>
-            <a href="/reports">Reports</a>
-            <a href="/admin">Admin Config</a>
-            <div class="user-info">
-                <span class="user-name" id="userName">Loading...</span>
-                <button class="logout-btn" onclick="logout()">Logout</button>
-            </div>
-        </div>
-    </div>
+{% endblock %}
 
-    <div class="container">
-        <a href="/cityworks" class="back-link">&#8592; Back to Work Orders</a>
+{% block content %}
+<div class="container">
+        <a href="/cityworks/work-orders" class="back-link">&#8592; Back to Work Orders</a>
 
         <h2 class="page-title">Work Order: <span class="work-order-id" id="workOrderId">Loading...</span></h2>
         <p class="subtitle" id="workOrderDescription">Loading work order details...</p>
@@ -1033,7 +1021,7 @@
                         <strong id="readyToProcessCount">0</strong> space(s) ready to process
                     </div>
                     <div class="process-buttons">
-                        <button class="btn btn-secondary" onclick="window.location.href='/cityworks'">
+                        <button class="btn btn-secondary" onclick="window.location.href='/cityworks/work-orders'">
                             Cancel
                         </button>
                         <button class="btn btn-process" id="btnProcessAll" onclick="processAllReadySpaces()" disabled>
@@ -1070,7 +1058,7 @@
         const workOrderId = urlParams.get('id');
 
         if (!workOrderId) {
-            window.location.href = '/cityworks';
+            window.location.href = '/cityworks/work-orders';
         }
 
         document.title = 'Work Order: ' + workOrderId;
@@ -1164,7 +1152,7 @@
                 console.error('Error loading work order:', error);
                 showMessage('Error loading work order details: ' + error.message, 'error');
                 document.getElementById('loadingState').innerHTML =
-                    '<div style="color: #c53030;">Error loading work order. <a href="/cityworks">Return to list</a></div>';
+                    '<div style="color: #c53030;">Error loading work order. <a href="/cityworks/work-orders">Return to list</a></div>';
             }
         }
 
@@ -1785,7 +1773,7 @@
 
                 if (result.success) {
                     showMessage('Work order closed successfully!', 'success');
-                    setTimeout(() => { window.location.href = '/cityworks'; }, 2000);
+                    setTimeout(() => { window.location.href = '/cityworks/work-orders'; }, 2000);
                 } else {
                     throw new Error(result.message || 'Failed to close work order');
                 }
@@ -1848,5 +1836,4 @@
             loadWorkOrderDetails();
         });
     </script>
-</body>
-</html>
+{% endblock %}

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Parking Division{% endblock %}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f3f4f6;
+            min-height: 100vh;
+        }
+
+        /* ── Top Nav ── */
+        .topnav {
+            background: #1e2a3a;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        }
+
+        .topnav-brand {
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 700;
+            text-decoration: none;
+            letter-spacing: 0.01em;
+            white-space: nowrap;
+            margin-right: 28px;
+            flex-shrink: 0;
+        }
+
+        .topnav-sections {
+            display: flex;
+            align-items: stretch;
+            height: 100%;
+            flex: 1;
+        }
+
+        /* Each section item */
+        .nav-item {
+            position: relative;
+            display: flex;
+            align-items: stretch;
+        }
+
+        .nav-item > a,
+        .nav-item > span {
+            display: flex;
+            align-items: center;
+            padding: 0 14px;
+            color: #b0bec5;
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            border-bottom: 3px solid transparent;
+            transition: color 0.15s, border-color 0.15s;
+            user-select: none;
+        }
+
+        .nav-item > a:hover,
+        .nav-item > span:hover,
+        .nav-item:hover > a,
+        .nav-item:hover > span {
+            color: #fff;
+        }
+
+        /* Active section */
+        .nav-item.active > a,
+        .nav-item.active > span {
+            color: #fff;
+            border-bottom-color: #4f9cf9;
+        }
+
+        /* Dropdown caret */
+        .nav-item > span::after {
+            content: '▾';
+            margin-left: 5px;
+            font-size: 0.7rem;
+            opacity: 0.7;
+        }
+
+        /* Dropdown menu */
+        .nav-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+            min-width: 190px;
+            padding: 6px 0;
+            z-index: 2000;
+        }
+
+        .nav-item:hover .nav-dropdown {
+            display: block;
+        }
+
+        .nav-dropdown a {
+            display: block;
+            padding: 9px 18px;
+            color: #1e2a3a;
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 400;
+        }
+
+        .nav-dropdown a:hover {
+            background: #f0f5ff;
+            color: #2563eb;
+        }
+
+        .nav-dropdown .dropdown-section-link {
+            font-weight: 600;
+            color: #2563eb;
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 3px;
+            padding-bottom: 10px;
+        }
+
+        .nav-dropdown .coming-soon {
+            color: #9ca3af;
+            font-size: 0.8rem;
+            padding: 7px 18px;
+            cursor: default;
+        }
+
+        /* Right side of nav */
+        .topnav-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .topnav-user {
+            color: #b0bec5;
+            font-size: 0.85rem;
+        }
+
+        .topnav-logout {
+            background: transparent;
+            border: 1px solid #4a5568;
+            color: #b0bec5;
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .topnav-logout:hover {
+            background: #e53e3e;
+            border-color: #e53e3e;
+            color: #fff;
+        }
+
+        /* ── Page content ── */
+        .page-content {
+            padding: 24px;
+        }
+
+        /* ── Utility ── */
+        .hidden { display: none !important; }
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+
+<nav class="topnav">
+    <a class="topnav-brand" href="/dashboard">Parking Division</a>
+
+    <div class="topnav-sections" id="navSections">
+
+        <!-- Revenue -->
+        <div class="nav-item {% if current_section == 'revenue' %}active{% endif %} nav-section-revenue hidden" data-roles="revenue,manager,admin">
+            <span>Revenue</span>
+            <div class="nav-dropdown">
+                <a class="dropdown-section-link" href="/revenue">Revenue Overview</a>
+                <a href="/revenue/upload">Upload Data</a>
+                <a href="/revenue/files/status">File Status</a>
+                <a href="/revenue/cash-variance">Cash Variance</a>
+                <a href="/revenue/reports">Reports</a>
+            </div>
+        </div>
+
+        <!-- Operations -->
+        <div class="nav-item {% if current_section == 'operations' %}active{% endif %} nav-section-operations hidden" data-roles="all">
+            <span>Operations</span>
+            <div class="nav-dropdown">
+                <a class="dropdown-section-link" href="/operations">Operations Overview</a>
+                <span class="coming-soon">Schedule (coming soon)</span>
+                <span class="coming-soon">Time Off Requests (coming soon)</span>
+                <span class="coming-soon">View Schedule (coming soon)</span>
+            </div>
+        </div>
+
+        <!-- Cityworks -->
+        <div class="nav-item {% if current_section == 'cityworks' %}active{% endif %} nav-section-cityworks hidden" data-roles="cityworks,manager,admin">
+            <span>Cityworks</span>
+            <div class="nav-dropdown">
+                <a class="dropdown-section-link" href="/cityworks">Cityworks Overview</a>
+                <a href="/cityworks/work-orders">Work Orders</a>
+                <span class="coming-soon">Reports (coming soon)</span>
+            </div>
+        </div>
+
+        <!-- Enforcement -->
+        <div class="nav-item {% if current_section == 'enforcement' %}active{% endif %} nav-section-enforcement hidden" data-roles="enforcement,manager,admin">
+            <a href="/enforcement">Enforcement</a>
+        </div>
+
+        <!-- Admin -->
+        <div class="nav-item {% if current_section == 'admin' %}active{% endif %} nav-section-admin hidden" data-roles="admin">
+            <span>Admin</span>
+            <div class="nav-dropdown">
+                <a class="dropdown-section-link" href="/admin">Admin Overview</a>
+                <a href="/admin/config">Configuration</a>
+            </div>
+        </div>
+
+        <!-- TDM -->
+        <div class="nav-item {% if current_section == 'tdm' %}active{% endif %} nav-section-tdm hidden" data-roles="tdm,manager,admin">
+            <a href="/tdm">TDM</a>
+        </div>
+
+        <!-- Analytics -->
+        <div class="nav-item {% if current_section == 'analytics' %}active{% endif %} nav-section-analytics hidden" data-roles="cityworks,manager,admin">
+            <a href="/analytics">Analytics</a>
+        </div>
+
+    </div>
+
+    <div class="topnav-right">
+        <span class="topnav-user" id="navUsername"></span>
+        <button class="topnav-logout" id="logoutBtn">Logout</button>
+    </div>
+</nav>
+
+<div class="page-content">
+    {% block content %}{% endblock %}
+</div>
+
+<script>
+    // ── Auth guard & nav setup ──────────────────────────────────
+    (function initNav() {
+        const token = localStorage.getItem('access_token');
+        if (!token) { window.location.href = '/'; return; }
+
+        // Decode JWT payload (base64url, no crypto needed — just for display/nav)
+        let payload = {};
+        try {
+            const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+            payload = JSON.parse(atob(b64));
+        } catch(e) {}
+
+        const role = (payload.role || '').toLowerCase();
+        const username = payload.sub || '';
+
+        document.getElementById('navUsername').textContent = username;
+
+        // Show nav sections based on role
+        document.querySelectorAll('#navSections .nav-item').forEach(item => {
+            const allowed = (item.dataset.roles || '').split(',').map(r => r.trim());
+            if (allowed.includes('all') || allowed.includes(role)) {
+                item.classList.remove('hidden');
+            }
+        });
+    })();
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+        localStorage.removeItem('access_token');
+        window.location.href = '/';
+    });
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -94,91 +94,120 @@ async def startup_event():
 
 @app.get("/")
 async def root(request: Request):
-    """Serve the main web interface (login page)"""
-    return templates.TemplateResponse(
-        context={"request": request},
-        name="index.html"
-    )
+    """Serve the login page"""
+    return templates.TemplateResponse(context={"request": request}, name="index.html")
 
 
-@app.get("/upload")
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page(request: Request):
+    """Main dashboard – post-login hub"""
+    return templates.TemplateResponse(name="dashboard.html", context={"request": request})
+
+
+# ── Revenue Section ──────────────────────────────────────────────────────────
+
+@app.get("/revenue", response_class=HTMLResponse)
+async def revenue_landing_page(request: Request):
+    """Revenue section landing page"""
+    return templates.TemplateResponse(name="revenue_landing.html", context={"request": request})
+
+@app.get("/revenue/upload", response_class=HTMLResponse)
 async def upload_page(request: Request):
-    """Serve the file upload page"""
-    return templates.TemplateResponse(
-        context={"request": request},
-        name="upload.html"
-    )
+    """File upload page"""
+    return templates.TemplateResponse(name="upload.html", context={"request": request})
 
-@app.get("/files/status", response_class=HTMLResponse)
+@app.get("/revenue/files/status", response_class=HTMLResponse)
 async def file_status_page(request: Request):
-    """
-    Serve the file status dashboard page
-    
-    This endpoint renders the file status HTML template that allows users to:
-    - View all uploaded files with their processing status
-    - Filter by status and data source type
-    - Load files to staging tables
-    - Process files through ETL pipeline
-    - View detailed error messages
-    """
-    return templates.TemplateResponse(
-        name="file_status.html",
-        context={"request": request}        
-    )
+    """File status dashboard"""
+    return templates.TemplateResponse(name="file_status.html", context={"request": request})
 
+@app.get("/revenue/cash-variance", response_class=HTMLResponse)
+async def cash_variance_page(request: Request):
+    """Cash variance entry page"""
+    return templates.TemplateResponse(name="cash_variance.html", context={"request": request})
 
-@app.get("/reports", response_class=HTMLResponse)
+@app.get("/revenue/reports", response_class=HTMLResponse)
 async def reports_page(request: Request):
-    """Serve the reports hub page with links to all available reports"""
-    return templates.TemplateResponse(name="reports.html", context={"request":request})
+    """Reports hub"""
+    return templates.TemplateResponse(name="reports.html", context={"request": request})
 
-
-@app.get("/reports/settle", response_class=HTMLResponse)
+@app.get("/revenue/reports/settle", response_class=HTMLResponse)
 async def settle_report_page(request: Request):
-    """Serve the settlement report page - date-range selector and results"""
-    return templates.TemplateResponse(name="settle_report.html", context={"request": request}, )
+    """Settlement report"""
+    return templates.TemplateResponse(name="settle_report.html", context={"request": request})
 
-
-@app.get("/reports/sources", response_class=HTMLResponse)
+@app.get("/revenue/reports/sources", response_class=HTMLResponse)
 async def settle_by_source_page(request: Request):
-    """Serve the pivoted settled-by-source report page"""
+    """Settled-by-source pivot report"""
     return templates.TemplateResponse(name="settle_by_source.html", context={"request": request})
 
-
-@app.get("/reports/revenue", response_class=HTMLResponse)
+@app.get("/revenue/reports/revenue", response_class=HTMLResponse)
 async def revenue_report_page(request: Request):
-    """Serve the revenue by period report page"""
+    """Revenue by period report"""
     return templates.TemplateResponse(name="revenue_report.html", context={"request": request})
 
 
+# ── Operations Section ───────────────────────────────────────────────────────
+
+@app.get("/operations", response_class=HTMLResponse)
+async def operations_landing_page(request: Request):
+    """Operations section landing page"""
+    return templates.TemplateResponse(name="operations_landing.html", context={"request": request})
+
+
+# ── Cityworks Section ────────────────────────────────────────────────────────
+
+@app.get("/cityworks", response_class=HTMLResponse)
+async def cityworks_landing_page(request: Request):
+    """Cityworks section landing page"""
+    return templates.TemplateResponse(name="cityworks_landing.html", context={"request": request})
+
+@app.get("/cityworks/work-orders", response_class=HTMLResponse)
+async def cityworks_work_orders_page(request: Request):
+    """Cityworks work orders list"""
+    return templates.TemplateResponse(name="cityworks.html", context={"request": request})
+
+@app.get("/cityworks/work-orders/detail", response_class=HTMLResponse)
+async def cityworks_detail_page(request: Request):
+    """Cityworks work order detail/processing"""
+    return templates.TemplateResponse(name="cityworks_detail.html", context={"request": request})
+
+
+# ── Enforcement Section ──────────────────────────────────────────────────────
+
+@app.get("/enforcement", response_class=HTMLResponse)
+async def enforcement_landing_page(request: Request):
+    """Enforcement section landing page"""
+    return templates.TemplateResponse(name="enforcement_landing.html", context={"request": request})
+
+
+# ── Admin Section ────────────────────────────────────────────────────────────
+
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_page(request: Request):
-    """Serve the admin configuration page"""
+async def admin_landing_page(request: Request):
+    """Admin section landing page"""
+    return templates.TemplateResponse(name="admin_landing.html", context={"request": request})
+
+@app.get("/admin/config", response_class=HTMLResponse)
+async def admin_config_page(request: Request):
+    """Admin configuration page"""
     return templates.TemplateResponse(name="admin.html", context={"request": request})
 
 
-@app.get("/cash_variance", response_class=HTMLResponse)
-async def cash_variance_page(request: Request):
-    """Serve the cash variance entry page"""
-    return templates.TemplateResponse(name="cash_variance.html", context={"request": request})
+# ── TDM Section ──────────────────────────────────────────────────────────────
+
+@app.get("/tdm", response_class=HTMLResponse)
+async def tdm_landing_page(request: Request):
+    """TDM section landing page"""
+    return templates.TemplateResponse(name="tdm_landing.html", context={"request": request})
 
 
-@app.get("/cityworks", response_class=HTMLResponse)
-async def cityworks_page(request: Request):
-    """Serve the Cityworks work orders list page"""
-    return templates.TemplateResponse(
-        name="cityworks.html",
-        context={"request": request}
-    )
+# ── Data & Analytics Section ─────────────────────────────────────────────────
 
-
-@app.get("/cityworks/detail", response_class=HTMLResponse)
-async def cityworks_detail_page(request: Request):
-    """Serve the Cityworks work order detail/processing page"""
-    return templates.TemplateResponse(
-        name="cityworks_detail.html",
-        context={"request": request}
-    )
+@app.get("/analytics", response_class=HTMLResponse)
+async def analytics_landing_page(request: Request):
+    """Data & Analytics section landing page"""
+    return templates.TemplateResponse(name="analytics_landing.html", context={"request": request})
 
 
 if __name__ == "__main__":

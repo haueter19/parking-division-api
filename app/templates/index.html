@@ -193,9 +193,9 @@
                     successDiv.textContent = 'Login successful! Redirecting...';
                     successDiv.style.display = 'block';
                     
-                    // Redirect to upload page
+                    // Redirect to dashboard
                     setTimeout(() => {
-                        window.location.href = '/upload';
+                        window.location.href = '/dashboard';
                     }, 1000);
                 } else {
                     errorDiv.textContent = data.detail || 'Login failed. Please check your credentials.';

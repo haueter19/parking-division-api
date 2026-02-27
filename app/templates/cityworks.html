@@ -1,10 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cityworks Work Orders - Parking Division</title>
-    <style>
+{% extends "base.html" %}
+{% set current_section = "cityworks" %}
+
+{% block title %}Work Orders – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
         * {
             margin: 0;
             padding: 0;
@@ -387,23 +387,10 @@
             }
         }
     </style>
-</head>
-<body>
-    <div class="header">
-        <h1>Cityworks Work Orders</h1>
-        <div class="header-nav">
-            <a href="/reports">Reports</a>
-            <a href="/upload">Upload Files</a>
-            <a href="/files/status">File Status</a>
-            <a href="/admin">Admin Config</a>
-            <div class="user-info">
-                <span class="user-name" id="userName">Loading...</span>
-                <button class="logout-btn" onclick="logout()">Logout</button>
-            </div>
-        </div>
-    </div>
+{% endblock %}
 
-    <div class="container">
+{% block content %}
+<div class="container">
         <h2 class="page-title">Update GIS Work Orders</h2>
         <p class="subtitle">Select a work order to process GIS updates</p>
 
@@ -508,5 +495,4 @@
     </div>
 
     <script src="/static/cityworks.js"></script>
-</body>
-</html>
+{% endblock %}

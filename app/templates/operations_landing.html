@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% set current_section = "operations" %}
+
+{% block title %}Operations – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
+    .section-header { margin-bottom: 24px; }
+    .section-header h1 { font-size: 1.5rem; color: #1e2a3a; font-weight: 700; }
+
+    .coming-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 16px;
+        margin-top: 24px;
+    }
+    .coming-card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 22px 20px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+        border-top: 4px solid #16a34a;
+        opacity: 0.65;
+    }
+    .coming-card .card-icon { font-size: 1.6rem; margin-bottom: 8px; }
+    .coming-card .card-title { font-size: 1rem; font-weight: 700; color: #1e2a3a; margin-bottom: 6px; }
+    .coming-card .card-desc { font-size: 0.85rem; color: #6b7280; line-height: 1.5; }
+    .coming-badge {
+        display: inline-block;
+        background: #f3f4f6;
+        color: #9ca3af;
+        font-size: 0.72rem;
+        padding: 2px 8px;
+        border-radius: 4px;
+        margin-top: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1>Operations</h1>
+    <p style="color:#6b7280;margin-top:4px;font-size:0.95rem">Staff scheduling, time-off management, and operational reporting.</p>
+</div>
+
+<div class="coming-grid">
+    <div class="coming-card">
+        <div class="card-icon">📅</div>
+        <div class="card-title">Schedule</div>
+        <div class="card-desc">View and manage staff shift schedules.</div>
+        <div class="coming-badge">Coming Soon</div>
+    </div>
+    <div class="coming-card">
+        <div class="card-icon">🏖️</div>
+        <div class="card-title">Time Off Requests</div>
+        <div class="card-desc">Submit and review time-off requests.</div>
+        <div class="coming-badge">Coming Soon</div>
+    </div>
+    <div class="coming-card">
+        <div class="card-icon">👁️</div>
+        <div class="card-title">View Schedule</div>
+        <div class="card-desc">Read-only view of the current schedule.</div>
+        <div class="coming-badge">Coming Soon</div>
+    </div>
+    <div class="coming-card">
+        <div class="card-icon">📊</div>
+        <div class="card-title">Reports</div>
+        <div class="card-desc">Operational reporting and analytics.</div>
+        <div class="coming-badge">Coming Soon</div>
+    </div>
+</div>
+{% endblock %}

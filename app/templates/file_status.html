@@ -1,10 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Status - Parking Division</title>
-    <style>
+{% extends "base.html" %}
+{% set current_section = "revenue" %}
+
+{% block title %}File Status – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
         * {
             margin: 0;
             padding: 0;
@@ -362,21 +362,10 @@
             cursor: not-allowed;
         }
     </style>
-</head>
-<body>
-    <div class="header">
-        <h1>🚗 File Status Dashboard</h1>
-        <div class="user-info">
-            <a href="/upload" class="nav-btn">Upload Files</a>
-            <a href="/cash_variance" class="nav-btn">Cash Variance</a>
-            <a href="/reports" class="nav-btn">Reports</a>
-            <a href="/admin" class="nav-btn">Admin Config</a>
-            <span class="user-name" id="userName">Loading...</span>
-            <button class="logout-btn" onclick="logout()">Logout</button>
-        </div>
-    </div>
+{% endblock %}
 
-    <div class="container">
+{% block content %}
+<div class="container">
         <div id="message" class="message"></div>
 
         <div class="filters">
@@ -925,5 +914,4 @@
         loadUserInfo();
         loadFiles();
     </script>
-</body>
-</html>
+{% endblock %}

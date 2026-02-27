@@ -478,4 +478,163 @@ async def revenue_report(
     }
 
     return {"data": results, "summary": summary}
-        
+
+
+@router.get('/revenue-landing')
+async def revenue_landing_data(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role([UserRole.REVENUE, UserRole.MANAGER, UserRole.ADMIN]))
+):
+    """Return all data needed for the Revenue section landing page.
+
+    Returns:
+    - recent_uploads: last 10 uploaded files with status
+    - source_pivot: 7-day settled-by-source pivot table
+    - facility_totals: total settled amount by facility for the last 30 days
+    - summary: overall totals for the last 30 days
+    """
+    from datetime import timedelta
+
+    today = datetime.utcnow().date()
+    yesterday = today - timedelta(days=1)
+    seven_days_ago = today - timedelta(days=7)
+    thirty_days_ago = today - timedelta(days=30)
+
+    # ── 1. Last 10 uploaded files ─────────────────────────────
+    uploads_sql = text("""
+        SELECT TOP 10
+            uf.id,
+            uf.original_filename,
+            uf.data_source_type,
+            uf.upload_date,
+            uf.is_processed,
+            uf.records_processed,
+            e.first_name + ' ' + e.last_name AS uploaded_by_name
+        FROM app.uploaded_files uf
+        LEFT JOIN pt.employees e ON uf.uploaded_by = e.employee_id
+        ORDER BY uf.upload_date DESC
+    """)
+    upload_rows = db.execute(uploads_sql).fetchall()
+    recent_uploads = []
+    for r in upload_rows:
+        recent_uploads.append({
+            "id": r.id,
+            "filename": r.original_filename,
+            "source_type": r.data_source_type,
+            "upload_date": r.upload_date.isoformat() if r.upload_date else None,
+            "is_processed": bool(r.is_processed),
+            "records_processed": r.records_processed,
+            "uploaded_by": r.uploaded_by_name
+        })
+
+    # ── 2. 7-day source pivot ─────────────────────────────────
+    pivot_sql = text("""
+        SELECT *
+        FROM (
+            SELECT CONVERT(CHAR(10), settle_date, 120) AS settle_date, staging_table
+            FROM app.fact_transaction t
+            WHERE settle_date IS NOT NULL
+              AND settle_date >= :seven_days_ago
+              AND settle_date <= :yesterday
+        ) AS SourceTable
+        PIVOT (
+            COUNT(staging_table)
+            FOR staging_table IN (
+                [windcave_staging],
+                [payments_insider_sales_staging],
+                [ips_staging],
+                [zms_cash_regular]
+            )
+        ) AS PivotTable
+        ORDER BY settle_date DESC
+    """)
+    pivot_cols = ['windcave_staging', 'payments_insider_sales_staging', 'ips_staging', 'zms_cash_regular']
+    pivot_rows_raw = db.execute(pivot_sql, {
+        "seven_days_ago": seven_days_ago.strftime('%Y-%m-%d') + 'T00:00:00',
+        "yesterday": yesterday.strftime('%Y-%m-%d') + 'T23:59:59'
+    }).fetchall()
+
+    pivot_map = {}
+    for row in pivot_rows_raw:
+        d = dict(row._mapping)
+        settle = d.get('settle_date')
+        if hasattr(settle, 'strftime'):
+            settle = settle.strftime('%Y-%m-%d')
+        else:
+            settle = str(settle) if settle is not None else None
+        out = {'settle_date': settle}
+        for c in pivot_cols:
+            v = d.get(c)
+            try:
+                out[c] = int(v) if v is not None else 0
+            except Exception:
+                out[c] = 0
+        pivot_map[settle] = out
+
+    source_pivot = []
+    current = yesterday
+    for _ in range(7):
+        ds = current.strftime('%Y-%m-%d')
+        source_pivot.append(pivot_map.get(ds, {
+            'settle_date': ds,
+            'windcave_staging': 0,
+            'payments_insider_sales_staging': 0,
+            'ips_staging': 0,
+            'zms_cash_regular': 0
+        }))
+        current -= timedelta(days=1)
+
+    # ── 3. Facility totals – last 30 days ─────────────────────
+    facility_sql = text("""
+        SELECT
+            f.facility_name,
+            f.facility_type,
+            COUNT(*) AS transaction_count,
+            SUM(t.settle_amount) AS total_settled
+        FROM app.fact_transaction t
+        INNER JOIN app.dim_location l ON t.location_id = l.location_id
+        INNER JOIN app.dim_facility f ON l.facility_id = f.facility_id
+        WHERE t.settle_date >= :thirty_days_ago
+          AND t.settle_date <= :yesterday
+        GROUP BY f.facility_name, f.facility_type
+        ORDER BY total_settled DESC
+    """)
+    facility_rows = db.execute(facility_sql, {
+        "thirty_days_ago": thirty_days_ago.strftime('%Y-%m-%d') + 'T00:00:00',
+        "yesterday": yesterday.strftime('%Y-%m-%d') + 'T23:59:59'
+    }).fetchall()
+    facility_totals = [{
+        "facility_name": r.facility_name,
+        "facility_type": r.facility_type,
+        "transaction_count": int(r.transaction_count),
+        "total_settled": float(r.total_settled or 0)
+    } for r in facility_rows]
+
+    # ── 4. 30-day summary ─────────────────────────────────────
+    summary_sql = text("""
+        SELECT
+            COUNT(*) AS total_transactions,
+            SUM(t.settle_amount) AS total_settled,
+            MAX(t.settle_date) AS last_settle_date
+        FROM app.fact_transaction t
+        WHERE t.settle_date >= :thirty_days_ago
+          AND t.settle_date <= :yesterday
+    """)
+    summary_row = db.execute(summary_sql, {
+        "thirty_days_ago": thirty_days_ago.strftime('%Y-%m-%d') + 'T00:00:00',
+        "yesterday": yesterday.strftime('%Y-%m-%d') + 'T23:59:59'
+    }).fetchone()
+
+    summary = {
+        "total_transactions": int(summary_row.total_transactions or 0),
+        "total_settled": float(summary_row.total_settled or 0),
+        "last_settle_date": summary_row.last_settle_date.strftime('%Y-%m-%d') if summary_row.last_settle_date else None,
+        "period_days": 30
+    }
+
+    return {
+        "recent_uploads": recent_uploads,
+        "source_pivot": source_pivot,
+        "facility_totals": facility_totals,
+        "summary": summary
+    }

@@ -40,6 +40,10 @@ class UserRole(str, enum.Enum):
     VIEWER = "viewer"
     UPLOADER = "uploader"
     EMPLOYEE = "employee"
+    REVENUE = "revenue"
+    CITYWORKS = "cityworks"
+    ENFORCEMENT = "enforcement"
+    TDM = "tdm"
 
 class LocationType(str, enum.Enum):
     """Location type for transactions"""

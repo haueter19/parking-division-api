@@ -34,6 +34,20 @@
         border-radius: 4px;
         margin-top: 10px;
     }
+    .live-card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 22px 20px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+        border-top: 4px solid #16a34a;
+        text-decoration: none;
+        display: block;
+        transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .live-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(22,163,74,0.18); }
+    .live-card .card-icon { font-size: 1.6rem; margin-bottom: 8px; }
+    .live-card .card-title { font-size: 1rem; font-weight: 700; color: #1e2a3a; margin-bottom: 6px; }
+    .live-card .card-desc { font-size: 0.85rem; color: #6b7280; line-height: 1.5; }
 </style>
 {% endblock %}
 
@@ -44,12 +58,11 @@
 </div>
 
 <div class="coming-grid">
-    <div class="coming-card">
+    <a href="/operations/schedule" class="live-card">
         <div class="card-icon">📅</div>
         <div class="card-title">Schedule</div>
-        <div class="card-desc">View and manage staff shift schedules.</div>
-        <div class="coming-badge">Coming Soon</div>
-    </div>
+        <div class="card-desc">Define weekly shift slots and manage solver assignments.</div>
+    </a>
     <div class="coming-card">
         <div class="card-icon">🏖️</div>
         <div class="card-title">Time Off Requests</div>

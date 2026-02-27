@@ -1,0 +1,701 @@
+{% extends "base.html" %}
+{% set current_section = "operations" %}
+
+{% block title %}Schedule Editor – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
+    /* ── Page Layout ── */
+    .page-header {
+        display: flex;
+        align-items: baseline;
+        gap: 18px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+    .page-header h1 { font-size: 1.4rem; color: #1e2a3a; font-weight: 700; }
+    .back-link { color: #2563eb; text-decoration: none; font-size: 0.88rem; }
+    .back-link:hover { text-decoration: underline; }
+
+    .week-label {
+        font-size: 0.88rem;
+        color: #6b7280;
+        margin-left: auto;
+        white-space: nowrap;
+    }
+
+    /* ── Cards ── */
+    .section-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        margin-bottom: 28px;
+    }
+    .section-card h2 {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #1e2a3a;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+        padding: 9px 18px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.88rem;
+        font-weight: 600;
+        transition: background 0.2s, opacity 0.2s;
+        white-space: nowrap;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-success:hover { background: #15803d; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-warning { background: #d97706; color: #fff; }
+    .btn-warning:hover { background: #b45309; }
+    .btn-ghost { background: #f1f5f9; color: #374151; }
+    .btn-ghost:hover { background: #e2e8f0; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-sm { padding: 5px 11px; font-size: 0.8rem; }
+
+    /* ── Tables ── */
+    .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid #e5e7eb; }
+    table { width: 100%; border-collapse: collapse; min-width: 640px; }
+    thead { background: #1e2a3a; color: #fff; }
+    th {
+        padding: 11px 14px;
+        text-align: left;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+    }
+    td { padding: 11px 14px; border-bottom: 1px solid #f1f5f9; font-size: 0.88rem; color: #374151; vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #f8faff; }
+
+    .period-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+    .period-am { background: #dbeafe; color: #1e40af; }
+    .period-pm { background: #fef3c7; color: #92400e; }
+
+    .override-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 8px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    /* ── Solver stub section ── */
+    .solver-bar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 20px;
+        background: #f8faff;
+        border-radius: 10px;
+        border: 1px solid #e0e7ff;
+        margin-top: 6px;
+    }
+    .solver-bar p { font-size: 0.88rem; color: #4b5563; flex: 1; }
+
+    /* ── Assignment section ── */
+    #assignSection { display: none; }
+
+    .assign-select {
+        padding: 5px 8px;
+        border: 1.5px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        background: #fff;
+        min-width: 160px;
+    }
+    .assign-select:focus { outline: none; border-color: #2563eb; }
+    tr.override-row td { background: #fffbeb; }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+        display: none;
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.45);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+        background: #fff;
+        border-radius: 14px;
+        padding: 28px;
+        width: 100%;
+        max-width: 480px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        position: relative;
+    }
+    .modal h3 { font-size: 1.1rem; font-weight: 700; color: #1e2a3a; margin-bottom: 20px; }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-bottom: 20px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 0.82rem; font-weight: 600; color: #4a5568; }
+    .form-group input,
+    .form-group select {
+        padding: 9px 11px;
+        border: 2px solid #e2e8f0;
+        border-radius: 7px;
+        font-size: 0.9rem;
+        outline: none;
+        transition: border-color 0.2s;
+    }
+    .form-group input:focus,
+    .form-group select:focus { border-color: #2563eb; }
+
+    .next-day-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 4px;
+        font-size: 0.8rem;
+        color: #6b7280;
+    }
+    .next-day-row input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; }
+
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .modal-close {
+        position: absolute;
+        top: 14px; right: 16px;
+        background: none; border: none;
+        font-size: 1.3rem; cursor: pointer; color: #9ca3af;
+        line-height: 1;
+    }
+    .modal-close:hover { color: #374151; }
+
+    /* ── Toast ── */
+    .toast {
+        position: fixed;
+        bottom: 24px; right: 24px;
+        padding: 12px 20px;
+        border-radius: 9px;
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: #fff;
+        z-index: 9999;
+        opacity: 0;
+        transition: opacity 0.3s;
+        pointer-events: none;
+        max-width: 340px;
+    }
+    .toast.show { opacity: 1; }
+    .toast-success { background: #16a34a; }
+    .toast-error   { background: #dc2626; }
+    .toast-info    { background: #2563eb; }
+
+    /* ── Empty state ── */
+    .empty-state { text-align: center; padding: 40px 20px; color: #9ca3af; }
+    .empty-state p { margin-top: 8px; font-size: 0.9rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a class="back-link" href="/operations/schedule">← Schedule Manager</a>
+    <h1 id="pageTitle">Schedule Editor</h1>
+    <span class="week-label" id="weekLabel"></span>
+</div>
+
+<!-- ── Shift Definitions ─────────────────────────────────────── -->
+<div class="section-card">
+    <h2>Shift Slots</h2>
+
+    <div class="toolbar">
+        <button class="btn btn-success" onclick="openAddModal()">+ Add Shift</button>
+        <span id="shiftCount" style="font-size:0.85rem;color:#6b7280;"></span>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Location</th>
+                    <th>Booth</th>
+                    <th>Day</th>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Period</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="shiftsBody">
+                <tr><td colspan="7"><div class="empty-state">Loading shifts…</div></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Solver stub -->
+    <div class="solver-bar" style="margin-top:20px;">
+        <p>Once all shifts are defined, run the solver to automatically assign employees to each slot.</p>
+        <button class="btn btn-warning" id="solveBtn" onclick="runSolver()">Run Solver</button>
+    </div>
+</div>
+
+<!-- ── Assignments (shown after solve) ───────────────────────── -->
+<div class="section-card" id="assignSection">
+    <h2>
+        Employee Assignments
+        <span style="font-size:0.8rem;font-weight:400;color:#6b7280;">Solver output — override as needed</span>
+    </h2>
+
+    <div class="toolbar">
+        <button class="btn btn-primary" onclick="saveAssignments()">Save Changes</button>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Location</th>
+                    <th>Booth</th>
+                    <th>Day</th>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Assigned Employee</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="assignBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── Add / Edit Shift Modal ────────────────────────────────── -->
+<div class="modal-backdrop" id="shiftModal">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <h3 id="modalTitle">Add Shift</h3>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="fLocation">Location (garage)</label>
+                <input type="text" id="fLocation" list="locationOptions" placeholder="e.g. Frances" autocomplete="off">
+                <datalist id="locationOptions"></datalist>
+            </div>
+            <div class="form-group">
+                <label for="fBooth">Booth #</label>
+                <input type="number" id="fBooth" min="1" max="99" placeholder="1">
+            </div>
+            <div class="form-group">
+                <label for="fDay">Day</label>
+                <select id="fDay">
+                    <option value="Sun">Sunday</option>
+                    <option value="Mon">Monday</option>
+                    <option value="Tue">Tuesday</option>
+                    <option value="Wed">Wednesday</option>
+                    <option value="Thu">Thursday</option>
+                    <option value="Fri">Friday</option>
+                    <option value="Sat">Saturday</option>
+                </select>
+            </div>
+            <div class="form-group"><!-- spacer --></div>
+
+            <div class="form-group">
+                <label for="fStartTime">Start Time</label>
+                <input type="time" id="fStartTime">
+                <div class="next-day-row">
+                    <input type="checkbox" id="fStartNextDay">
+                    <label for="fStartNextDay">Starts next day (+24 h)</label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="fEndTime">End Time</label>
+                <input type="time" id="fEndTime">
+                <div class="next-day-row">
+                    <input type="checkbox" id="fEndNextDay">
+                    <label for="fEndNextDay">Ends next day (+24 h)</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" id="modalSaveBtn" onclick="saveShift()">Save Shift</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────────── -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────
+const token   = localStorage.getItem('access_token');
+const week    = new URLSearchParams(window.location.search).get('week');
+let shifts    = [];
+let employees = [];
+let locations = [];
+let editingShiftId = null;   // null = adding new
+let assignChanges  = {};     // { assignment_id: employee_id }
+
+// ─── Init ─────────────────────────────────────────────────────────────────
+(async function init() {
+    if (!week) {
+        document.getElementById('pageTitle').textContent = 'No week selected';
+        return;
+    }
+    document.getElementById('weekLabel').textContent = 'Week of ' + formatWeekDate(week);
+    document.getElementById('pageTitle').textContent  = 'Schedule Editor';
+
+    await Promise.all([loadMetadata(), loadShifts()]);
+})();
+
+// ─── API helpers ──────────────────────────────────────────────────────────
+async function apiFetch(path, options = {}) {
+    const res = await fetch('/api/v1' + path, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + token,
+            ...(options.headers || {}),
+        },
+    });
+    if (res.status === 204) return null;
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    return data;
+}
+
+// ─── Load metadata (locations + employees) ────────────────────────────────
+async function loadMetadata() {
+    try {
+        const meta = await apiFetch('/schedule/metadata');
+        locations = meta.locations || [];
+        employees = meta.employees || [];
+
+        const dl = document.getElementById('locationOptions');
+        dl.innerHTML = locations.map(l => `<option value="${l}">`).join('');
+    } catch (err) {
+        showToast('Could not load metadata: ' + err.message, 'error');
+    }
+}
+
+// ─── Load shifts ──────────────────────────────────────────────────────────
+async function loadShifts() {
+    try {
+        shifts = await apiFetch(`/schedule/shifts?week=${week}`);
+        renderShifts();
+        renderAssignments();
+    } catch (err) {
+        document.getElementById('shiftsBody').innerHTML =
+            `<tr><td colspan="7"><div class="empty-state">Error: ${err.message}</div></td></tr>`;
+    }
+}
+
+// ─── Render shifts table ──────────────────────────────────────────────────
+function renderShifts() {
+    const tbody = document.getElementById('shiftsBody');
+    document.getElementById('shiftCount').textContent =
+        shifts.length ? `${shifts.length} shift${shifts.length === 1 ? '' : 's'} defined` : '';
+
+    if (!shifts.length) {
+        tbody.innerHTML = `
+            <tr><td colspan="7">
+                <div class="empty-state">
+                    No shifts yet.<br><p>Use "Add Shift" to define the schedule for this week.</p>
+                </div>
+            </td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = shifts.map(s => `
+        <tr>
+            <td>${esc(s.location)}</td>
+            <td>${s.booth}</td>
+            <td>${s.day_of_week}</td>
+            <td>${decimalToDisplay(s.start_hour)}</td>
+            <td>${decimalToDisplay(s.end_hour)}</td>
+            <td><span class="period-badge period-${s.period.toLowerCase()}">${s.period}</span></td>
+            <td>
+                <button class="btn btn-ghost btn-sm" onclick="openEditModal(${s.shift_id})">Edit</button>
+                <button class="btn btn-danger btn-sm" style="margin-left:6px" onclick="deleteShift(${s.shift_id})">Delete</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// ─── Render assignments table ─────────────────────────────────────────────
+function renderAssignments() {
+    const hasSolvedShifts = shifts.some(s => s.assignment_id !== null);
+    const section = document.getElementById('assignSection');
+
+    if (!hasSolvedShifts) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = 'block';
+
+    const empOptions = ['<option value="">— Unassigned —</option>']
+        .concat(employees.map(e =>
+            `<option value="${e.employee_id}">${esc(e.full_name)}</option>`
+        )).join('');
+
+    const tbody = document.getElementById('assignBody');
+    tbody.innerHTML = shifts.filter(s => s.assignment_id !== null).map(s => {
+        const isOverride = s.is_manual_override;
+        const select = `
+            <select class="assign-select"
+                    data-assignment-id="${s.assignment_id}"
+                    onchange="markAssignChange(${s.assignment_id}, this.value)">
+                ${employees.map(e =>
+                    `<option value="${e.employee_id}"${e.employee_id === s.employee_id ? ' selected' : ''}>${esc(e.full_name)}</option>`
+                ).join('')}
+                <option value=""${!s.employee_id ? ' selected' : ''}>— Unassigned —</option>
+            </select>`;
+        const statusCell = isOverride
+            ? '<span class="override-badge">Override</span>'
+            : '<span style="color:#6b7280;font-size:0.8rem">Solver</span>';
+        return `
+            <tr class="${isOverride ? 'override-row' : ''}">
+                <td>${esc(s.location)}</td>
+                <td>${s.booth}</td>
+                <td>${s.day_of_week}</td>
+                <td>${decimalToDisplay(s.start_hour)}</td>
+                <td>${decimalToDisplay(s.end_hour)}</td>
+                <td>${select}</td>
+                <td>${statusCell}</td>
+            </tr>`;
+    }).join('');
+}
+
+// ─── Assignment change tracking ────────────────────────────────────────────
+function markAssignChange(assignmentId, employeeId) {
+    assignChanges[assignmentId] = employeeId === '' ? null : parseInt(employeeId, 10);
+}
+
+async function saveAssignments() {
+    const ids = Object.keys(assignChanges);
+    if (!ids.length) { showToast('No changes to save.', 'info'); return; }
+
+    try {
+        await Promise.all(ids.map(id =>
+            apiFetch(`/schedule/assignments/${id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ employee_id: assignChanges[id] }),
+            })
+        ));
+        assignChanges = {};
+        await loadShifts();
+        showToast('Assignment changes saved.', 'success');
+    } catch (err) {
+        showToast('Save failed: ' + err.message, 'error');
+    }
+}
+
+// ─── Add / Edit modal ─────────────────────────────────────────────────────
+function openAddModal() {
+    editingShiftId = null;
+    document.getElementById('modalTitle').textContent = 'Add Shift';
+    document.getElementById('modalSaveBtn').textContent = 'Add Shift';
+    clearForm();
+    document.getElementById('shiftModal').classList.add('open');
+}
+
+function openEditModal(shiftId) {
+    const s = shifts.find(x => x.shift_id === shiftId);
+    if (!s) return;
+    editingShiftId = shiftId;
+    document.getElementById('modalTitle').textContent = 'Edit Shift';
+    document.getElementById('modalSaveBtn').textContent = 'Save Changes';
+
+    document.getElementById('fLocation').value = s.location;
+    document.getElementById('fBooth').value    = s.booth;
+    document.getElementById('fDay').value      = s.day_of_week;
+
+    const startBase = s.start_hour % 24;
+    document.getElementById('fStartTime').value    = decimalToTimeInput(startBase);
+    document.getElementById('fStartNextDay').checked = s.start_hour >= 24;
+
+    const endBase = s.end_hour % 24;
+    document.getElementById('fEndTime').value    = decimalToTimeInput(endBase);
+    document.getElementById('fEndNextDay').checked = s.end_hour >= 24;
+
+    document.getElementById('shiftModal').classList.add('open');
+}
+
+function closeModal() {
+    document.getElementById('shiftModal').classList.remove('open');
+    editingShiftId = null;
+}
+
+function clearForm() {
+    document.getElementById('fLocation').value = '';
+    document.getElementById('fBooth').value    = '';
+    document.getElementById('fDay').value      = 'Sun';
+    document.getElementById('fStartTime').value = '';
+    document.getElementById('fStartNextDay').checked = false;
+    document.getElementById('fEndTime').value   = '';
+    document.getElementById('fEndNextDay').checked = false;
+}
+
+async function saveShift() {
+    const location  = document.getElementById('fLocation').value.trim();
+    const booth     = parseInt(document.getElementById('fBooth').value, 10);
+    const day       = document.getElementById('fDay').value;
+    const startTime = document.getElementById('fStartTime').value;
+    const startNext = document.getElementById('fStartNextDay').checked;
+    const endTime   = document.getElementById('fEndTime').value;
+    const endNext   = document.getElementById('fEndNextDay').checked;
+
+    if (!location || !booth || !startTime || !endTime) {
+        showToast('Please fill in all fields.', 'error');
+        return;
+    }
+
+    const startHour = timeInputToDecimal(startTime, startNext);
+    const endHour   = timeInputToDecimal(endTime,   endNext);
+
+    if (endHour <= startHour) {
+        showToast('End time must be after start time.', 'error');
+        return;
+    }
+
+    const body = { week_start_date: week, location, booth, day_of_week: day, start_hour: startHour, end_hour: endHour };
+
+    try {
+        if (editingShiftId === null) {
+            await apiFetch('/schedule/shifts', { method: 'POST', body: JSON.stringify(body) });
+            showToast('Shift added.', 'success');
+        } else {
+            await apiFetch(`/schedule/shifts/${editingShiftId}`, { method: 'PUT', body: JSON.stringify(body) });
+            showToast('Shift updated.', 'success');
+        }
+        closeModal();
+        await loadShifts();
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+// ─── Delete shift ─────────────────────────────────────────────────────────
+async function deleteShift(shiftId) {
+    const s = shifts.find(x => x.shift_id === shiftId);
+    const label = s ? `${s.location} Booth ${s.booth} ${s.day_of_week}` : `#${shiftId}`;
+    if (!confirm(`Delete shift: ${label}?`)) return;
+    try {
+        await apiFetch(`/schedule/shifts/${shiftId}`, { method: 'DELETE' });
+        showToast('Shift deleted.', 'success');
+        await loadShifts();
+    } catch (err) {
+        showToast('Delete failed: ' + err.message, 'error');
+    }
+}
+
+// ─── Solver stub ──────────────────────────────────────────────────────────
+async function runSolver() {
+    if (!shifts.length) {
+        showToast('Define at least one shift before running the solver.', 'error');
+        return;
+    }
+    try {
+        await apiFetch(`/schedule/solve?week=${week}`, { method: 'POST' });
+        await loadShifts();
+    } catch (err) {
+        // 501 = not yet integrated
+        showToast(err.message, 'info');
+    }
+}
+
+// ─── Time conversion helpers ──────────────────────────────────────────────
+/**
+ * Convert decimal hour to display string.
+ * 12.5 → "12:30 PM"   |   25.0 → "1:00 AM (+1)"
+ */
+function decimalToDisplay(h) {
+    const overflow = h >= 24;
+    const base  = h % 24;
+    const hours = Math.floor(base);
+    const mins  = Math.round((base - hours) * 60);
+    const ampm  = hours < 12 ? 'AM' : 'PM';
+    const h12   = hours % 12 || 12;
+    const mm    = String(mins).padStart(2, '0');
+    return `${h12}:${mm} ${ampm}${overflow ? ' (+1)' : ''}`;
+}
+
+/**
+ * Convert decimal hour to HH:MM string for <input type="time">.
+ * Uses the base-24 value (ignores overflow, handled by checkbox).
+ */
+function decimalToTimeInput(base) {
+    const hours = Math.floor(base);
+    const mins  = Math.round((base - hours) * 60);
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+}
+
+/**
+ * Convert HH:MM string + nextDay flag to decimal hours.
+ * "20:30" + false → 20.5   |   "01:00" + true → 25.0
+ */
+function timeInputToDecimal(timeStr, nextDay) {
+    const [h, m] = timeStr.split(':').map(Number);
+    return h + m / 60 + (nextDay ? 24 : 0);
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────
+function esc(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function formatWeekDate(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+let toastTimer;
+function showToast(msg, type = 'info') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `toast toast-${type} show`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.classList.remove('show'); }, 3500);
+}
+
+// Close modal on backdrop click
+document.getElementById('shiftModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+</script>
+{% endblock %}

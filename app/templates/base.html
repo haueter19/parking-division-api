@@ -201,7 +201,7 @@
             <span>Operations</span>
             <div class="nav-dropdown">
                 <a class="dropdown-section-link" href="/operations">Operations Overview</a>
-                <span class="coming-soon">Schedule (coming soon)</span>
+                <a href="/operations/schedule" class="nav-section-schedule hidden" data-roles="supervisor,manager,admin">Schedule</a>
                 <span class="coming-soon">Time Off Requests (coming soon)</span>
                 <span class="coming-soon">View Schedule (coming soon)</span>
             </div>
@@ -271,8 +271,8 @@
 
         document.getElementById('navUsername').textContent = username;
 
-        // Show nav sections based on role
-        document.querySelectorAll('#navSections .nav-item').forEach(item => {
+        // Show nav sections based on role (handles both top-level and nested data-roles elements)
+        document.querySelectorAll('#navSections [data-roles]').forEach(item => {
             const allowed = (item.dataset.roles || '').split(',').map(r => r.trim());
             if (allowed.includes('all') || allowed.includes(role)) {
                 item.classList.remove('hidden');

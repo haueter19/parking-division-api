@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% set current_section = "operations" %}
+
+{% block title %}Schedule Manager – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
+    .page-header { margin-bottom: 28px; }
+    .page-header h1 { font-size: 1.5rem; color: #1e2a3a; font-weight: 700; }
+    .page-header p { color: #6b7280; margin-top: 4px; }
+
+    .week-picker-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 28px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        margin-bottom: 32px;
+        max-width: 480px;
+    }
+    .week-picker-card h2 { font-size: 1.1rem; font-weight: 700; color: #1e2a3a; margin-bottom: 16px; }
+
+    .input-row {
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+    }
+    .input-group { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .input-group label { font-size: 0.85rem; font-weight: 600; color: #4a5568; }
+    .input-group input[type="date"] {
+        padding: 10px 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        outline: none;
+        transition: border-color 0.2s;
+    }
+    .input-group input[type="date"]:focus { border-color: #2563eb; }
+
+    .btn {
+        padding: 10px 22px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 600;
+        white-space: nowrap;
+        transition: background 0.2s;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+
+    .snap-note { font-size: 0.78rem; color: #9ca3af; margin-top: 6px; }
+
+    /* Weeks Table */
+    .weeks-section h2 { font-size: 1.1rem; font-weight: 700; color: #1e2a3a; margin-bottom: 14px; }
+
+    .weeks-table-wrap {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: #1e2a3a; color: #fff; }
+    th { padding: 13px 18px; text-align: left; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 14px 18px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; color: #374151; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #f8faff; }
+
+    .badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 10px;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+    .badge-solved { background: #d1fae5; color: #065f46; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+
+    .link-edit {
+        color: #2563eb;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+    .link-edit:hover { text-decoration: underline; }
+
+    .empty-row td { text-align: center; color: #9ca3af; padding: 40px; }
+
+    .error-banner {
+        background: #fee2e2; color: #991b1b;
+        padding: 12px 18px; border-radius: 8px; margin-bottom: 20px;
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Schedule Manager</h1>
+    <p>Select an existing week to edit, or open a new week to define its shifts.</p>
+</div>
+
+<div id="errorBanner" class="error-banner"></div>
+
+<!-- Week picker -->
+<div class="week-picker-card">
+    <h2>Open a Week</h2>
+    <div class="input-row">
+        <div class="input-group">
+            <label for="weekPicker">Week starting (Sunday)</label>
+            <input type="date" id="weekPicker">
+            <div class="snap-note" id="snapNote"></div>
+        </div>
+        <button class="btn btn-primary" id="openWeekBtn" onclick="openWeek()">Open / Create</button>
+    </div>
+</div>
+
+<!-- Saved weeks table -->
+<div class="weeks-section">
+    <h2>Saved Weeks</h2>
+    <div class="weeks-table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Week Starting</th>
+                    <th>Shifts Defined</th>
+                    <th>Solver Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="weeksBody">
+                <tr class="empty-row"><td colspan="4">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+(function() {
+    const token = localStorage.getItem('access_token');
+    const picker = document.getElementById('weekPicker');
+    const snapNote = document.getElementById('snapNote');
+
+    // Default to the most recent Sunday
+    const today = new Date();
+    const day = today.getDay(); // 0=Sun
+    const diff = today.getDate() - day;
+    const sunday = new Date(today.setDate(diff));
+    picker.value = sunday.toISOString().slice(0, 10);
+
+    // Snap to Sunday on change
+    picker.addEventListener('change', () => {
+        const d = new Date(picker.value + 'T00:00:00');
+        const dow = d.getDay();
+        if (dow !== 0) {
+            d.setDate(d.getDate() - dow);
+            picker.value = d.toISOString().slice(0, 10);
+            snapNote.textContent = 'Snapped to Sunday ' + picker.value;
+        } else {
+            snapNote.textContent = '';
+        }
+    });
+
+    // Load saved weeks
+    async function loadWeeks() {
+        try {
+            const res = await fetch('/api/v1/schedule/weeks', {
+                headers: { Authorization: 'Bearer ' + token }
+            });
+            if (!res.ok) throw new Error('Failed to load weeks');
+            const weeks = await res.json();
+
+            const tbody = document.getElementById('weeksBody');
+            if (!weeks.length) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No schedules saved yet. Open a week above to get started.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = weeks.map(w => {
+                const dateLabel = formatWeekDate(w.week_start_date);
+                const badge = w.is_solved
+                    ? '<span class="badge badge-solved">Solved</span>'
+                    : '<span class="badge badge-pending">Shifts Only</span>';
+                return `
+                    <tr>
+                        <td>${dateLabel}</td>
+                        <td>${w.shift_count}</td>
+                        <td>${badge}</td>
+                        <td><a class="link-edit" href="/operations/schedule/edit?week=${w.week_start_date}">Edit</a></td>
+                    </tr>`;
+            }).join('');
+        } catch (err) {
+            showError(err.message);
+        }
+    }
+
+    window.openWeek = function() {
+        const week = picker.value;
+        if (!week) return;
+        window.location.href = `/operations/schedule/edit?week=${week}`;
+    };
+
+    function formatWeekDate(iso) {
+        // iso = "2026-03-01"
+        const d = new Date(iso + 'T00:00:00');
+        return d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('errorBanner');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+
+    loadWeeks();
+})();
+</script>
+{% endblock %}

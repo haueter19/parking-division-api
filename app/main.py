@@ -154,6 +154,16 @@ async def operations_landing_page(request: Request):
     """Operations section landing page"""
     return templates.TemplateResponse(name="operations_landing.html", context={"request": request})
 
+@app.get("/operations/schedule", response_class=HTMLResponse)
+async def schedule_manager_page(request: Request):
+    """Schedule week manager — select or create a week"""
+    return templates.TemplateResponse(name="schedule_manager.html", context={"request": request})
+
+@app.get("/operations/schedule/edit", response_class=HTMLResponse)
+async def schedule_editor_page(request: Request):
+    """Schedule editor — define shifts and manage assignments for a week"""
+    return templates.TemplateResponse(name="schedule_editor.html", context={"request": request})
+
 
 # ── Cityworks Section ────────────────────────────────────────────────────────
 

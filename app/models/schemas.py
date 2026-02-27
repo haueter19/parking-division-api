@@ -642,4 +642,96 @@ class CashVarianceResponse(CashVarianceBase):
     device_terminal_id: Optional[str] = None
     created_by_name: Optional[str] = None
 
+
+# ============= Schedule Schemas =============
+
+DAY_ORDER = {"Sun": 0, "Mon": 1, "Tue": 2, "Wed": 3, "Thu": 4, "Fri": 5, "Sat": 6}
+VALID_DAYS = list(DAY_ORDER.keys())
+
+
+class ShiftCreate(BaseModel):
+    """Data required to create a new shift slot"""
+    week_start_date: str  # YYYY-MM-DD string (always a Sunday)
+    location: str = Field(..., min_length=1, max_length=50)
+    booth: int = Field(..., ge=1, le=99)
+    day_of_week: str
+    start_hour: float = Field(..., ge=0, le=47.75)  # up to 47:45 (double overnight)
+    end_hour: float = Field(..., ge=0, le=47.75)
+
+    @field_validator("day_of_week")
+    @classmethod
+    def validate_day(cls, v: str) -> str:
+        if v not in VALID_DAYS:
+            raise ValueError(f"day_of_week must be one of {VALID_DAYS}")
+        return v
+
+
+class ShiftUpdate(BaseModel):
+    """All fields optional for partial updates"""
+    location: Optional[str] = Field(None, min_length=1, max_length=50)
+    booth: Optional[int] = Field(None, ge=1, le=99)
+    day_of_week: Optional[str] = None
+    start_hour: Optional[float] = Field(None, ge=0, le=47.75)
+    end_hour: Optional[float] = Field(None, ge=0, le=47.75)
+
+    @field_validator("day_of_week")
+    @classmethod
+    def validate_day(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in VALID_DAYS:
+            raise ValueError(f"day_of_week must be one of {VALID_DAYS}")
+        return v
+
+
+class ShiftResponse(BaseModel):
+    """Shift slot with derived fields and optional assignment"""
+    model_config = ConfigDict(from_attributes=True)
+
+    shift_id: int
+    week_start_date: str
+    location: str
+    booth: int
+    day_of_week: str
+    start_hour: float
+    end_hour: float
+    period: str  # "AM" or "PM" derived server-side
+    created_at: Optional[datetime] = None
+    created_by: Optional[int] = None
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[int] = None
+
+    # Assignment fields (None if not yet solved)
+    assignment_id: Optional[int] = None
+    employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
+    solver_employee_id: Optional[int] = None
+    is_manual_override: Optional[bool] = None
+
+
+class AssignmentUpdate(BaseModel):
+    """Supervisor override for an assignment"""
+    employee_id: Optional[int] = None  # None = unassign
+    notes: Optional[str] = Field(None, max_length=500)
+
+
+class AssignmentResponse(BaseModel):
+    """Assignment record with employee info"""
+    model_config = ConfigDict(from_attributes=True)
+
+    assignment_id: int
+    shift_id: int
+    employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
+    solver_employee_id: Optional[int] = None
+    is_manual_override: bool
+    notes: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[int] = None
+
+
+class WeekSummary(BaseModel):
+    """Summary row for the week manager list"""
+    week_start_date: str
+    shift_count: int
+    is_solved: bool
+
     model_config = ConfigDict(from_attributes=True)

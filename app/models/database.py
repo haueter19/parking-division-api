@@ -44,6 +44,7 @@ class UserRole(str, enum.Enum):
     CITYWORKS = "cityworks"
     ENFORCEMENT = "enforcement"
     TDM = "tdm"
+    SUPERVISOR = "supervisor"
 
 class LocationType(str, enum.Enum):
     """Location type for transactions"""

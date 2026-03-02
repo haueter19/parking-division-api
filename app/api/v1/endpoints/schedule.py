@@ -400,8 +400,9 @@ async def get_metadata(
         FROM app.schedule_shifts
         ORDER BY location
     """)
-    locations = [row.location for row in db.execute(locations_sql).fetchall()]
-
+    #locations = [row.location for row in db.execute(locations_sql).fetchall()]
+    locations = ['Frances', 'SSCo', 'OC', 'SLS', 'CSN', 'Lake', 'Wilson']
+    
     employees_sql = text("""
         SELECT
             employee_id,

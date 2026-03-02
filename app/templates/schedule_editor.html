@@ -452,7 +452,7 @@ function renderShifts() {
             <td>${decimalToDisplay(s.start_hour)}</td>
             <td>${decimalToDisplay(s.end_hour)}</td>
             <td><span class="period-badge period-${s.period.toLowerCase()}">${s.period}</span></td>
-            <td>${s.is_special_event ? '<span class="override-badge">Yes</span>' : '<span style="color:#9ca3af;font-size:0.8rem">No</span>'}</td>
+            <td>${s.special_event ? '<span class="override-badge">Yes</span>' : '<span style="color:#9ca3af;font-size:0.8rem">No</span>'}</td>
             <td>
                 <button class="btn btn-ghost btn-sm" onclick="openEditModal(${s.shift_id})">Edit</button>
                 <button class="btn btn-danger btn-sm" style="margin-left:6px" onclick="deleteShift(${s.shift_id})">Delete</button>
@@ -557,7 +557,7 @@ function openEditModal(shiftId) {
     document.getElementById('fEndTime').value    = decimalToTimeInput(endBase);
     document.getElementById('fEndNextDay').checked = s.end_hour >= 24;
 
-    document.getElementById('fSpecialEvent').checked = !!s.is_special_event;
+    document.getElementById('fSpecialEvent').checked = !!s.special_event;
 
     document.getElementById('shiftModal').classList.add('open');
 }
@@ -601,7 +601,7 @@ async function saveShift() {
     }
 
     const isSpecialEvent = document.getElementById('fSpecialEvent').checked;
-    const body = { week_start_date: week, location, booth, day_of_week: day, start_hour: startHour, end_hour: endHour, is_special_event: isSpecialEvent };
+    const body = { week_start_date: week, location, booth, day_of_week: day, start_hour: startHour, end_hour: endHour, special_event: isSpecialEvent };
 
     try {
         if (editingShiftId === null) {

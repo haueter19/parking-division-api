@@ -224,6 +224,83 @@
     /* ── Empty state ── */
     .empty-state { text-align: center; padding: 40px 20px; color: #9ca3af; }
     .empty-state p { margin-top: 8px; font-size: 0.9rem; }
+
+    /* ── View toggle ── */
+    .view-toggle {
+        display: flex;
+        border: 1.5px solid #d1d5db;
+        border-radius: 8px;
+        overflow: hidden;
+        margin-left: auto;
+    }
+    .view-toggle button {
+        padding: 6px 14px;
+        border: none;
+        background: #fff;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #6b7280;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+    }
+    .view-toggle button:not(:last-child) { border-right: 1.5px solid #d1d5db; }
+    .view-toggle button.active { background: #1e2a3a; color: #fff; }
+
+    /* ── Calendar view ── */
+    #calendarView { display: none; }
+
+    .cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 10px;
+        min-width: 700px;
+    }
+    .cal-day {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        overflow: hidden;
+        min-height: 120px;
+    }
+    .cal-day-header {
+        background: #1e2a3a;
+        color: #fff;
+        text-align: center;
+        padding: 8px 4px;
+    }
+    .cal-day-header .dow {
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+    .cal-day-header .dom {
+        font-size: 1.1rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    .cal-shifts {
+        padding: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .cal-shift {
+        border-radius: 6px;
+        padding: 5px 7px;
+        background: #f1f5f9;
+        font-size: 0.76rem;
+        color: #1e2a3a;
+        line-height: 1.4;
+    }
+    .cal-shift.special { background: #d1fae5; }
+    .cal-shift .shift-time { font-weight: 700; white-space: nowrap; }
+    .cal-shift .shift-loc  { color: #4b5563; margin-top: 1px; }
+    .cal-empty {
+        padding: 12px 6px;
+        text-align: center;
+        font-size: 0.75rem;
+        color: #d1d5db;
+    }
 </style>
 {% endblock %}
 
@@ -241,6 +318,10 @@
     <div class="toolbar">
         <button class="btn btn-success" onclick="openAddModal()">+ Add Shift</button>
         <span id="shiftCount" style="font-size:0.85rem;color:#6b7280;"></span>
+        <div class="view-toggle">
+            <button id="btnTableView"    class="active" onclick="setView('table')">Table</button>
+            <button id="btnCalendarView"            onclick="setView('calendar')">Calendar</button>
+        </div>
     </div>
 
     <div class="table-wrap">
@@ -261,6 +342,11 @@
                 <tr><td colspan="7"><div class="empty-state">Loading shifts…</div></td></tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- Calendar view -->
+    <div id="calendarView">
+        <div class="cal-grid" id="calGrid"></div>
     </div>
 
     <!-- Solver stub -->
@@ -428,8 +514,9 @@ async function loadShifts() {
     }
 }
 
-// ─── Render shifts table ──────────────────────────────────────────────────
+// ─── Render shifts table (and calendar if active) ─────────────────────────
 function renderShifts() {
+    if (currentView === 'calendar') { renderCalendar(); }
     const tbody = document.getElementById('shiftsBody');
     document.getElementById('shiftCount').textContent =
         shifts.length ? `${shifts.length} shift${shifts.length === 1 ? '' : 's'} defined` : '';
@@ -459,6 +546,61 @@ function renderShifts() {
             </td>
         </tr>
     `).join('');
+}
+
+// ─── View toggle ──────────────────────────────────────────────────────────
+let currentView = 'table';
+
+function setView(v) {
+    currentView = v;
+    document.querySelector('.table-wrap').style.display  = (v === 'table')    ? '' : 'none';
+    document.getElementById('calendarView').style.display = (v === 'calendar') ? '' : 'none';
+    document.getElementById('btnTableView').classList.toggle('active',    v === 'table');
+    document.getElementById('btnCalendarView').classList.toggle('active', v === 'calendar');
+    if (v === 'calendar') renderCalendar();
+}
+
+// ─── Render calendar view ─────────────────────────────────────────────────
+const DAY_ORDER = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function renderCalendar() {
+    const grid = document.getElementById('calGrid');
+    if (!week) { grid.innerHTML = ''; return; }
+
+    // week is always a Sunday (YYYY-MM-DD)
+    const weekDate = new Date(week + 'T00:00:00');
+
+    // Group shifts by day_of_week
+    const byDay = {};
+    DAY_NAMES.forEach(d => { byDay[d] = []; });
+    shifts.forEach(s => { if (byDay[s.day_of_week] !== undefined) byDay[s.day_of_week].push(s); });
+    // Sort each day's shifts by start_hour
+    DAY_NAMES.forEach(d => byDay[d].sort((a, b) => a.start_hour - b.start_hour));
+
+    grid.innerHTML = DAY_NAMES.map((dow, i) => {
+        const dayDate = new Date(weekDate);
+        dayDate.setDate(weekDate.getDate() + i);
+        const dom = dayDate.getDate();
+
+        const dayShifts = byDay[dow];
+        const shiftsHtml = dayShifts.length
+            ? dayShifts.map(s => `
+                <div class="cal-shift${s.special_event ? ' special' : ''}">
+                    <div class="shift-time">${decimalToDisplay(s.start_hour)} – ${decimalToDisplay(s.end_hour)}</div>
+                    <div class="shift-loc">${esc(s.location)} · Booth ${s.booth}</div>
+                </div>`).join('')
+            : '<div class="cal-empty">No shifts</div>';
+
+        return `
+            <div class="cal-day">
+                <div class="cal-day-header">
+                    <div class="dow">${dow}</div>
+                    <div class="dom">${dom}</div>
+                </div>
+                <div class="cal-shifts">${shiftsHtml}</div>
+            </div>`;
+    }).join('');
 }
 
 // ─── Render assignments table ─────────────────────────────────────────────

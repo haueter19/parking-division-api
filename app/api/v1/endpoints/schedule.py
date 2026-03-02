@@ -251,7 +251,7 @@ async def delete_shift(
 
 
 # ---------------------------------------------------------------------------
-# POST /schedule/solve?week=YYYY-MM-DD  — solver stub
+# POST /schedule/solve?week=YYYY-MM-DD
 # ---------------------------------------------------------------------------
 @router.post("/solve")
 async def solve_schedule(
@@ -259,14 +259,63 @@ async def solve_schedule(
     db: Session = Depends(get_db),
     current_user=Depends(require_role(SCHEDULE_ROLES)),
 ):
+    from datetime import date as _date
+    from ortools.sat.python import cp_model
     from app.utils.schedule_solver import ParkingScheduler
-    scheduler = ParkingScheduler(week_start=week, db=db)
 
-    scheduler._setup_variables()
-    scheduler.summary()
+    count = db.execute(
+        text("SELECT COUNT(*) FROM app.schedule_shifts WHERE week_start_date = :week"),
+        {"week": week}
+    ).scalar()
+    if not count:
+        raise HTTPException(status_code=400, detail="No shifts defined for this week")
+
+    # Build a lookup from solver-tuple key → DB shift_id before the solver runs,
+    # so we can persist results without modifying the solver class.
+    shift_rows = db.execute(text("""
+        SELECT shift_id, location, booth, day_of_week,
+               CAST(start_hour AS FLOAT) AS start_hour,
+               CAST(end_hour   AS FLOAT) AS end_hour
+        FROM app.schedule_shifts
+        WHERE week_start_date = :week
+    """), {"week": week}).fetchall()
+    shift_lookup = {
+        (r.location, int(r.booth), r.day_of_week, float(r.start_hour), float(r.end_hour)): r.shift_id
+        for r in shift_rows
+    }
+
+    scheduler = ParkingScheduler(week_start=_date.fromisoformat(week), db=db)
     scheduler.build().solve()
 
-    return
+    if scheduler._solution not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Solver could not find a valid schedule: {scheduler.status_label()}"
+        )
+
+    # Replace all existing assignments for the week
+    db.execute(text("""
+        DELETE FROM app.schedule_assignments
+        WHERE shift_id IN (
+            SELECT shift_id FROM app.schedule_shifts WHERE week_start_date = :week
+        )
+    """), {"week": week})
+
+    saved = 0
+    for day, day_shifts in scheduler.schedule.items():
+        for garage, booth, start, end, employee_id in day_shifts:
+            sid = shift_lookup.get((garage, int(booth), day, float(start), float(end)))
+            if sid is None:
+                continue
+            db.execute(text("""
+                INSERT INTO app.schedule_assignments
+                    (shift_id, employee_id, solver_employee_id, is_manual_override)
+                VALUES (:sid, :emp, :emp, 0)
+            """), {"sid": sid, "emp": int(employee_id)})
+            saved += 1
+
+    db.commit()
+    return {"status": scheduler.status_label(), "assignments_saved": saved}
 
 
 # ---------------------------------------------------------------------------

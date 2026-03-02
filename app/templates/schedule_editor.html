@@ -774,18 +774,33 @@ async function deleteShift(shiftId) {
     }
 }
 
-// ─── Solver stub ──────────────────────────────────────────────────────────
+// ─── Solver ───────────────────────────────────────────────────────────────
 async function runSolver() {
     if (!shifts.length) {
         showToast('Define at least one shift before running the solver.', 'error');
         return;
     }
+
+    const hasAssignments = shifts.some(s => s.assignment_id !== null);
+    if (hasAssignments) {
+        if (!confirm('Running the solver will overwrite all existing assignments for this week, including any manual overrides. Continue?')) {
+            return;
+        }
+    }
+
+    const btn = document.getElementById('solveBtn');
+    btn.disabled = true;
+    btn.textContent = 'Solving…';
+
     try {
-        await apiFetch(`/schedule/solve?week=${week}`, { method: 'POST' });
+        const result = await apiFetch(`/schedule/solve?week=${week}`, { method: 'POST' });
         await loadShifts();
+        showToast(`Solver complete (${result.status}) — ${result.assignments_saved} assignments saved.`, 'success');
     } catch (err) {
-        // 501 = not yet integrated
-        showToast(err.message, 'info');
+        showToast('Solver failed: ' + err.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Run Solver';
     }
 }
 

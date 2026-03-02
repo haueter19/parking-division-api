@@ -124,9 +124,7 @@
     }
     .solver-bar p { font-size: 0.88rem; color: #4b5563; flex: 1; }
 
-    /* ── Assignment section ── */
-    #assignSection { display: none; }
-
+    /* ── Assignment inline editing ── */
     .assign-select {
         padding: 5px 8px;
         border: 1.5px solid #d1d5db;
@@ -295,6 +293,7 @@
     .cal-shift.special { background: #d1fae5; }
     .cal-shift .shift-time { font-weight: 700; white-space: nowrap; }
     .cal-shift .shift-loc  { color: #4b5563; margin-top: 1px; }
+    .cal-shift .shift-emp  { color: #374151; margin-top: 3px; font-style: italic; font-size: 0.72rem; }
     .cal-empty {
         padding: 12px 6px;
         text-align: center;
@@ -317,6 +316,7 @@
 
     <div class="toolbar">
         <button class="btn btn-success" onclick="openAddModal()">+ Add Shift</button>
+        <button class="btn btn-ghost" id="saveAssignBtn" style="display:none;" onclick="saveAssignments()">Save Assignments</button>
         <span id="shiftCount" style="font-size:0.85rem;color:#6b7280;"></span>
         <div class="view-toggle">
             <button id="btnTableView"    class="active" onclick="setView('table')">Table</button>
@@ -333,13 +333,14 @@
                     <th>Day</th>
                     <th>Start</th>
                     <th>End</th>
-                    <th>Period</th>
                     <th>Special Event</th>
+                    <th>Assigned Employee</th>
+                    <th>Status</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="shiftsBody">
-                <tr><td colspan="7"><div class="empty-state">Loading shifts…</div></td></tr>
+                <tr><td colspan="9"><div class="empty-state">Loading shifts…</div></td></tr>
             </tbody>
         </table>
     </div>
@@ -353,35 +354,6 @@
     <div class="solver-bar" style="margin-top:20px;">
         <p>Once all shifts are defined, run the solver to automatically assign employees to each slot.</p>
         <button class="btn btn-warning" id="solveBtn" onclick="runSolver()">Run Solver</button>
-    </div>
-</div>
-
-<!-- ── Assignments (shown after solve) ───────────────────────── -->
-<div class="section-card" id="assignSection">
-    <h2>
-        Employee Assignments
-        <span style="font-size:0.8rem;font-weight:400;color:#6b7280;">Solver output — override as needed</span>
-    </h2>
-
-    <div class="toolbar">
-        <button class="btn btn-primary" onclick="saveAssignments()">Save Changes</button>
-    </div>
-
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>Location</th>
-                    <th>Booth</th>
-                    <th>Day</th>
-                    <th>Start</th>
-                    <th>End</th>
-                    <th>Assigned Employee</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody id="assignBody"></tbody>
-        </table>
     </div>
 </div>
 
@@ -507,23 +479,28 @@ async function loadShifts() {
     try {
         shifts = await apiFetch(`/schedule/shifts?week=${week}`);
         renderShifts();
-        renderAssignments();
     } catch (err) {
         document.getElementById('shiftsBody').innerHTML =
-            `<tr><td colspan="7"><div class="empty-state">Error: ${err.message}</div></td></tr>`;
+            `<tr><td colspan="9"><div class="empty-state">Error: ${err.message}</div></td></tr>`;
     }
 }
 
 // ─── Render shifts table (and calendar if active) ─────────────────────────
 function renderShifts() {
     if (currentView === 'calendar') { renderCalendar(); }
+
+    const hasSolved = shifts.some(s => s.assignment_id !== null);
+    const saveBtn = document.getElementById('saveAssignBtn');
+    saveBtn.style.display = hasSolved ? '' : 'none';
+    updateSaveBtnLabel();
+
     const tbody = document.getElementById('shiftsBody');
     document.getElementById('shiftCount').textContent =
         shifts.length ? `${shifts.length} shift${shifts.length === 1 ? '' : 's'} defined` : '';
 
     if (!shifts.length) {
         tbody.innerHTML = `
-            <tr><td colspan="7">
+            <tr><td colspan="9">
                 <div class="empty-state">
                     No shifts yet.<br><p>Use "Add Shift" to define the schedule for this week.</p>
                 </div>
@@ -531,21 +508,41 @@ function renderShifts() {
         return;
     }
 
-    tbody.innerHTML = shifts.map(s => `
-        <tr>
-            <td>${esc(s.location)}</td>
-            <td>${s.booth}</td>
-            <td>${s.day_of_week}</td>
-            <td>${decimalToDisplay(s.start_hour)}</td>
-            <td>${decimalToDisplay(s.end_hour)}</td>
-            <td><span class="period-badge period-${s.period.toLowerCase()}">${s.period}</span></td>
-            <td>${s.special_event ? '<span class="override-badge">Yes</span>' : '<span style="color:#9ca3af;font-size:0.8rem">No</span>'}</td>
-            <td>
-                <button class="btn btn-ghost btn-sm" onclick="openEditModal(${s.shift_id})">Edit</button>
-                <button class="btn btn-danger btn-sm" style="margin-left:6px" onclick="deleteShift(${s.shift_id})">Delete</button>
-            </td>
-        </tr>
-    `).join('');
+    tbody.innerHTML = shifts.map(s => {
+        const seCell = s.special_event
+            ? '<span class="override-badge">Yes</span>'
+            : '<span style="color:#9ca3af;font-size:0.8rem">No</span>';
+
+        let assignCell, statusCell;
+        if (s.assignment_id !== null) {
+            const opts = employees.map(e =>
+                `<option value="${e.employee_id}"${e.employee_id === s.employee_id ? ' selected' : ''}>${esc(e.full_name)}</option>`
+            ).join('') + `<option value=""${!s.employee_id ? ' selected' : ''}>— Unassigned —</option>`;
+            assignCell = `<select class="assign-select" onchange="markAssignChange(${s.assignment_id}, this.value)">${opts}</select>`;
+            statusCell = s.is_manual_override
+                ? '<span class="override-badge">Override</span>'
+                : '<span style="color:#6b7280;font-size:0.8rem">Solver</span>';
+        } else {
+            assignCell = '<span style="color:#d1d5db;font-size:0.8rem">—</span>';
+            statusCell = '<span style="color:#d1d5db;font-size:0.8rem">—</span>';
+        }
+
+        return `
+            <tr class="${s.is_manual_override ? 'override-row' : ''}">
+                <td>${esc(s.location)}</td>
+                <td>${s.booth}</td>
+                <td>${s.day_of_week}</td>
+                <td>${decimalToDisplay(s.start_hour)}</td>
+                <td>${decimalToDisplay(s.end_hour)}</td>
+                <td>${seCell}</td>
+                <td>${assignCell}</td>
+                <td>${statusCell}</td>
+                <td>
+                    <button class="btn btn-ghost btn-sm" onclick="openEditModal(${s.shift_id})">Edit</button>
+                    <button class="btn btn-danger btn-sm" style="margin-left:6px" onclick="deleteShift(${s.shift_id})">Delete</button>
+                </td>
+            </tr>`;
+    }).join('');
 }
 
 // ─── View toggle ──────────────────────────────────────────────────────────
@@ -585,11 +582,17 @@ function renderCalendar() {
 
         const dayShifts = byDay[dow];
         const shiftsHtml = dayShifts.length
-            ? dayShifts.map(s => `
+            ? dayShifts.map(s => {
+                const empLine = s.assignment_id !== null
+                    ? `<div class="shift-emp">${s.employee_name ? esc(s.employee_name) : '<em>Unassigned</em>'}${s.is_manual_override ? ' <span class="override-badge" style="font-size:0.65rem;padding:1px 5px;vertical-align:middle;">Override</span>' : ''}</div>`
+                    : '';
+                return `
                 <div class="cal-shift${s.special_event ? ' special' : ''}">
                     <div class="shift-time">${decimalToDisplay(s.start_hour)} – ${decimalToDisplay(s.end_hour)}</div>
                     <div class="shift-loc">${esc(s.location)} · Booth ${s.booth}</div>
-                </div>`).join('')
+                    ${empLine}
+                </div>`;
+            }).join('')
             : '<div class="cal-empty">No shifts</div>';
 
         return `
@@ -603,53 +606,17 @@ function renderCalendar() {
     }).join('');
 }
 
-// ─── Render assignments table ─────────────────────────────────────────────
-function renderAssignments() {
-    const hasSolvedShifts = shifts.some(s => s.assignment_id !== null);
-    const section = document.getElementById('assignSection');
-
-    if (!hasSolvedShifts) {
-        section.style.display = 'none';
-        return;
-    }
-    section.style.display = 'block';
-
-    const empOptions = ['<option value="">— Unassigned —</option>']
-        .concat(employees.map(e =>
-            `<option value="${e.employee_id}">${esc(e.full_name)}</option>`
-        )).join('');
-
-    const tbody = document.getElementById('assignBody');
-    tbody.innerHTML = shifts.filter(s => s.assignment_id !== null).map(s => {
-        const isOverride = s.is_manual_override;
-        const select = `
-            <select class="assign-select"
-                    data-assignment-id="${s.assignment_id}"
-                    onchange="markAssignChange(${s.assignment_id}, this.value)">
-                ${employees.map(e =>
-                    `<option value="${e.employee_id}"${e.employee_id === s.employee_id ? ' selected' : ''}>${esc(e.full_name)}</option>`
-                ).join('')}
-                <option value=""${!s.employee_id ? ' selected' : ''}>— Unassigned —</option>
-            </select>`;
-        const statusCell = isOverride
-            ? '<span class="override-badge">Override</span>'
-            : '<span style="color:#6b7280;font-size:0.8rem">Solver</span>';
-        return `
-            <tr class="${isOverride ? 'override-row' : ''}">
-                <td>${esc(s.location)}</td>
-                <td>${s.booth}</td>
-                <td>${s.day_of_week}</td>
-                <td>${decimalToDisplay(s.start_hour)}</td>
-                <td>${decimalToDisplay(s.end_hour)}</td>
-                <td>${select}</td>
-                <td>${statusCell}</td>
-            </tr>`;
-    }).join('');
+// ─── Assignment change tracking ────────────────────────────────────────────
+function updateSaveBtnLabel() {
+    const btn = document.getElementById('saveAssignBtn');
+    const n = Object.keys(assignChanges).length;
+    btn.textContent = n > 0 ? `Save Assignments (${n})` : 'Save Assignments';
+    btn.className = n > 0 ? 'btn btn-primary' : 'btn btn-ghost';
 }
 
-// ─── Assignment change tracking ────────────────────────────────────────────
 function markAssignChange(assignmentId, employeeId) {
     assignChanges[assignmentId] = employeeId === '' ? null : parseInt(employeeId, 10);
+    updateSaveBtnLabel();
 }
 
 async function saveAssignments() {

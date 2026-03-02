@@ -554,7 +554,7 @@ let currentView = 'table';
 function setView(v) {
     currentView = v;
     document.querySelector('.table-wrap').style.display  = (v === 'table')    ? '' : 'none';
-    document.getElementById('calendarView').style.display = (v === 'calendar') ? '' : 'none';
+    document.getElementById('calendarView').style.display = (v === 'calendar') ? 'block' : 'none';
     document.getElementById('btnTableView').classList.toggle('active',    v === 'table');
     document.getElementById('btnCalendarView').classList.toggle('active', v === 'calendar');
     if (v === 'calendar') renderCalendar();

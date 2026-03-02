@@ -270,8 +270,11 @@ async def solve_schedule(
     if not count:
         raise HTTPException(status_code=400, detail="No shifts defined for this week")
 
-    # Build a lookup from solver-tuple key → DB shift_id before the solver runs,
-    # so we can persist results without modifying the solver class.
+    # Build a per-key deque of shift_ids so that two shifts with identical
+    # (location, booth, day, start, end) each get their own assignment row
+    # and don't collide on UQ_assignments_shift.
+    from collections import deque as _deque, defaultdict as _defaultdict
+
     shift_rows = db.execute(text("""
         SELECT shift_id, location, booth, day_of_week,
                CAST(start_hour AS FLOAT) AS start_hour,
@@ -279,10 +282,10 @@ async def solve_schedule(
         FROM app.schedule_shifts
         WHERE week_start_date = :week
     """), {"week": week}).fetchall()
-    shift_lookup = {
-        (r.location, int(r.booth), r.day_of_week, float(r.start_hour), float(r.end_hour)): r.shift_id
-        for r in shift_rows
-    }
+    shift_queue: dict = _defaultdict(_deque)
+    for r in shift_rows:
+        key = (r.location, int(r.booth), r.day_of_week, float(r.start_hour), float(r.end_hour))
+        shift_queue[key].append(r.shift_id)
 
     scheduler = ParkingScheduler(week_start=_date.fromisoformat(week), db=db)
     scheduler.build().solve()
@@ -304,9 +307,10 @@ async def solve_schedule(
     saved = 0
     for day, day_shifts in scheduler.schedule.items():
         for garage, booth, start, end, employee_id in day_shifts:
-            sid = shift_lookup.get((garage, int(booth), day, float(start), float(end)))
-            if sid is None:
-                continue
+            key = (garage, int(booth), day, float(start), float(end))
+            if not shift_queue[key]:
+                continue  # no matching DB shift — solver/DB mismatch
+            sid = shift_queue[key].popleft()
             db.execute(text("""
                 INSERT INTO app.schedule_assignments
                     (shift_id, employee_id, solver_employee_id, is_manual_override)

@@ -271,7 +271,7 @@ class ParkingScheduler:
         # Returns a list of tuples suitable for JSON serialization
         shifts_df = pd.read_sql("""
             SELECT * FROM PUReporting.app.schedule_shifts WHERE week_start_date = ?
-            """, self.db, params=(self.week_start,))
+            """, self.db.bind, params=(self.week_start,))
 
         shifts = []
         for _, row in shifts_df[['location', 'booth', 'day_of_week', 'start_hour', 'end_hour']].iterrows():
@@ -317,7 +317,7 @@ class ParkingScheduler:
             WHERE 
                 request_date BETWEEN ? and ?
                 AND employee_job = 'Cashier'
-            """, self.db, params=(self.week_start, week_end))
+            """, self.db.bind, params=(self.week_start, week_end))
         self.requests = requests
         return requests
         

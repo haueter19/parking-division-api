@@ -259,18 +259,14 @@ async def solve_schedule(
     db: Session = Depends(get_db),
     current_user=Depends(require_role(SCHEDULE_ROLES)),
 ):
-    # Check that shifts exist for the week
-    count = db.execute(
-        text("SELECT COUNT(*) FROM app.schedule_shifts WHERE week_start_date = :week"),
-        {"week": week}
-    ).scalar()
-    if not count:
-        raise HTTPException(status_code=400, detail="No shifts defined for this week")
+    from app.utils.schedule_solver import ParkingScheduler
+    scheduler = ParkingScheduler(week_start=week, db=db)
 
-    raise HTTPException(
-        status_code=501,
-        detail="Solver not yet integrated. Define shifts and check back after solver implementation."
-    )
+    scheduler._setup_variables()
+    scheduler.summary()
+    scheduler.build().solve()
+
+    return
 
 
 # ---------------------------------------------------------------------------

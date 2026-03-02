@@ -86,6 +86,7 @@ async def get_shifts(
             s.day_of_week,
             s.start_hour,
             s.end_hour,
+            s.is_special_event,
             s.created_at,
             s.created_by,
             s.updated_at,
@@ -121,6 +122,7 @@ async def get_shifts(
             start_hour=row.start_hour,
             end_hour=row.end_hour,
             period=_derive_period(row.start_hour),
+            is_special_event=bool(row.is_special_event),
             created_at=row.created_at,
             created_by=row.created_by,
             updated_at=row.updated_at,
@@ -146,9 +148,9 @@ async def create_shift(
 ):
     sql = text("""
         INSERT INTO app.schedule_shifts
-            (week_start_date, location, booth, day_of_week, start_hour, end_hour, created_by)
+            (week_start_date, location, booth, day_of_week, start_hour, end_hour, is_special_event, created_by)
         OUTPUT INSERTED.shift_id
-        VALUES (:week, :location, :booth, :day, :start_hour, :end_hour, :created_by)
+        VALUES (:week, :location, :booth, :day, :start_hour, :end_hour, :is_special_event, :created_by)
     """)
     result = db.execute(sql, {
         "week": shift.week_start_date,
@@ -157,6 +159,7 @@ async def create_shift(
         "day": shift.day_of_week,
         "start_hour": shift.start_hour,
         "end_hour": shift.end_hour,
+        "is_special_event": shift.is_special_event,
         "created_by": current_user.employee_id,
     }).first()
     db.commit()
@@ -204,6 +207,8 @@ async def update_shift(
         updates["start_hour"] = shift.start_hour
     if shift.end_hour is not None:
         updates["end_hour"] = shift.end_hour
+    if shift.is_special_event is not None:
+        updates["is_special_event"] = shift.is_special_event
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")

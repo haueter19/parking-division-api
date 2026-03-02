@@ -66,11 +66,12 @@ class ParkingScheduler:
                 garages_worked = [g for g in self.garages if self.solver.Value(self.works_at_garage[(c, g)]) == 1]
                 if garages_worked:
                     print(f"  {c}: {', '.join(garages_worked)}")
+
+            self.schedule = schedule
+
         else:
             print("No solution found.")
         
-        self.schedule = schedule if status in (cp_model.OPTIMAL, cp_model.FEASIBLE) else None
-    
         return status
 
     def _setup_variables(self):

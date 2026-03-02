@@ -289,7 +289,10 @@
         font-size: 0.76rem;
         color: #1e2a3a;
         line-height: 1.4;
+        cursor: pointer;
+        transition: filter 0.15s;
     }
+    .cal-shift:hover { filter: brightness(0.95); }
     .cal-shift.special { background: #d1fae5; }
     .cal-shift .shift-time { font-weight: 700; white-space: nowrap; }
     .cal-shift .shift-loc  { color: #4b5563; margin-top: 1px; }
@@ -587,7 +590,7 @@ function renderCalendar() {
                     ? `<div class="shift-emp">${s.employee_name ? esc(s.employee_name) : '<em>Unassigned</em>'}${s.is_manual_override ? ' <span class="override-badge" style="font-size:0.65rem;padding:1px 5px;vertical-align:middle;">Override</span>' : ''}</div>`
                     : '';
                 return `
-                <div class="cal-shift${s.special_event ? ' special' : ''}">
+                <div class="cal-shift${s.special_event ? ' special' : ''}" onclick="openEditModal(${s.shift_id})">
                     <div class="shift-time">${decimalToDisplay(s.start_hour)} – ${decimalToDisplay(s.end_hour)}</div>
                     <div class="shift-loc">${esc(s.location)} · Booth ${s.booth}</div>
                     ${empLine}

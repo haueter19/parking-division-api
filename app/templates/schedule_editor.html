@@ -219,6 +219,38 @@
     .toast-error   { background: #dc2626; }
     .toast-info    { background: #2563eb; }
 
+    /* ── Hours summary strip ── */
+    .hours-summary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        margin-bottom: 14px;
+        min-height: 26px;
+    }
+    .hours-summary-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-right: 2px;
+        white-space: nowrap;
+    }
+    .hours-pill {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 4px;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        border-radius: 20px;
+        padding: 3px 9px;
+        font-size: 0.77rem;
+        white-space: nowrap;
+    }
+    .hours-pill .pill-name { font-weight: 700; color: #1e2a3a; }
+    .hours-pill .pill-hrs  { color: #6b7280; }
+
     /* ── Empty state ── */
     .empty-state { text-align: center; padding: 40px 20px; color: #9ca3af; }
     .empty-state p { margin-top: 8px; font-size: 0.9rem; }
@@ -326,6 +358,8 @@
             <button id="btnCalendarView"            onclick="setView('calendar')">Calendar</button>
         </div>
     </div>
+
+    <div id="hoursSummary" class="hours-summary"></div>
 
     <div class="table-wrap">
         <table>
@@ -511,6 +545,8 @@ function renderShifts() {
         return;
     }
 
+    renderHoursSummary();
+
     tbody.innerHTML = shifts.map(s => {
         const seCell = s.special_event
             ? '<span class="override-badge">Yes</span>'
@@ -620,6 +656,7 @@ function updateSaveBtnLabel() {
 function markAssignChange(assignmentId, employeeId) {
     assignChanges[assignmentId] = employeeId === '' ? null : parseInt(employeeId, 10);
     updateSaveBtnLabel();
+    renderHoursSummary();
 }
 
 async function saveAssignments() {
@@ -772,6 +809,48 @@ async function runSolver() {
         btn.disabled = false;
         btn.textContent = 'Run Solver';
     }
+}
+
+// ─── Hours summary ────────────────────────────────────────────────────────
+function computeHoursByEmployee() {
+    const map = {};
+    shifts.forEach(s => {
+        if (s.assignment_id === null) return;
+        let empId   = s.employee_id;
+        let empName = s.employee_name;
+        if (Object.prototype.hasOwnProperty.call(assignChanges, s.assignment_id)) {
+            empId = assignChanges[s.assignment_id];
+            if (empId !== null) {
+                const emp = employees.find(e => e.employee_id === empId);
+                empName = emp ? emp.full_name : null;
+            } else {
+                empId = null; empName = null;
+            }
+        }
+        if (!empId || !empName) return;
+        const h = s.end_hour - s.start_hour;
+        if (!map[empId]) map[empId] = { name: empName, hours: 0 };
+        map[empId].hours += h;
+    });
+    return Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function fmtHours(h) {
+    const whole = Math.floor(h);
+    const mins  = Math.round((h - whole) * 60);
+    return mins ? `${whole}h ${mins}m` : `${whole}h`;
+}
+
+function renderHoursSummary() {
+    const el = document.getElementById('hoursSummary');
+    if (!el) return;
+    const data = computeHoursByEmployee();
+    if (!data.length) { el.innerHTML = ''; return; }
+    el.innerHTML = '<span class="hours-summary-label">Hours:</span>' +
+        data.map(d => {
+            const lastName = d.name.split(' ').slice(-1)[0];
+            return `<span class="hours-pill"><span class="pill-name">${esc(lastName)}</span><span class="pill-hrs">${fmtHours(d.hours)}</span></span>`;
+        }).join('');
 }
 
 // ─── Time conversion helpers ──────────────────────────────────────────────

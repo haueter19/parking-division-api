@@ -78,10 +78,11 @@ class ParkingScheduler:
         self.get_shifts()
         self.shift_ids = list(range(len(self.shifts)))
         self.garages = list(dict.fromkeys(s[0] for s in self.shifts))  # unique, order preserved
-        self.get_employees('Cashier')       # DataFrame from your DB query
-        HOURLY_CASHIERS = self.employees[self.employees['Type']=='Hourly']['EmployeeNumber'].tolist()
-        PERMANENT_CASHIERS = self.employees[self.employees['Type']=='Full Time']['EmployeeNumber'].tolist()
-        self.all_cashiers = PERMANENT_CASHIERS + HOURLY_CASHIERS
+        self.get_employees('viewer')       # DataFrame from your DB query
+        #HOURLY_CASHIERS = self.employees[self.employees['Type']=='Hourly']['cashier_id'].tolist()
+        #PERMANENT_CASHIERS = self.employees[self.employees['Type']=='Full Time']['cashier_id'].tolist()
+        #self.all_cashiers = PERMANENT_CASHIERS + HOURLY_CASHIERS
+        self.all_cashiers = self.employees['cashier_id'].tolist()
         self.get_requests()
 
     
@@ -121,19 +122,19 @@ class ParkingScheduler:
         for s in self.shift_ids:
             _, _, _, start, end = self.shifts[s]
             if (end - start) > 6.0:
-                self.model.Add(self._assign[(self.employees[self.employees['LastName']=='Treleven'].iloc[0]['EmployeeNumber'], s)] == 0)
+                self.model.Add(self._assign[(self.employees[self.employees['last_name']=='Treleven'].iloc[0]['employee_id'].astype(int), s)] == 0)
         
         # Hard constraint: Wood only available M-F at 7pm or later, full availability Sat/Sun
         for s in self.shift_ids:
             _, _, day, start, end = self.shifts[s]
             if day in self.weekdays and start < 19.0:
-                self.model.Add(self._assign[(self.employees[self.employees['LastName']=='Wood'].iloc[0]['EmployeeNumber'], s)] == 0)
+                self.model.Add(self._assign[(self.employees[self.employees['last_name']=='Wood'].iloc[0]['employee_id'].astype(int), s)] == 0)
         
         # Hard constraint: Siegel only available M-F at 5:15pm or later, full Sat/Sun
         for s in self.shift_ids:
             _, _, day, start, end = self.shifts[s]
             if day in self.weekdays and start < 17.25:
-                self.model.Add(self._assign[(self.employees[self.employees['LastName']=='Siegel'].iloc[0]['EmployeeNumber'], s)] == 0)
+                self.model.Add(self._assign[(self.employees[self.employees['last_name']=='Siegel'].iloc[0]['employee_id'].astype(int), s)] == 0)
         return
         
 
@@ -180,7 +181,7 @@ class ParkingScheduler:
         for s in self.shift_ids:
             _, _, day, _, _ = self.shifts[s]
             if day in {'Sat', 'Sun'}:
-                punwar_weekend_terms.append(self._assign[(self.employees[self.employees['LastName']=='Punwar'].iloc[0]['EmployeeNumber'], s)] * WEEKEND_PENALTY)
+                punwar_weekend_terms.append(self._assign[(self.employees[self.employees['last_name']=='Punwar'].iloc[0]['employee_id'], s)] * WEEKEND_PENALTY)
         
         # Soft constraint: Punwar prefers <= 15 hours per week
         # Penalize each hour over 15
@@ -188,7 +189,7 @@ class ParkingScheduler:
         
         punwar_hours = self.model.NewIntVar(0, 40 * self.SCALE, 'punwar_hours')
         self.model.Add(
-            punwar_hours == sum(self._assign[(self.employees[self.employees['LastName']=='Punwar'].iloc[0]['EmployeeNumber'], s)] * int(self.paid_hours(s) * self.SCALE) for s in self.shift_ids)
+            punwar_hours == sum(self._assign[(self.employees[self.employees['last_name']=='Punwar'].iloc[0]['employee_id'], s)] * int(self.paid_hours(s) * self.SCALE) for s in self.shift_ids)
         )
         
         punwar_overage = self.model.NewIntVar(0, 40 * self.SCALE, 'punwar_overage')
@@ -280,19 +281,16 @@ class ParkingScheduler:
         self.shifts = shifts
         return shifts
 
-    def get_employees(self, job):
+    def get_employees(self, role):
         """
         """
         employees = pd.read_sql(f"""
             SELECT 
-                EmployeeNumber, FirstName, LastName, Classification, Type, SeniorityDate
-            FROM Employee
-            WHERE Classification = '{job}'
-            ORDER BY Type, SeniorityDate
-            """, self.conn)
-        
-        employees.loc[12] = [98, 'Barry', 'Wood', 'Cashier', 'Hourly', '2026-02-01']
-        employees.loc[13] = [99, 'S', 'McBride', 'Cashier', 'Hourly', '2026-02-01']
+                e.employee_id, first_name, last_name, e.role, c.cashier_id
+            FROM pt.employees e
+            INNER JOIN app.cashier_id c On (e.employee_id=c.employee_id)
+            WHERE e.role = '{role}'
+            """, self.db.bind)
         
         self.employees = employees
         

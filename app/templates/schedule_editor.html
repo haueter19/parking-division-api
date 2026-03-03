@@ -828,7 +828,8 @@ function computeHoursByEmployee() {
             }
         }
         if (!empId || !empName) return;
-        const h = s.end_hour - s.start_hour;
+        const raw = s.end_hour - s.start_hour;
+        const h = raw >= 6.75 ? raw - 0.5 : raw;  // deduct unpaid 30-min lunch
         if (!map[empId]) map[empId] = { name: empName, hours: 0 };
         map[empId].hours += h;
     });

@@ -52,10 +52,13 @@ class ParkingScheduler:
             ('Frances', '1', 'Mon'), ('Frances', '1', 'Tue'), ('Frances', '1', 'Wed'),
             ('Frances', '1', 'Thu'), ('Frances', '1', 'Fri'),
         }
+        # Show ALL shifts at fixed locations/booths/days so you can verify AM/PM matching
         matched = [(s, self.shifts[s]) for s in self.shift_ids if (self.shifts[s][0], self.shifts[s][1], self.shifts[s][2]) in fixed_keys]
         print(f"\nFixed schedule matches: {len(matched)} (expected 10)")
         for s, shift in matched:
-            print(f"  shift {s}: {shift}")
+            garage, booth, day, start, end = shift
+            period = 'AM' if start % 24 < 12 else 'PM'
+            print(f"  shift {s}: {garage} booth={booth} {day} {start}-{end} [{period}]")
 
         # Check availability conflicts with fixed employees
         print(f"\nAvailability conflicts with fixed schedule:")
@@ -264,27 +267,29 @@ class ParkingScheduler:
         chan_id = int(self.employees[self.employees['last_name'] == 'Chan'].iloc[0]['employee_id'])
 
         # Hard constraint: McConley/Chan fixed schedule
-        # Find matching shift indices and force assign to McConley/Chan
+        # Keys are (garage, booth, day, period) where period = 'AM' or 'PM'.
+        # Using AM/PM instead of exact start time makes this robust to minor schedule changes.
         mcconley_assignments = {
-            ('Frances', '2', 'Tue'): mcconley_id,
-            ('Frances', '2', 'Wed'): mcconley_id,
-            ('Frances', '2', 'Thu'): mcconley_id,
-            ('Frances', '2', 'Fri'): mcconley_id,
-            ('Frances', '2', 'Sat'): mcconley_id,
+            ('Frances', '2', 'Tue', 'PM'): mcconley_id,
+            ('Frances', '2', 'Wed', 'PM'): mcconley_id,
+            ('Frances', '2', 'Thu', 'PM'): mcconley_id,
+            ('Frances', '2', 'Fri', 'PM'): mcconley_id,
+            ('Frances', '2', 'Sat', 'PM'): mcconley_id,
         }
         chan_assignments = {
-            ('Frances', '1', 'Mon'): chan_id,
-            ('Frances', '1', 'Tue'): chan_id,
-            ('Frances', '1', 'Wed'): chan_id,
-            ('Frances', '1', 'Thu'): chan_id,
-            ('Frances', '1', 'Fri'): chan_id,
+            ('Frances', '1', 'Mon', 'AM'): chan_id,
+            ('Frances', '1', 'Tue', 'AM'): chan_id,
+            ('Frances', '1', 'Wed', 'AM'): chan_id,
+            ('Frances', '1', 'Thu', 'AM'): chan_id,
+            ('Frances', '1', 'Fri', 'AM'): chan_id,
         }
-        
+
         fixed_assignments = {**mcconley_assignments, **chan_assignments}
-        
+
         for s in self.shift_ids:
             garage, booth, day, start, end = self.shifts[s]
-            key = (garage, booth, day)
+            period = 'AM' if start % 24 < 12 else 'PM'
+            key = (garage, booth, day, period)
             if key in fixed_assignments:
                 cashier = fixed_assignments[key]
                 self.model.Add(self._assign[(cashier, s)] == 1)

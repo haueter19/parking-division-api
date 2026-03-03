@@ -405,14 +405,17 @@ async def get_metadata(
     
     employees_sql = text("""
         SELECT
-            employee_id,
-            LTRIM(RTRIM(ISNULL(first_name, '') + ' ' + ISNULL(last_name, ''))) AS full_name
-        FROM pt.employees
+            e.employee_id,
+            LTRIM(RTRIM(ISNULL(first_name, '') + ' ' + ISNULL(last_name, ''))) AS full_name,
+            e.role,
+            c.cashier_id
+        FROM pt.employees e
+        INNER JOIN app.cashier_id c ON e.employee_id = c.employee_id
         WHERE is_active = 1
         ORDER BY last_name, first_name
     """)
     employees = [
-        {"employee_id": row.employee_id, "full_name": row.full_name}
+        {"employee_id": row.employee_id, "full_name": row.full_name, "role": row.role, "cashier_id": row.cashier_id}
         for row in db.execute(employees_sql).fetchall()
     ]
 

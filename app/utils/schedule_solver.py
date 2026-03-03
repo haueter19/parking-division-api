@@ -213,21 +213,25 @@ class ParkingScheduler:
     def _apply_fixed_schedules(self):
         """
         """
+        # Look up employee IDs by name (same pattern as Treleven/Wood/Siegel)
+        mcconley_id = int(self.employees[self.employees['last_name'] == 'McConley'].iloc[0]['employee_id'])
+        chan_id = int(self.employees[self.employees['last_name'] == 'Chan'].iloc[0]['employee_id'])
+
         # Hard constraint: McConley/Chan fixed schedule
         # Find matching shift indices and force assign to McConley/Chan
         mcconley_assignments = {
-            ('Frances', '2', 'Tue'): 14,
-            ('Frances', '2', 'Wed'): 14,
-            ('Frances', '2', 'Thu'): 14,
-            ('Frances', '2', 'Fri'): 14,
-            ('Frances', '2', 'Sat'): 14,
-        }        
+            ('Frances', '2', 'Tue'): mcconley_id,
+            ('Frances', '2', 'Wed'): mcconley_id,
+            ('Frances', '2', 'Thu'): mcconley_id,
+            ('Frances', '2', 'Fri'): mcconley_id,
+            ('Frances', '2', 'Sat'): mcconley_id,
+        }
         chan_assignments = {
-            ('Frances', '1', 'Mon'): 10,
-            ('Frances', '1', 'Tue'): 10,
-            ('Frances', '1', 'Wed'): 10,
-            ('Frances', '1', 'Thu'): 10,
-            ('Frances', '1', 'Fri'): 10,
+            ('Frances', '1', 'Mon'): chan_id,
+            ('Frances', '1', 'Tue'): chan_id,
+            ('Frances', '1', 'Wed'): chan_id,
+            ('Frances', '1', 'Thu'): chan_id,
+            ('Frances', '1', 'Fri'): chan_id,
         }
         
         fixed_assignments = {**mcconley_assignments, **chan_assignments}
@@ -251,7 +255,7 @@ class ParkingScheduler:
             self.get_requests()
         
         availability = {}
-        for employee_number in self.employees:
+        for employee_number in self.employees['employee_id']:
             if employee_number not in availability.keys():
                 availability[employee_number] = []
         

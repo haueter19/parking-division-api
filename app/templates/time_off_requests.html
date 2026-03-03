@@ -1,0 +1,542 @@
+{% extends "base.html" %}
+{% set current_section = "operations" %}
+
+{% block title %}Time Off Requests – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
+    .page-header { margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .page-header h1 { font-size: 1.5rem; color: #1e2a3a; font-weight: 700; }
+    .page-header p  { color: #6b7280; margin-top: 4px; font-size: 0.95rem; }
+
+    /* ── Filters ── */
+    .filters-card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 18px 20px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+        margin-bottom: 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        align-items: flex-end;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 5px; }
+    .filter-group label { font-size: 0.8rem; font-weight: 600; color: #4a5568; }
+    .filter-group select,
+    .filter-group input[type="date"] {
+        padding: 8px 10px;
+        border: 2px solid #e2e8f0;
+        border-radius: 7px;
+        font-size: 0.88rem;
+        outline: none;
+        transition: border-color 0.2s;
+        min-width: 160px;
+    }
+    .filter-group select:focus,
+    .filter-group input[type="date"]:focus { border-color: #2563eb; }
+    .filter-group.toggle { flex-direction: row; align-items: center; gap: 8px; padding-bottom: 2px; }
+    .filter-group.toggle label { font-size: 0.88rem; color: #374151; margin: 0; }
+
+    /* ── Buttons ── */
+    .btn {
+        padding: 9px 20px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.88rem;
+        font-weight: 600;
+        transition: background 0.15s;
+        white-space: nowrap;
+    }
+    .btn-primary   { background: #2563eb; color: #fff; }
+    .btn-primary:hover   { background: #1d4ed8; }
+    .btn-secondary { background: #f1f5f9; color: #374151; border: 1px solid #e2e8f0; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn-danger    { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .btn-danger:hover    { background: #fecaca; }
+    .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Table ── */
+    .table-wrap {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: #1e2a3a; color: #fff; }
+    th { padding: 13px 16px; text-align: left; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+    td { padding: 13px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.88rem; color: #374151; vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #f8faff; }
+    .empty-row td { text-align: center; color: #9ca3af; padding: 48px; }
+
+    /* ── Type badges ── */
+    .badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 10px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    .badge-vacation    { background: #d1fae5; color: #065f46; }
+    .badge-sick        { background: #fee2e2; color: #991b1b; }
+    .badge-holiday     { background: #ede9fe; color: #5b21b6; }
+    .badge-fmla        { background: #ffedd5; color: #9a3412; }
+    .badge-comp        { background: #dbeafe; color: #1e40af; }
+    .badge-paid-leave  { background: #ccfbf1; color: #134e4a; }
+    .badge-off-hourly  { background: #f3f4f6; color: #374151; }
+    .badge-in-late     { background: #fef9c3; color: #854d0e; }
+    .badge-rdo         { background: #e0e7ff; color: #3730a3; }
+    .badge-cancelled   { background: #f3f4f6; color: #9ca3af; text-decoration: line-through; }
+
+    /* ── Status badge ── */
+    .status-active    { background: #d1fae5; color: #065f46; }
+    .status-cancelled { background: #f3f4f6; color: #9ca3af; }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+        display: none;
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.4);
+        z-index: 3000;
+        align-items: center;
+        justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+        background: #fff;
+        border-radius: 14px;
+        padding: 32px;
+        width: 100%;
+        max-width: 500px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        position: relative;
+    }
+    .modal h2 { font-size: 1.2rem; font-weight: 700; color: #1e2a3a; margin-bottom: 24px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+    .form-group label { font-size: 0.83rem; font-weight: 600; color: #4a5568; }
+    .form-group select,
+    .form-group input[type="date"] {
+        padding: 10px 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 0.93rem;
+        outline: none;
+        transition: border-color 0.2s;
+    }
+    .form-group select:focus,
+    .form-group input[type="date"]:focus { border-color: #2563eb; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+    .modal-close {
+        position: absolute; top: 16px; right: 18px;
+        background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #9ca3af;
+        line-height: 1;
+    }
+    .modal-close:hover { color: #374151; }
+
+    /* ── Toast ── */
+    .toast {
+        position: fixed; bottom: 24px; right: 24px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 0.25s, transform 0.25s;
+        pointer-events: none;
+        z-index: 9999;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast-success { background: #16a34a; }
+    .toast-error   { background: #dc2626; }
+
+    /* ── Error banner ── */
+    .error-banner {
+        background: #fee2e2; color: #991b1b;
+        padding: 12px 18px; border-radius: 8px; margin-bottom: 20px;
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Time Off Requests</h1>
+        <p>Submit and manage employee time-off requests.</p>
+    </div>
+    <button class="btn btn-primary" onclick="openNewModal()">+ New Request</button>
+</div>
+
+<div id="errorBanner" class="error-banner"></div>
+
+<!-- Filters -->
+<div class="filters-card">
+    <div class="filter-group" id="employeeFilterGroup" style="display:none">
+        <label for="filterEmployee">Employee</label>
+        <select id="filterEmployee">
+            <option value="">All Employees</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label for="filterFrom">From Date</label>
+        <input type="date" id="filterFrom">
+    </div>
+    <div class="filter-group">
+        <label for="filterTo">To Date</label>
+        <input type="date" id="filterTo">
+    </div>
+    <div class="filter-group">
+        <label for="filterType">Request Type</label>
+        <select id="filterType">
+            <option value="">All Types</option>
+        </select>
+    </div>
+    <div class="filter-group toggle">
+        <input type="checkbox" id="filterCancelled">
+        <label for="filterCancelled">Show Cancelled</label>
+    </div>
+    <button class="btn btn-secondary" onclick="loadRequests()">Apply</button>
+</div>
+
+<!-- Requests Table -->
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Type</th>
+                <th>Request Date</th>
+                <th>Submitted By</th>
+                <th>Submit Date</th>
+                <th>Status</th>
+                <th>Last Updated</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="requestsBody">
+            <tr class="empty-row"><td colspan="8">Loading…</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- New / Edit Modal -->
+<div class="modal-backdrop" id="requestModal" onclick="onBackdropClick(event)">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModal()">&#x2715;</button>
+        <h2 id="modalTitle">New Time Off Request</h2>
+
+        <div class="form-group" id="employeeFieldGroup">
+            <label for="formEmployee">Employee</label>
+            <select id="formEmployee"></select>
+        </div>
+
+        <div class="form-group">
+            <label for="formType">Request Type</label>
+            <select id="formType"></select>
+        </div>
+
+        <div class="form-group">
+            <label for="formDate">Date Off</label>
+            <input type="date" id="formDate">
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" id="saveBtn" onclick="saveRequest()">Save Request</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+    const token = localStorage.getItem('access_token');
+
+    // Decode role from JWT
+    let userRole = '';
+    let myEmployeeId = null;
+    try {
+        const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(atob(b64));
+        userRole = (payload.role || '').toLowerCase();
+    } catch(e) {}
+
+    const MANAGE_ROLES = ['supervisor', 'manager', 'admin'];
+    const canManage = MANAGE_ROLES.includes(userRole);
+
+    let employees   = [];
+    let reqTypes    = [];
+    let allRequests = [];
+    let editingId   = null;
+    let toastTimer;
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    async function init() {
+        try {
+            const res = await apiFetch('/api/v1/time-off/metadata');
+            reqTypes      = res.request_types;
+            employees     = res.employees;
+            myEmployeeId  = res.employee_id;
+
+            populateTypeDropdowns();
+            populateEmployeeDropdowns();
+
+            if (canManage) {
+                document.getElementById('employeeFilterGroup').style.display = 'block';
+                document.getElementById('employeeFieldGroup').style.display  = 'flex';
+            } else {
+                document.getElementById('employeeFieldGroup').style.display = 'none';
+            }
+        } catch (err) {
+            showError(err.message);
+        }
+        await loadRequests();
+    }
+
+    function populateTypeDropdowns() {
+        const filterSel = document.getElementById('filterType');
+        const formSel   = document.getElementById('formType');
+        reqTypes.forEach(t => {
+            filterSel.appendChild(new Option(t, t));
+            formSel.appendChild(new Option(t, t));
+        });
+    }
+
+    function populateEmployeeDropdowns() {
+        const filterSel = document.getElementById('filterEmployee');
+        const formSel   = document.getElementById('formEmployee');
+        employees.forEach(e => {
+            filterSel.appendChild(new Option(e.full_name, e.employee_id));
+            formSel.appendChild(new Option(e.full_name, e.employee_id));
+        });
+    }
+
+    // ── Load requests ─────────────────────────────────────────────────────────
+    window.loadRequests = async function () {
+        const params = new URLSearchParams();
+        const empVal  = document.getElementById('filterEmployee').value;
+        const fromVal = document.getElementById('filterFrom').value;
+        const toVal   = document.getElementById('filterTo').value;
+        const typeVal = document.getElementById('filterType').value;
+        const showCx  = document.getElementById('filterCancelled').checked;
+
+        if (empVal)  params.set('employee_id', empVal);
+        if (fromVal) params.set('date_from', fromVal);
+        if (toVal)   params.set('date_to', toVal);
+        if (showCx)  params.set('include_cancelled', 'true');
+
+        const tbody = document.getElementById('requestsBody');
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Loading…</td></tr>';
+
+        try {
+            const data = await apiFetch('/api/v1/time-off/requests?' + params.toString());
+            allRequests = data;
+
+            // Client-side type filter (not sent to API)
+            const filtered = typeVal ? data.filter(r => r.request_type === typeVal) : data;
+
+            if (!filtered.length) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No requests found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(r => {
+                const typeBadge   = typeClass(r.request_type, r.cancelled);
+                const statusBadge = r.cancelled
+                    ? '<span class="badge status-cancelled">Cancelled</span>'
+                    : '<span class="badge status-active">Active</span>';
+                const updatedStr  = r.updated_at
+                    ? `${fmtDate(r.updated_at)} by ${r.updated_by_name || '—'}`
+                    : '—';
+
+                let actions = '';
+                if (!r.cancelled) {
+                    if (canManage) {
+                        actions += `<button class="btn btn-sm btn-secondary" onclick="openEditModal(${r.request_id})" style="margin-right:6px">Edit</button>`;
+                    }
+                    if (canManage || r.employee_id === myEmployeeId) {
+                        actions += `<button class="btn btn-sm btn-danger" onclick="cancelRequest(${r.request_id})">Cancel</button>`;
+                    }
+                }
+
+                return `<tr>
+                    <td>${esc(r.employee_name)}</td>
+                    <td>${typeBadge}</td>
+                    <td>${fmtDate(r.request_date)}</td>
+                    <td>${esc(r.submit_by_name)}</td>
+                    <td>${fmtDate(r.submit_date)}</td>
+                    <td>${statusBadge}</td>
+                    <td style="font-size:0.8rem;color:#6b7280">${updatedStr}</td>
+                    <td>${actions}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            showError(err.message);
+        }
+    };
+
+    // ── Modal ─────────────────────────────────────────────────────────────────
+    window.openNewModal = function () {
+        editingId = null;
+        document.getElementById('modalTitle').textContent = 'New Time Off Request';
+        document.getElementById('saveBtn').textContent = 'Save Request';
+        document.getElementById('formType').value = '';
+        document.getElementById('formDate').value = '';
+
+        // Pre-select self if not a manager
+        const empSel = document.getElementById('formEmployee');
+        if (!canManage && myEmployeeId) {
+            empSel.value = myEmployeeId;
+        } else {
+            empSel.value = '';
+        }
+
+        document.getElementById('requestModal').classList.add('open');
+    };
+
+    window.openEditModal = function (requestId) {
+        const r = allRequests.find(x => x.request_id === requestId);
+        if (!r) return;
+        editingId = requestId;
+        document.getElementById('modalTitle').textContent = 'Edit Request';
+        document.getElementById('saveBtn').textContent = 'Save Changes';
+        document.getElementById('formEmployee').value = r.employee_id;
+        document.getElementById('formType').value     = r.request_type;
+        document.getElementById('formDate').value     = r.request_date;
+        document.getElementById('requestModal').classList.add('open');
+    };
+
+    window.closeModal = function () {
+        document.getElementById('requestModal').classList.remove('open');
+    };
+
+    window.onBackdropClick = function (e) {
+        if (e.target === document.getElementById('requestModal')) closeModal();
+    };
+
+    // ── Save (create or update) ───────────────────────────────────────────────
+    window.saveRequest = async function () {
+        const empId   = parseInt(document.getElementById('formEmployee').value) || myEmployeeId;
+        const type    = document.getElementById('formType').value;
+        const dateVal = document.getElementById('formDate').value;
+
+        if (!type || !dateVal) {
+            showToast('Request type and date are required.', 'error');
+            return;
+        }
+
+        const btn = document.getElementById('saveBtn');
+        btn.disabled = true;
+
+        try {
+            if (editingId) {
+                await apiFetch(`/api/v1/time-off/requests/${editingId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ request_type: type, request_date: dateVal }),
+                });
+                showToast('Request updated.', 'success');
+            } else {
+                await apiFetch('/api/v1/time-off/requests', {
+                    method: 'POST',
+                    body: JSON.stringify({ employee_id: empId, request_type: type, request_date: dateVal }),
+                });
+                showToast('Request submitted.', 'success');
+            }
+            closeModal();
+            loadRequests();
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    };
+
+    // ── Cancel request ────────────────────────────────────────────────────────
+    window.cancelRequest = async function (requestId) {
+        if (!confirm('Cancel this time-off request?')) return;
+        try {
+            await apiFetch(`/api/v1/time-off/requests/${requestId}/cancel`, { method: 'PUT' });
+            showToast('Request cancelled.', 'success');
+            loadRequests();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    };
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    async function apiFetch(url, opts = {}) {
+        const res = await fetch(url, {
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type':  'application/json',
+                ...(opts.headers || {}),
+            },
+            ...opts,
+        });
+        if (!res.ok) {
+            let msg = `Error ${res.status}`;
+            try { const j = await res.json(); msg = j.detail || msg; } catch(e) {}
+            throw new Error(msg);
+        }
+        return res.json();
+    }
+
+    function typeClass(type, cancelled) {
+        if (cancelled) return `<span class="badge badge-cancelled">${esc(type)}</span>`;
+        const map = {
+            'Vacation':   'badge-vacation',
+            'Sick':       'badge-sick',
+            'Holiday':    'badge-holiday',
+            'FMLA':       'badge-fmla',
+            'Comp':       'badge-comp',
+            'Paid Leave': 'badge-paid-leave',
+            'Off - Hourly': 'badge-off-hourly',
+            'In Late':    'badge-in-late',
+            'RDO':        'badge-rdo',
+        };
+        const cls = map[type] || 'badge-off-hourly';
+        return `<span class="badge ${cls}">${esc(type)}</span>`;
+    }
+
+    function fmtDate(iso) {
+        if (!iso) return '—';
+        // iso may be "2026-03-03" or "2026-03-03 14:30:00"
+        const d = new Date(iso.replace(' ', 'T'));
+        if (iso.length <= 10) {
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+        }
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function showToast(msg, type = 'info') {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.className = `toast toast-${type} show`;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('errorBanner');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+
+    init();
+})();
+</script>
+{% endblock %}

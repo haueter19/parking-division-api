@@ -169,6 +169,11 @@ async def schedule_view_page(request: Request):
     """Personal schedule viewer — employee looks up their own (or another's) schedule"""
     return templates.TemplateResponse(name="schedule_view.html", context={"request": request})
 
+@app.get("/operations/time-off", response_class=HTMLResponse)
+async def time_off_page(request: Request):
+    """Time-off request management — submit and review requests"""
+    return templates.TemplateResponse(name="time_off_requests.html", context={"request": request})
+
 
 # ── Cityworks Section ────────────────────────────────────────────────────────
 

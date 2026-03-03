@@ -10,7 +10,7 @@ from sqlalchemy import text
 from typing import List, Optional
 
 from app.db.session import get_db
-from app.api.dependencies import require_role
+from app.api.dependencies import require_role, get_current_active_user
 from app.models.database import UserRole
 from app.models.schemas import (
     ShiftCreate, ShiftUpdate, ShiftResponse,
@@ -385,6 +385,95 @@ async def update_assignment(
         updated_at=row.updated_at,
         updated_by=row.updated_by,
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /schedule/employee-weeks?employee_id=X  — weeks with assignments for an employee
+# Accessible to any authenticated user; non-supervisors can only query themselves.
+# ---------------------------------------------------------------------------
+@router.get("/employee-weeks")
+async def get_employee_weeks(
+    employee_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    user_role = current_user.role
+    if isinstance(user_role, str):
+        try:
+            user_role = UserRole(user_role.lower())
+        except ValueError:
+            pass
+    if user_role not in SCHEDULE_ROLES and current_user.employee_id != employee_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this employee's schedule")
+
+    rows = db.execute(text("""
+        SELECT DISTINCT CONVERT(VARCHAR(10), s.week_start_date, 120) AS week_start_date
+        FROM app.schedule_assignments a
+        INNER JOIN app.schedule_shifts s ON s.shift_id = a.shift_id
+        WHERE a.employee_id = :employee_id
+        ORDER BY week_start_date DESC
+    """), {"employee_id": employee_id}).fetchall()
+    return [row.week_start_date for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# GET /schedule/employee-schedule?week=YYYY-MM-DD&employee_id=X
+# Accessible to any authenticated user; non-supervisors can only query themselves.
+# ---------------------------------------------------------------------------
+@router.get("/employee-schedule")
+async def get_employee_schedule(
+    week: str = Query(...),
+    employee_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    user_role = current_user.role
+    if isinstance(user_role, str):
+        try:
+            user_role = UserRole(user_role.lower())
+        except ValueError:
+            pass
+    if user_role not in SCHEDULE_ROLES and current_user.employee_id != employee_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this employee's schedule")
+
+    rows = db.execute(text("""
+        SELECT
+            s.shift_id,
+            s.location,
+            s.booth,
+            s.day_of_week,
+            CAST(s.start_hour AS FLOAT) AS start_hour,
+            CAST(s.end_hour   AS FLOAT) AS end_hour,
+            s.special_event,
+            NULLIF(LTRIM(RTRIM(
+                ISNULL(e.first_name, '') + ' ' + ISNULL(e.last_name, '')
+            )), '') AS employee_name
+        FROM app.schedule_shifts s
+        INNER JOIN app.schedule_assignments a ON a.shift_id = s.shift_id
+        INNER JOIN pt.employees e ON e.employee_id = a.employee_id
+        WHERE s.week_start_date = :week
+          AND a.employee_id = :employee_id
+        ORDER BY
+            CASE s.day_of_week
+                WHEN 'Sun' THEN 0 WHEN 'Mon' THEN 1 WHEN 'Tue' THEN 2
+                WHEN 'Wed' THEN 3 WHEN 'Thu' THEN 4 WHEN 'Fri' THEN 5
+                WHEN 'Sat' THEN 6 ELSE 7 END,
+            s.start_hour
+    """), {"week": week, "employee_id": employee_id}).fetchall()
+
+    return [
+        {
+            "shift_id":     row.shift_id,
+            "location":     row.location,
+            "booth":        row.booth,
+            "day_of_week":  row.day_of_week,
+            "start_hour":   row.start_hour,
+            "end_hour":     row.end_hour,
+            "special_event": bool(row.special_event),
+            "employee_name": row.employee_name,
+        }
+        for row in rows
+    ]
 
 
 # ---------------------------------------------------------------------------

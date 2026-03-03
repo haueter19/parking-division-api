@@ -164,6 +164,11 @@ async def schedule_editor_page(request: Request):
     """Schedule editor — define shifts and manage assignments for a week"""
     return templates.TemplateResponse(name="schedule_editor.html", context={"request": request})
 
+@app.get("/operations/schedule/view", response_class=HTMLResponse)
+async def schedule_view_page(request: Request):
+    """Personal schedule viewer — employee looks up their own (or another's) schedule"""
+    return templates.TemplateResponse(name="schedule_view.html", context={"request": request})
+
 
 # ── Cityworks Section ────────────────────────────────────────────────────────
 

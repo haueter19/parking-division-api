@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% set current_section = "operations" %}
+
+{% block title %}My Schedule – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
+    /* ── Layout ── */
+    .page-header {
+        display: flex;
+        align-items: baseline;
+        gap: 18px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+    .page-header h1 { font-size: 1.4rem; color: #1e2a3a; font-weight: 700; }
+    .back-link { color: #2563eb; text-decoration: none; font-size: 0.88rem; }
+    .back-link:hover { text-decoration: underline; }
+
+    .section-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        margin-bottom: 28px;
+    }
+
+    /* ── Controls ── */
+    .controls-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 20px;
+        flex-wrap: wrap;
+    }
+    .control-group { display: flex; flex-direction: column; gap: 5px; }
+    .control-group label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .control-select {
+        padding: 8px 12px;
+        border: 1.5px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        background: #fff;
+        cursor: pointer;
+        min-width: 200px;
+    }
+    .control-select:focus { outline: none; border-color: #2563eb; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        margin-left: auto;
+        padding: 6px 0;
+    }
+    .stat-item { text-align: center; }
+    .stat-value {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #1e2a3a;
+        line-height: 1;
+    }
+    .stat-label {
+        font-size: 0.7rem;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-top: 3px;
+    }
+    .stat-divider { width: 1px; height: 36px; background: #e5e7eb; }
+
+    /* ── Calendar ── */
+    .cal-scroll { overflow-x: auto; }
+    .cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 10px;
+        min-width: 700px;
+    }
+    .cal-day {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .cal-day-header {
+        background: #1e2a3a;
+        color: #fff;
+        text-align: center;
+        padding: 8px 4px;
+    }
+    .cal-day.today .cal-day-header { background: #2563eb; }
+    .cal-day-header .dow {
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+    .cal-day-header .dom {
+        font-size: 1.15rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    .cal-shifts { padding: 8px 7px; display: flex; flex-direction: column; gap: 6px; }
+    .cal-shift {
+        border-radius: 8px;
+        padding: 9px 11px;
+        background: #dbeafe;
+        border-left: 3px solid #2563eb;
+        font-size: 0.8rem;
+        color: #1e2a3a;
+        line-height: 1.5;
+    }
+    .cal-shift.special {
+        background: #d1fae5;
+        border-left-color: #16a34a;
+    }
+    .cal-shift .shift-time { font-weight: 700; }
+    .cal-shift .shift-loc  { color: #4b5563; font-size: 0.75rem; }
+    .cal-shift .shift-hrs  { color: #6b7280; font-size: 0.72rem; margin-top: 3px; }
+    .cal-shift .event-tag  {
+        display: inline-block;
+        background: #bbf7d0;
+        color: #166534;
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 6px;
+        margin-top: 3px;
+    }
+    .cal-off {
+        padding: 18px 6px;
+        text-align: center;
+        font-size: 0.78rem;
+        color: #d1d5db;
+        font-style: italic;
+    }
+
+    /* ── Empty / loading states ── */
+    .empty-state {
+        text-align: center;
+        padding: 48px 20px;
+        color: #9ca3af;
+        font-size: 0.92rem;
+    }
+
+    /* ── Toast ── */
+    .toast {
+        position: fixed;
+        bottom: 24px; right: 24px;
+        padding: 12px 20px;
+        border-radius: 9px;
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: #fff;
+        z-index: 9999;
+        opacity: 0;
+        transition: opacity 0.3s;
+        pointer-events: none;
+        max-width: 340px;
+    }
+    .toast.show { opacity: 1; }
+    .toast-error { background: #dc2626; }
+    .toast-info  { background: #2563eb; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a class="back-link" href="/operations/schedule">← Schedule Manager</a>
+    <h1 id="pageTitle">My Schedule</h1>
+</div>
+
+<!-- Controls -->
+<div class="section-card">
+    <div class="controls-row">
+        <div id="empPickerWrap" class="control-group" style="display:none;">
+            <label>Employee</label>
+            <select id="empSelect" class="control-select" onchange="onEmployeeChange()">
+                <option value="">Loading…</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Week</label>
+            <select id="weekSelect" class="control-select" onchange="onWeekChange()">
+                <option value="">Loading…</option>
+            </select>
+        </div>
+        <div class="stats-bar" id="statsBar" style="display:none;">
+            <div class="stat-item">
+                <div class="stat-value" id="statShifts">—</div>
+                <div class="stat-label">Shifts</div>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <div class="stat-value" id="statHours">—</div>
+                <div class="stat-label">Paid Hrs</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Calendar -->
+<div class="section-card">
+    <div class="cal-scroll">
+        <div class="cal-grid" id="calGrid">
+            <div style="grid-column:1/-1"><div class="empty-state">Loading…</div></div>
+        </div>
+    </div>
+    <div class="empty-state" id="noWeeks" style="display:none;">
+        No scheduled weeks found.
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────
+const token        = localStorage.getItem('access_token');
+let me             = null;     // { id, full_name, role }
+let selectedEmpId  = null;
+let selectedEmpName = '';
+let selectedWeek   = null;
+let employees      = [];
+let isScheduleAdmin = false;
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// ─── Init ─────────────────────────────────────────────────────────────────
+(async function init() {
+    try {
+        me = await apiFetch('/auth/me');
+        selectedEmpId   = me.id;
+        selectedEmpName = me.full_name || me.username;
+
+        const payload = parseJwt(token);
+        isScheduleAdmin = ['supervisor', 'manager', 'admin']
+            .includes((payload?.role || '').toLowerCase());
+
+        if (isScheduleAdmin) {
+            await loadEmployees();
+        } else {
+            document.getElementById('pageTitle').textContent = 'My Schedule';
+        }
+
+        await loadWeeks();
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+})();
+
+// ─── API helpers ──────────────────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+    const res = await fetch('/api/v1' + path, {
+        ...opts,
+        headers: { Authorization: 'Bearer ' + token, ...(opts.headers || {}) },
+    });
+    if (res.status === 204) return null;
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    return data;
+}
+
+function parseJwt(token) {
+    try {
+        return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    } catch { return null; }
+}
+
+// ─── Load employees (schedule admins only) ────────────────────────────────
+async function loadEmployees() {
+    try {
+        const meta = await apiFetch('/schedule/metadata');
+        employees = meta.employees || [];
+        const sel = document.getElementById('empSelect');
+        sel.innerHTML = employees.map(e =>
+            `<option value="${e.employee_id}"${e.employee_id === selectedEmpId ? ' selected' : ''}>${esc(e.full_name)}</option>`
+        ).join('');
+        document.getElementById('empPickerWrap').style.display = '';
+    } catch {
+        showToast('Could not load employee list.', 'error');
+    }
+}
+
+// ─── Load weeks for selected employee ─────────────────────────────────────
+async function loadWeeks() {
+    const sel = document.getElementById('weekSelect');
+    sel.innerHTML = '<option>Loading…</option>';
+    renderStats([]);
+
+    try {
+        const weeks = await apiFetch(`/schedule/employee-weeks?employee_id=${selectedEmpId}`);
+        if (!weeks.length) {
+            sel.innerHTML = '<option value="">No scheduled weeks</option>';
+            document.getElementById('calGrid').innerHTML =
+                '<div style="grid-column:1/-1"><div class="empty-state">No assignments scheduled yet.</div></div>';
+            return;
+        }
+        sel.innerHTML = weeks.map((w, i) =>
+            `<option value="${w}"${i === 0 ? ' selected' : ''}>${formatWeekLabel(w)}</option>`
+        ).join('');
+        selectedWeek = weeks[0];
+        await loadSchedule();
+    } catch (err) {
+        sel.innerHTML = '<option value="">Error</option>';
+        showToast('Could not load weeks: ' + err.message, 'error');
+    }
+}
+
+// ─── Event handlers ───────────────────────────────────────────────────────
+async function onEmployeeChange() {
+    const sel = document.getElementById('empSelect');
+    selectedEmpId = parseInt(sel.value, 10);
+    const emp = employees.find(e => e.employee_id === selectedEmpId);
+    selectedEmpName = emp ? emp.full_name : '';
+    await loadWeeks();
+}
+
+async function onWeekChange() {
+    selectedWeek = document.getElementById('weekSelect').value;
+    if (selectedWeek) await loadSchedule();
+}
+
+// ─── Load schedule ────────────────────────────────────────────────────────
+async function loadSchedule() {
+    if (!selectedWeek || !selectedEmpId) return;
+    document.getElementById('calGrid').innerHTML =
+        '<div style="grid-column:1/-1"><div class="empty-state">Loading…</div></div>';
+    try {
+        const shifts = await apiFetch(
+            `/schedule/employee-schedule?week=${selectedWeek}&employee_id=${selectedEmpId}`
+        );
+        renderCalendar(shifts);
+        renderStats(shifts);
+    } catch (err) {
+        showToast('Could not load schedule: ' + err.message, 'error');
+    }
+}
+
+// ─── Render stats ─────────────────────────────────────────────────────────
+function renderStats(shifts) {
+    const bar = document.getElementById('statsBar');
+    if (!shifts.length) { bar.style.display = 'none'; return; }
+
+    let paid = 0;
+    shifts.forEach(s => {
+        const raw = s.end_hour - s.start_hour;
+        paid += raw >= 6.75 ? raw - 0.5 : raw;
+    });
+    document.getElementById('statShifts').textContent = shifts.length;
+    document.getElementById('statHours').textContent  = fmtHours(paid);
+    bar.style.display = '';
+}
+
+// ─── Render calendar ──────────────────────────────────────────────────────
+function renderCalendar(shifts) {
+    const grid = document.getElementById('calGrid');
+    if (!selectedWeek) { grid.innerHTML = ''; return; }
+
+    const weekDate = new Date(selectedWeek + 'T00:00:00');
+    const todayMs  = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+
+    const byDay = {};
+    DAY_NAMES.forEach(d => { byDay[d] = []; });
+    shifts.forEach(s => { if (byDay[s.day_of_week] !== undefined) byDay[s.day_of_week].push(s); });
+    DAY_NAMES.forEach(d => byDay[d].sort((a, b) => a.start_hour - b.start_hour));
+
+    grid.innerHTML = DAY_NAMES.map((dow, i) => {
+        const dayDate = new Date(weekDate);
+        dayDate.setDate(weekDate.getDate() + i);
+        const isToday = dayDate.getTime() === todayMs;
+
+        const dayShifts = byDay[dow];
+        const body = dayShifts.length
+            ? `<div class="cal-shifts">${dayShifts.map(s => {
+                const raw  = s.end_hour - s.start_hour;
+                const paid = raw >= 6.75 ? raw - 0.5 : raw;
+                return `
+                <div class="cal-shift${s.special_event ? ' special' : ''}">
+                    <div class="shift-time">${decimalToDisplay(s.start_hour)} – ${decimalToDisplay(s.end_hour)}</div>
+                    <div class="shift-loc">${esc(s.location)} · Booth ${s.booth}</div>
+                    <div class="shift-hrs">${fmtHours(paid)} paid</div>
+                    ${s.special_event ? '<span class="event-tag">Special Event</span>' : ''}
+                </div>`;
+            }).join('')}</div>`
+            : '<div class="cal-off">Off</div>';
+
+        return `
+        <div class="cal-day${isToday ? ' today' : ''}">
+            <div class="cal-day-header">
+                <div class="dow">${dow}</div>
+                <div class="dom">${dayDate.getDate()}</div>
+            </div>
+            ${body}
+        </div>`;
+    }).join('');
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+function decimalToDisplay(h) {
+    const overflow = h >= 24;
+    const base  = h % 24;
+    const hours = Math.floor(base);
+    const mins  = Math.round((base - hours) * 60);
+    const ampm  = hours < 12 ? 'AM' : 'PM';
+    const h12   = hours % 12 || 12;
+    const mm    = String(mins).padStart(2, '0');
+    return `${h12}:${mm} ${ampm}${overflow ? ' (+1)' : ''}`;
+}
+
+function fmtHours(h) {
+    const whole = Math.floor(h);
+    const mins  = Math.round((h - whole) * 60);
+    return mins ? `${whole}h ${mins}m` : `${whole}h`;
+}
+
+function formatWeekLabel(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    return 'Week of ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function esc(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+let toastTimer;
+function showToast(msg, type = 'info') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `toast toast-${type} show`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+</script>
+{% endblock %}

@@ -31,12 +31,58 @@ class ParkingScheduler:
     
     def build(self):
         self._setup_variables()
-        #self.diagnose()
         self._apply_hard_constraints()
         self._apply_availability()
         self._apply_fixed_schedules()
         self._apply_soft_constraints()
         return self  # allows chaining: scheduler.build().solve()
+
+    def diagnose(self):
+        """Call after build() to surface constraint conflicts before solving."""
+        print(f"\n=== DIAGNOSTICS ===")
+        print(f"Employees: {len(self.all_cashiers)} | Shifts: {len(self.shifts)}")
+        print(f"Garages in shifts: {sorted(set(s[0] for s in self.shifts))}")
+
+        # Check fixed schedule matches
+        mcconley_id = int(self.employees[self.employees['last_name'] == 'McConley'].iloc[0]['employee_id'])
+        chan_id = int(self.employees[self.employees['last_name'] == 'Chan'].iloc[0]['employee_id'])
+        fixed_keys = {
+            ('Frances', '2', 'Tue'), ('Frances', '2', 'Wed'), ('Frances', '2', 'Thu'),
+            ('Frances', '2', 'Fri'), ('Frances', '2', 'Sat'),
+            ('Frances', '1', 'Mon'), ('Frances', '1', 'Tue'), ('Frances', '1', 'Wed'),
+            ('Frances', '1', 'Thu'), ('Frances', '1', 'Fri'),
+        }
+        matched = [(s, self.shifts[s]) for s in self.shift_ids if (self.shifts[s][0], self.shifts[s][1], self.shifts[s][2]) in fixed_keys]
+        print(f"\nFixed schedule matches: {len(matched)} (expected 10)")
+        for s, shift in matched:
+            print(f"  shift {s}: {shift}")
+
+        # Check availability conflicts with fixed employees
+        print(f"\nAvailability conflicts with fixed schedule:")
+        fixed_emp_days = {
+            mcconley_id: {'Tue', 'Wed', 'Thu', 'Fri', 'Sat'},
+            chan_id: {'Mon', 'Tue', 'Wed', 'Thu', 'Fri'},
+        }
+        for emp_id, required_days in fixed_emp_days.items():
+            name = self.employees[self.employees['employee_id'] == emp_id].iloc[0]['last_name']
+            blocked = required_days - self.availability.get(emp_id, set(self.days))
+            if blocked:
+                print(f"  {name} (id={emp_id}) has time-off on fixed days: {blocked}  <-- CONFLICT")
+            else:
+                print(f"  {name} (id={emp_id}): OK")
+
+        # Check for shifts with no eligible employees
+        print(f"\nShifts with no eligible cashiers:")
+        found = False
+        for s in self.shift_ids:
+            garage, booth, day, start, end = self.shifts[s]
+            eligible = [c for c in self.all_cashiers if day in self.availability.get(c, set(self.days))]
+            if not eligible:
+                print(f"  shift {s}: {garage} booth={booth} {day} {start}-{end}")
+                found = True
+        if not found:
+            print("  None")
+        print("===================\n")
 
     def solve(self, time_limit=30.0):
         self.solver.parameters.max_time_in_seconds = time_limit

@@ -82,7 +82,7 @@ class ParkingScheduler:
         #HOURLY_CASHIERS = self.employees[self.employees['Type']=='Hourly']['cashier_id'].tolist()
         #PERMANENT_CASHIERS = self.employees[self.employees['Type']=='Full Time']['cashier_id'].tolist()
         #self.all_cashiers = PERMANENT_CASHIERS + HOURLY_CASHIERS
-        self.all_cashiers = self.employees['cashier_id'].tolist()
+        self.all_cashiers = self.employees['employee_id'].tolist()
         self.get_requests()
 
     
@@ -119,22 +119,27 @@ class ParkingScheduler:
             )
         
         # Hard constraint: Treleven can only work shifts <= 6 hours
+        treleven_id = int(
+            self.employees[self.employees['last_name'] == 'Treleven'].iloc[0]['employee_id']
+        )
         for s in self.shift_ids:
             _, _, _, start, end = self.shifts[s]
             if (end - start) > 6.0:
-                self.model.Add(self._assign[(self.employees[self.employees['last_name']=='Treleven'].iloc[0]['employee_id'].astype(int), s)] == 0)
+                self.model.Add(self._assign[(treleven_id, s)] == 0)
         
         # Hard constraint: Wood only available M-F at 7pm or later, full availability Sat/Sun
+        wood_id = int(self.employees[self.employees['last_name']=='Wood'].iloc[0]['employee_id'])
         for s in self.shift_ids:
             _, _, day, start, end = self.shifts[s]
             if day in self.weekdays and start < 19.0:
-                self.model.Add(self._assign[(self.employees[self.employees['last_name']=='Wood'].iloc[0]['employee_id'].astype(int), s)] == 0)
+                self.model.Add(self._assign[(wood_id, s)] == 0)
         
         # Hard constraint: Siegel only available M-F at 5:15pm or later, full Sat/Sun
+        siegel_id = int(self.employees[self.employees['last_name']=='Siegel'].iloc[0]['employee_id'])
         for s in self.shift_ids:
             _, _, day, start, end = self.shifts[s]
             if day in self.weekdays and start < 17.25:
-                self.model.Add(self._assign[(self.employees[self.employees['last_name']=='Siegel'].iloc[0]['employee_id'].astype(int), s)] == 0)
+                self.model.Add(self._assign[(siegel_id, s)] == 0)
         return
         
 
@@ -211,18 +216,18 @@ class ParkingScheduler:
         # Hard constraint: McConley/Chan fixed schedule
         # Find matching shift indices and force assign to McConley/Chan
         mcconley_assignments = {
-            ('Frances', 2, 'Tue'): 12,
-            ('Frances', 2, 'Wed'): 12,
-            ('Frances', 2, 'Thu'): 12,
-            ('Frances', 2, 'Fri'): 12,
-            ('Frances', 2, 'Sat'): 12,
+            ('Frances', '2', 'Tue'): 14,
+            ('Frances', '2', 'Wed'): 14,
+            ('Frances', '2', 'Thu'): 14,
+            ('Frances', '2', 'Fri'): 14,
+            ('Frances', '2', 'Sat'): 14,
         }        
         chan_assignments = {
-            ('Frances', 1, 'Mon'): 33,
-            ('Frances', 1, 'Tue'): 33,
-            ('Frances', 1, 'Wed'): 33,
-            ('Frances', 1, 'Thu'): 33,
-            ('Frances', 1, 'Fri'): 33,
+            ('Frances', '1', 'Mon'): 10,
+            ('Frances', '1', 'Tue'): 10,
+            ('Frances', '1', 'Wed'): 10,
+            ('Frances', '1', 'Thu'): 10,
+            ('Frances', '1', 'Fri'): 10,
         }
         
         fixed_assignments = {**mcconley_assignments, **chan_assignments}

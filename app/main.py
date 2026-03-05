@@ -174,6 +174,11 @@ async def time_off_page(request: Request):
     """Time-off request management — submit and review requests"""
     return templates.TemplateResponse(name="time_off_requests.html", context={"request": request})
 
+@app.get("/operations/special-events", response_class=HTMLResponse)
+async def special_events_page(request: Request):
+    """Special events — log city events that affect parking operations"""
+    return templates.TemplateResponse(name="special_events.html", context={"request": request})
+
 
 # ── Cityworks Section ────────────────────────────────────────────────────────
 

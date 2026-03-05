@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import auth, cityworks_endpoint, uploads, health, transactions, file_status, admin, users
-from app.api.v1.endpoints import reports, cash_variance, schedule, time_off
+from app.api.v1.endpoints import reports, cash_variance, schedule, time_off, special_events
 
 api_router = APIRouter()
 
@@ -17,3 +17,4 @@ api_router.include_router(cash_variance.router)
 api_router.include_router(cityworks_endpoint.router)
 api_router.include_router(schedule.router)
 api_router.include_router(time_off.router)
+api_router.include_router(special_events.router)

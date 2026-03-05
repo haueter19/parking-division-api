@@ -1,0 +1,620 @@
+{% extends "base.html" %}
+{% set current_section = "operations" %}
+
+{% block title %}Special Events – Parking Division{% endblock %}
+
+{% block head_extra %}
+<style>
+    .page-header { margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .page-header h1 { font-size: 1.5rem; color: #1e2a3a; font-weight: 700; }
+    .page-header p  { color: #6b7280; margin-top: 4px; font-size: 0.95rem; }
+
+    /* ── Filters ── */
+    .filters-card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 18px 20px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+        margin-bottom: 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        align-items: flex-end;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 5px; }
+    .filter-group label { font-size: 0.8rem; font-weight: 600; color: #4a5568; }
+    .filter-group select,
+    .filter-group input[type="date"],
+    .filter-group input[type="text"] {
+        padding: 8px 10px;
+        border: 2px solid #e2e8f0;
+        border-radius: 7px;
+        font-size: 0.88rem;
+        outline: none;
+        transition: border-color 0.2s;
+        min-width: 150px;
+    }
+    .filter-group select:focus,
+    .filter-group input:focus { border-color: #2563eb; }
+
+    /* ── Buttons ── */
+    .btn {
+        padding: 9px 20px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.88rem;
+        font-weight: 600;
+        transition: background 0.15s;
+        white-space: nowrap;
+    }
+    .btn-primary   { background: #2563eb; color: #fff; }
+    .btn-primary:hover   { background: #1d4ed8; }
+    .btn-secondary { background: #f1f5f9; color: #374151; border: 1px solid #e2e8f0; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn-danger    { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .btn-danger:hover    { background: #fecaca; }
+    .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Table ── */
+    .table-wrap {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: #1e2a3a; color: #fff; }
+    th { padding: 13px 16px; text-align: left; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+    td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.88rem; color: #374151; vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #f8faff; }
+    .empty-row td { text-align: center; color: #9ca3af; padding: 48px; }
+
+    /* ── Badges ── */
+    .badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 10px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    /* Status */
+    .status-planned   { background: #dbeafe; color: #1e40af; }
+    .status-confirmed { background: #d1fae5; color: #065f46; }
+    .status-cancelled { background: #f3f4f6; color: #9ca3af; }
+    .status-completed { background: #ede9fe; color: #5b21b6; }
+    /* Impact */
+    .impact-low    { background: #d1fae5; color: #065f46; }
+    .impact-medium { background: #fef9c3; color: #854d0e; }
+    .impact-high   { background: #fee2e2; color: #991b1b; }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+        display: none;
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.4);
+        z-index: 3000;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 40px 16px;
+        overflow-y: auto;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+        background: #fff;
+        border-radius: 14px;
+        padding: 32px;
+        width: 100%;
+        max-width: 560px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+        position: relative;
+        margin: auto;
+    }
+    .modal h2 { font-size: 1.2rem; font-weight: 700; color: #1e2a3a; margin-bottom: 24px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 0.83rem; font-weight: 600; color: #4a5568; }
+    .form-group select,
+    .form-group input[type="datetime-local"],
+    .form-group input[type="number"],
+    .form-group input[type="text"] {
+        padding: 10px 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 0.93rem;
+        outline: none;
+        transition: border-color 0.2s;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .form-group select:focus,
+    .form-group input:focus { border-color: #2563eb; }
+    .form-group textarea {
+        padding: 10px 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 0.88rem;
+        outline: none;
+        transition: border-color 0.2s;
+        width: 100%;
+        box-sizing: border-box;
+        resize: vertical;
+        min-height: 72px;
+        font-family: inherit;
+    }
+    .form-group textarea:focus { border-color: #2563eb; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+    .modal-close {
+        position: absolute; top: 16px; right: 18px;
+        background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #9ca3af;
+        line-height: 1;
+    }
+    .modal-close:hover { color: #374151; }
+
+    /* ── Toast ── */
+    .toast {
+        position: fixed; bottom: 24px; right: 24px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 0.25s, transform 0.25s;
+        pointer-events: none;
+        z-index: 9999;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast-success { background: #16a34a; }
+    .toast-error   { background: #dc2626; }
+
+    /* ── Error banner ── */
+    .error-banner {
+        background: #fee2e2; color: #991b1b;
+        padding: 12px 18px; border-radius: 8px; margin-bottom: 20px;
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Special Events</h1>
+        <p>City events that affect parking operations, staffing, and revenue.</p>
+    </div>
+    <button class="btn btn-primary" id="newEventBtn" onclick="openNewModal()" style="display:none">+ Add Event</button>
+</div>
+
+<div id="errorBanner" class="error-banner"></div>
+
+<!-- Filters -->
+<div class="filters-card">
+    <div class="filter-group">
+        <label for="filterSearch">Search Name</label>
+        <input type="text" id="filterSearch" placeholder="Event name…">
+    </div>
+    <div class="filter-group">
+        <label for="filterFrom">From Date</label>
+        <input type="date" id="filterFrom">
+    </div>
+    <div class="filter-group">
+        <label for="filterTo">To Date</label>
+        <input type="date" id="filterTo">
+    </div>
+    <div class="filter-group">
+        <label for="filterStatus">Status</label>
+        <select id="filterStatus">
+            <option value="">All Statuses</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label for="filterType">Event Type</label>
+        <select id="filterType">
+            <option value="">All Types</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label for="filterLocation">Location</label>
+        <select id="filterLocation">
+            <option value="">All Locations</option>
+        </select>
+    </div>
+    <button class="btn btn-secondary" onclick="loadEvents()">Apply</button>
+</div>
+
+<!-- Events Table -->
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Event</th>
+                <th>Type</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Location</th>
+                <th>Attendance</th>
+                <th>Impact</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="eventsBody">
+            <tr class="empty-row"><td colspan="9">Loading…</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- New / Edit Modal -->
+<div class="modal-backdrop" id="eventModal" onclick="onBackdropClick(event)">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModal()">&#x2715;</button>
+        <h2 id="modalTitle">Add Special Event</h2>
+
+        <div class="form-group">
+            <label for="formName">Event Name *</label>
+            <input type="text" id="formName" placeholder="e.g. Riverfest 2026">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="formStart">Start *</label>
+                <input type="datetime-local" id="formStart">
+            </div>
+            <div class="form-group">
+                <label for="formEnd">End *</label>
+                <input type="datetime-local" id="formEnd">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="formType">Event Type</label>
+                <select id="formType">
+                    <option value="">— Select —</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="formLocation">Location</label>
+                <select id="formLocation">
+                    <option value="">— None —</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="formAttendance">Expected Attendance</label>
+                <input type="number" id="formAttendance" min="0" placeholder="e.g. 5000">
+            </div>
+            <div class="form-group">
+                <label for="formImpact">Parking Impact</label>
+                <select id="formImpact">
+                    <option value="">— Select —</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="formStatus">Status</label>
+            <select id="formStatus"></select>
+        </div>
+
+        <div class="form-group">
+            <label for="formNotes">Notes</label>
+            <textarea id="formNotes" placeholder="General notes…"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="formOpsNotes">Ops Plan Notes</label>
+            <textarea id="formOpsNotes" placeholder="Operational plan, staffing instructions…"></textarea>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" id="saveBtn" onclick="saveEvent()">Save Event</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+    const token = localStorage.getItem('access_token');
+
+    let userRole = '';
+    try {
+        const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(atob(b64));
+        userRole = (payload.role || '').toLowerCase();
+    } catch(e) {}
+
+    const MANAGE_ROLES = ['supervisor', 'manager', 'admin'];
+    const canManage = MANAGE_ROLES.includes(userRole);
+
+    let meta = { event_types: [], statuses: [], impact_levels: [], locations: [] };
+    let allEvents = [];
+    let editingId = null;
+    let toastTimer;
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    async function init() {
+        try {
+            meta = await apiFetch('/api/v1/special-events/metadata');
+            populateFilterDropdowns();
+            populateFormDropdowns();
+        } catch (err) {
+            showError(err.message);
+        }
+
+        if (canManage) {
+            document.getElementById('newEventBtn').style.display = 'block';
+        }
+
+        await loadEvents();
+    }
+
+    function populateFilterDropdowns() {
+        const statusSel   = document.getElementById('filterStatus');
+        const typeSel     = document.getElementById('filterType');
+        const locationSel = document.getElementById('filterLocation');
+
+        meta.statuses.forEach(s => statusSel.appendChild(new Option(s, s)));
+        meta.event_types.forEach(t => typeSel.appendChild(new Option(t, t)));
+        meta.locations.forEach(l => locationSel.appendChild(new Option(l.location_name, l.location_id)));
+    }
+
+    function populateFormDropdowns() {
+        const typeSel     = document.getElementById('formType');
+        const locationSel = document.getElementById('formLocation');
+        const impactSel   = document.getElementById('formImpact');
+        const statusSel   = document.getElementById('formStatus');
+
+        meta.event_types.forEach(t => typeSel.appendChild(new Option(t, t)));
+        meta.locations.forEach(l => locationSel.appendChild(new Option(l.location_name, l.location_id)));
+        meta.impact_levels.forEach(i => impactSel.appendChild(new Option(i, i)));
+        meta.statuses.forEach(s => statusSel.appendChild(new Option(s, s)));
+    }
+
+    // ── Load events ───────────────────────────────────────────────────────────
+    window.loadEvents = async function () {
+        const params = new URLSearchParams();
+        const search   = document.getElementById('filterSearch').value.trim();
+        const fromVal  = document.getElementById('filterFrom').value;
+        const toVal    = document.getElementById('filterTo').value;
+        const status   = document.getElementById('filterStatus').value;
+        const type     = document.getElementById('filterType').value;
+        const location = document.getElementById('filterLocation').value;
+
+        if (search)   params.set('search', search);
+        if (fromVal)  params.set('date_from', fromVal);
+        if (toVal)    params.set('date_to', toVal);
+        if (status)   params.set('status', status);
+        if (type)     params.set('event_type', type);
+        if (location) params.set('location_id', location);
+
+        const tbody = document.getElementById('eventsBody');
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="9">Loading…</td></tr>';
+
+        try {
+            allEvents = await apiFetch('/api/v1/special-events?' + params.toString());
+
+            if (!allEvents.length) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="9">No events found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = allEvents.map(e => {
+                const statusBadge = `<span class="badge status-${(e.status || '').toLowerCase()}">${esc(e.status)}</span>`;
+                const impactBadge = e.impact_level
+                    ? `<span class="badge impact-${(e.impact_level || '').toLowerCase()}">${esc(e.impact_level)}</span>`
+                    : '—';
+
+                let actions = '';
+                if (canManage) {
+                    actions = `
+                        <button class="btn btn-sm btn-secondary" onclick="openEditModal(${e.event_id})" style="margin-right:6px">Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteEvent(${e.event_id})">Delete</button>
+                    `;
+                }
+
+                return `<tr>
+                    <td><strong>${esc(e.event_name)}</strong></td>
+                    <td>${esc(e.event_type) || '—'}</td>
+                    <td style="white-space:nowrap">${fmtDt(e.event_start)}</td>
+                    <td style="white-space:nowrap">${fmtDt(e.event_end)}</td>
+                    <td>${esc(e.location_name) || '—'}</td>
+                    <td>${e.expected_attendance != null ? e.expected_attendance.toLocaleString() : '—'}</td>
+                    <td>${impactBadge}</td>
+                    <td>${statusBadge}</td>
+                    <td style="white-space:nowrap">${actions}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            showError(err.message);
+        }
+    };
+
+    // ── Modal helpers ─────────────────────────────────────────────────────────
+    function clearForm() {
+        document.getElementById('formName').value       = '';
+        document.getElementById('formStart').value      = '';
+        document.getElementById('formEnd').value        = '';
+        document.getElementById('formType').value       = '';
+        document.getElementById('formLocation').value   = '';
+        document.getElementById('formAttendance').value = '';
+        document.getElementById('formImpact').value     = '';
+        document.getElementById('formStatus').value     = meta.statuses[0] || 'Planned';
+        document.getElementById('formNotes').value      = '';
+        document.getElementById('formOpsNotes').value   = '';
+    }
+
+    window.openNewModal = function () {
+        editingId = null;
+        clearForm();
+        document.getElementById('modalTitle').textContent = 'Add Special Event';
+        document.getElementById('saveBtn').textContent    = 'Save Event';
+        document.getElementById('eventModal').classList.add('open');
+    };
+
+    window.openEditModal = function (eventId) {
+        const e = allEvents.find(x => x.event_id === eventId);
+        if (!e) return;
+        editingId = eventId;
+
+        document.getElementById('formName').value       = e.event_name || '';
+        document.getElementById('formStart').value      = toLocalInput(e.event_start);
+        document.getElementById('formEnd').value        = toLocalInput(e.event_end);
+        document.getElementById('formType').value       = e.event_type || '';
+        document.getElementById('formLocation').value   = e.location_id || '';
+        document.getElementById('formAttendance').value = e.expected_attendance != null ? e.expected_attendance : '';
+        document.getElementById('formImpact').value     = e.impact_level || '';
+        document.getElementById('formStatus').value     = e.status || 'Planned';
+        document.getElementById('formNotes').value      = e.notes || '';
+        document.getElementById('formOpsNotes').value   = e.ops_notes || '';
+
+        document.getElementById('modalTitle').textContent = 'Edit Event';
+        document.getElementById('saveBtn').textContent    = 'Save Changes';
+        document.getElementById('eventModal').classList.add('open');
+    };
+
+    window.closeModal = function () {
+        document.getElementById('eventModal').classList.remove('open');
+    };
+
+    window.onBackdropClick = function (e) {
+        if (e.target === document.getElementById('eventModal')) closeModal();
+    };
+
+    // ── Save ──────────────────────────────────────────────────────────────────
+    window.saveEvent = async function () {
+        const name  = document.getElementById('formName').value.trim();
+        const start = document.getElementById('formStart').value;
+        const end   = document.getElementById('formEnd').value;
+
+        if (!name || !start || !end) {
+            showToast('Event name, start, and end are required.', 'error');
+            return;
+        }
+        if (end <= start) {
+            showToast('End must be after start.', 'error');
+            return;
+        }
+
+        const body = {
+            event_name:          name,
+            event_start:         start.replace('T', ' '),
+            event_end:           end.replace('T', ' '),
+            location_id:         parseInt(document.getElementById('formLocation').value) || null,
+            event_type:          document.getElementById('formType').value || null,
+            expected_attendance: parseInt(document.getElementById('formAttendance').value) || null,
+            status:              document.getElementById('formStatus').value,
+            impact_level:        document.getElementById('formImpact').value || null,
+            notes:               document.getElementById('formNotes').value.trim() || null,
+            ops_notes:           document.getElementById('formOpsNotes').value.trim() || null,
+        };
+
+        const btn = document.getElementById('saveBtn');
+        btn.disabled = true;
+
+        try {
+            if (editingId) {
+                await apiFetch(`/api/v1/special-events/${editingId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(body),
+                });
+                showToast('Event updated.', 'success');
+            } else {
+                await apiFetch('/api/v1/special-events', {
+                    method: 'POST',
+                    body: JSON.stringify(body),
+                });
+                showToast('Event added.', 'success');
+            }
+            closeModal();
+            loadEvents();
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    };
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+    window.deleteEvent = async function (eventId) {
+        const e = allEvents.find(x => x.event_id === eventId);
+        const label = e ? `"${e.event_name}"` : 'this event';
+        if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+        try {
+            await apiFetch(`/api/v1/special-events/${eventId}`, { method: 'DELETE' });
+            showToast('Event deleted.', 'success');
+            loadEvents();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    };
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    async function apiFetch(url, opts = {}) {
+        const res = await fetch(url, {
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type':  'application/json',
+                ...(opts.headers || {}),
+            },
+            ...opts,
+        });
+        if (!res.ok) {
+            let msg = `Error ${res.status}`;
+            try { const j = await res.json(); msg = j.detail || msg; } catch(e) {}
+            throw new Error(msg);
+        }
+        if (res.status === 204) return null;
+        return res.json();
+    }
+
+    function fmtDt(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso.replace(' ', 'T'));
+        return d.toLocaleString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: 'numeric', minute: '2-digit'
+        });
+    }
+
+    // Convert "2026-06-01 18:00:00" → "2026-06-01T18:00" for datetime-local input
+    function toLocalInput(iso) {
+        if (!iso) return '';
+        return iso.replace(' ', 'T').substring(0, 16);
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function showToast(msg, type = 'info') {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.className = `toast toast-${type} show`;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+    }
+
+    function showError(msg) {
+        const el = document.getElementById('errorBanner');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+
+    init();
+})();
+</script>
+{% endblock %}

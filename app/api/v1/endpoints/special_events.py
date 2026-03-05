@@ -23,7 +23,7 @@ VIEW_ROLES = list(UserRole)  # all authenticated roles can view
 
 EVENT_TYPES = [
     "Concert", "Sports", "Festival", "Convention", "Parade",
-    "Marathon/Race", "Fair/Expo", "Government/Civic", "Other"
+    "Marathon/Race", "Fair/Expo", "Government/Civic", "Political", "Other", 
 ]
 STATUSES = ["Planned", "Confirmed", "Cancelled", "Completed"]
 
@@ -121,7 +121,7 @@ async def list_events(
             CONVERT(VARCHAR(19), e.event_start, 120) AS event_start,
             CONVERT(VARCHAR(19), e.event_end,   120) AS event_end,
             e.location_id,
-            f.facility_name,
+            f.facility_name location_name,
             e.event_venue,
             e.event_type,
             e.status,

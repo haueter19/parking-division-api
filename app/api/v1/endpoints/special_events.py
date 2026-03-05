@@ -6,20 +6,19 @@ These events inform cashier scheduling and are inputs for future revenue predict
 
 Table DDL (run once in SQL Server):
     CREATE TABLE app.special_events (
-        event_id            INT IDENTITY(1,1) PRIMARY KEY,
-        event_name          NVARCHAR(200)  NOT NULL,
-        event_start         DATETIME2      NOT NULL,
-        event_end           DATETIME2      NOT NULL,
-        location_id         INT            NULL REFERENCES app.dim_location(location_id),
-        event_type          NVARCHAR(50)   NULL,
-        expected_attendance INT            NULL,
-        status              NVARCHAR(20)   NOT NULL DEFAULT 'Planned',
-        impact_level        NVARCHAR(10)   NULL,
-        notes               NVARCHAR(MAX)  NULL,
-        ops_notes           NVARCHAR(MAX)  NULL,
-        created_by          NVARCHAR(100)  NULL,
-        created_at          DATETIME2      NOT NULL DEFAULT GETDATE(),
-        updated_at          DATETIME2      NULL
+        event_id    INT IDENTITY(1,1) PRIMARY KEY,
+        event_name  NVARCHAR(200)  NOT NULL,
+        event_start DATETIME2      NOT NULL,
+        event_end   DATETIME2      NOT NULL,
+        location_id INT            NULL REFERENCES app.dim_location(location_id),
+        event_type  NVARCHAR(50)   NULL,
+        status      NVARCHAR(20)   NOT NULL DEFAULT 'Planned',
+        notes       NVARCHAR(MAX)  NULL,
+        ops_notes   NVARCHAR(MAX)  NULL,
+        created_by  NVARCHAR(100)  NULL,
+        created_at  DATETIME2      NOT NULL DEFAULT GETDATE(),
+        updated_by  NVARCHAR(100)  NULL,
+        updated_at  DATETIME2      NULL
     );
 """
 from fastapi import APIRouter, Depends, HTTPException
@@ -43,7 +42,6 @@ EVENT_TYPES = [
     "Marathon/Race", "Fair/Expo", "Government/Civic", "Other"
 ]
 STATUSES = ["Planned", "Confirmed", "Cancelled", "Completed"]
-IMPACT_LEVELS = ["Low", "Medium", "High"]
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
@@ -54,9 +52,7 @@ class EventCreate(BaseModel):
     event_end: str
     location_id: Optional[int] = None
     event_type: Optional[str] = None
-    expected_attendance: Optional[int] = None
     status: str = "Planned"
-    impact_level: Optional[str] = None
     notes: Optional[str] = None
     ops_notes: Optional[str] = None
 
@@ -67,9 +63,7 @@ class EventUpdate(BaseModel):
     event_end: Optional[str] = None
     location_id: Optional[int] = None
     event_type: Optional[str] = None
-    expected_attendance: Optional[int] = None
     status: Optional[str] = None
-    impact_level: Optional[str] = None
     notes: Optional[str] = None
     ops_notes: Optional[str] = None
 
@@ -87,9 +81,8 @@ async def get_metadata(
     """)).fetchall()
 
     return {
-        "event_types":   EVENT_TYPES,
-        "statuses":      STATUSES,
-        "impact_levels": IMPACT_LEVELS,
+        "event_types": EVENT_TYPES,
+        "statuses":    STATUSES,
         "locations": [
             {"location_id": r.location_id, "location_name": r.location_name}
             for r in locations
@@ -140,13 +133,12 @@ async def list_events(
             e.location_id,
             l.location_name,
             e.event_type,
-            e.expected_attendance,
             e.status,
-            e.impact_level,
             e.notes,
             e.ops_notes,
             e.created_by,
             CONVERT(VARCHAR(19), e.created_at, 120) AS created_at,
+            e.updated_by,
             CONVERT(VARCHAR(19), e.updated_at, 120) AS updated_at
         FROM app.special_events e
         LEFT JOIN app.dim_location l ON l.location_id = e.location_id
@@ -168,26 +160,22 @@ async def create_event(
     sql = text("""
         INSERT INTO app.special_events
             (event_name, event_start, event_end, location_id, event_type,
-             expected_attendance, status, impact_level, notes, ops_notes,
-             created_by, created_at)
+             status, notes, ops_notes, created_by, created_at)
         OUTPUT INSERTED.event_id
         VALUES
             (:event_name, :event_start, :event_end, :location_id, :event_type,
-             :expected_attendance, :status, :impact_level, :notes, :ops_notes,
-             :created_by, GETDATE())
+             :status, :notes, :ops_notes, :created_by, GETDATE())
     """)
     result = db.execute(sql, {
-        "event_name":          body.event_name,
-        "event_start":         body.event_start,
-        "event_end":           body.event_end,
-        "location_id":         body.location_id,
-        "event_type":          body.event_type,
-        "expected_attendance": body.expected_attendance,
-        "status":              body.status,
-        "impact_level":        body.impact_level,
-        "notes":               body.notes,
-        "ops_notes":           body.ops_notes,
-        "created_by":          current_user.username,
+        "event_name":  body.event_name,
+        "event_start": body.event_start,
+        "event_end":   body.event_end,
+        "location_id": body.location_id,
+        "event_type":  body.event_type,
+        "status":      body.status,
+        "notes":       body.notes,
+        "ops_notes":   body.ops_notes,
+        "created_by":  current_user.username,
     })
     new_id = result.scalar()
     db.commit()
@@ -207,16 +195,14 @@ async def update_event(
     params: dict = {"event_id": event_id}
 
     field_map = {
-        "event_name":          body.event_name,
-        "event_start":         body.event_start,
-        "event_end":           body.event_end,
-        "location_id":         body.location_id,
-        "event_type":          body.event_type,
-        "expected_attendance": body.expected_attendance,
-        "status":              body.status,
-        "impact_level":        body.impact_level,
-        "notes":               body.notes,
-        "ops_notes":           body.ops_notes,
+        "event_name":  body.event_name,
+        "event_start": body.event_start,
+        "event_end":   body.event_end,
+        "location_id": body.location_id,
+        "event_type":  body.event_type,
+        "status":      body.status,
+        "notes":       body.notes,
+        "ops_notes":   body.ops_notes,
     }
     for col, val in field_map.items():
         if val is not None:
@@ -226,7 +212,9 @@ async def update_event(
     if not set_clauses:
         raise HTTPException(status_code=400, detail="No fields to update.")
 
+    set_clauses.append("updated_by = :updated_by")
     set_clauses.append("updated_at = GETDATE()")
+    params["updated_by"] = current_user.username
 
     sql = text(f"""
         UPDATE app.special_events

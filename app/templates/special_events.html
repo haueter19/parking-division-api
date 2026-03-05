@@ -86,10 +86,6 @@
     .status-confirmed { background: #d1fae5; color: #065f46; }
     .status-cancelled { background: #f3f4f6; color: #9ca3af; }
     .status-completed { background: #ede9fe; color: #5b21b6; }
-    /* Impact */
-    .impact-low    { background: #d1fae5; color: #065f46; }
-    .impact-medium { background: #fef9c3; color: #854d0e; }
-    .impact-high   { background: #fee2e2; color: #991b1b; }
 
     /* ── Modal ── */
     .modal-backdrop {
@@ -239,14 +235,13 @@
                 <th>Start</th>
                 <th>End</th>
                 <th>Location</th>
-                <th>Attendance</th>
-                <th>Impact</th>
                 <th>Status</th>
+                <th>Last Updated</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody id="eventsBody">
-            <tr class="empty-row"><td colspan="9">Loading…</td></tr>
+            <tr class="empty-row"><td colspan="8">Loading…</td></tr>
         </tbody>
     </table>
 </div>
@@ -284,19 +279,6 @@
                 <label for="formLocation">Location</label>
                 <select id="formLocation">
                     <option value="">— None —</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="form-row">
-            <div class="form-group">
-                <label for="formAttendance">Expected Attendance</label>
-                <input type="number" id="formAttendance" min="0" placeholder="e.g. 5000">
-            </div>
-            <div class="form-group">
-                <label for="formImpact">Parking Impact</label>
-                <select id="formImpact">
-                    <option value="">— Select —</option>
                 </select>
             </div>
         </div>
@@ -374,12 +356,10 @@
     function populateFormDropdowns() {
         const typeSel     = document.getElementById('formType');
         const locationSel = document.getElementById('formLocation');
-        const impactSel   = document.getElementById('formImpact');
         const statusSel   = document.getElementById('formStatus');
 
         meta.event_types.forEach(t => typeSel.appendChild(new Option(t, t)));
         meta.locations.forEach(l => locationSel.appendChild(new Option(l.location_name, l.location_id)));
-        meta.impact_levels.forEach(i => impactSel.appendChild(new Option(i, i)));
         meta.statuses.forEach(s => statusSel.appendChild(new Option(s, s)));
     }
 
@@ -401,20 +381,20 @@
         if (location) params.set('location_id', location);
 
         const tbody = document.getElementById('eventsBody');
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="9">Loading…</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Loading…</td></tr>';
 
         try {
             allEvents = await apiFetch('/api/v1/special-events?' + params.toString());
 
             if (!allEvents.length) {
-                tbody.innerHTML = '<tr class="empty-row"><td colspan="9">No events found.</td></tr>';
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No events found.</td></tr>';
                 return;
             }
 
             tbody.innerHTML = allEvents.map(e => {
                 const statusBadge = `<span class="badge status-${(e.status || '').toLowerCase()}">${esc(e.status)}</span>`;
-                const impactBadge = e.impact_level
-                    ? `<span class="badge impact-${(e.impact_level || '').toLowerCase()}">${esc(e.impact_level)}</span>`
+                const updatedStr  = e.updated_at
+                    ? `${fmtDt(e.updated_at)}<br><span style="font-size:0.78rem;color:#9ca3af">${esc(e.updated_by)}</span>`
                     : '—';
 
                 let actions = '';
@@ -431,9 +411,8 @@
                     <td style="white-space:nowrap">${fmtDt(e.event_start)}</td>
                     <td style="white-space:nowrap">${fmtDt(e.event_end)}</td>
                     <td>${esc(e.location_name) || '—'}</td>
-                    <td>${e.expected_attendance != null ? e.expected_attendance.toLocaleString() : '—'}</td>
-                    <td>${impactBadge}</td>
                     <td>${statusBadge}</td>
+                    <td style="font-size:0.82rem">${updatedStr}</td>
                     <td style="white-space:nowrap">${actions}</td>
                 </tr>`;
             }).join('');
@@ -444,16 +423,14 @@
 
     // ── Modal helpers ─────────────────────────────────────────────────────────
     function clearForm() {
-        document.getElementById('formName').value       = '';
-        document.getElementById('formStart').value      = '';
-        document.getElementById('formEnd').value        = '';
-        document.getElementById('formType').value       = '';
-        document.getElementById('formLocation').value   = '';
-        document.getElementById('formAttendance').value = '';
-        document.getElementById('formImpact').value     = '';
-        document.getElementById('formStatus').value     = meta.statuses[0] || 'Planned';
-        document.getElementById('formNotes').value      = '';
-        document.getElementById('formOpsNotes').value   = '';
+        document.getElementById('formName').value     = '';
+        document.getElementById('formStart').value    = '';
+        document.getElementById('formEnd').value      = '';
+        document.getElementById('formType').value     = '';
+        document.getElementById('formLocation').value = '';
+        document.getElementById('formStatus').value   = meta.statuses[0] || 'Planned';
+        document.getElementById('formNotes').value    = '';
+        document.getElementById('formOpsNotes').value = '';
     }
 
     window.openNewModal = function () {
@@ -469,16 +446,14 @@
         if (!e) return;
         editingId = eventId;
 
-        document.getElementById('formName').value       = e.event_name || '';
-        document.getElementById('formStart').value      = toLocalInput(e.event_start);
-        document.getElementById('formEnd').value        = toLocalInput(e.event_end);
-        document.getElementById('formType').value       = e.event_type || '';
-        document.getElementById('formLocation').value   = e.location_id || '';
-        document.getElementById('formAttendance').value = e.expected_attendance != null ? e.expected_attendance : '';
-        document.getElementById('formImpact').value     = e.impact_level || '';
-        document.getElementById('formStatus').value     = e.status || 'Planned';
-        document.getElementById('formNotes').value      = e.notes || '';
-        document.getElementById('formOpsNotes').value   = e.ops_notes || '';
+        document.getElementById('formName').value     = e.event_name || '';
+        document.getElementById('formStart').value    = toLocalInput(e.event_start);
+        document.getElementById('formEnd').value      = toLocalInput(e.event_end);
+        document.getElementById('formType').value     = e.event_type || '';
+        document.getElementById('formLocation').value = e.location_id || '';
+        document.getElementById('formStatus').value   = e.status || 'Planned';
+        document.getElementById('formNotes').value    = e.notes || '';
+        document.getElementById('formOpsNotes').value = e.ops_notes || '';
 
         document.getElementById('modalTitle').textContent = 'Edit Event';
         document.getElementById('saveBtn').textContent    = 'Save Changes';
@@ -509,16 +484,14 @@
         }
 
         const body = {
-            event_name:          name,
-            event_start:         start.replace('T', ' '),
-            event_end:           end.replace('T', ' '),
-            location_id:         parseInt(document.getElementById('formLocation').value) || null,
-            event_type:          document.getElementById('formType').value || null,
-            expected_attendance: parseInt(document.getElementById('formAttendance').value) || null,
-            status:              document.getElementById('formStatus').value,
-            impact_level:        document.getElementById('formImpact').value || null,
-            notes:               document.getElementById('formNotes').value.trim() || null,
-            ops_notes:           document.getElementById('formOpsNotes').value.trim() || null,
+            event_name:  name,
+            event_start: start.replace('T', ' '),
+            event_end:   end.replace('T', ' '),
+            location_id: parseInt(document.getElementById('formLocation').value) || null,
+            event_type:  document.getElementById('formType').value || null,
+            status:      document.getElementById('formStatus').value,
+            notes:       document.getElementById('formNotes').value.trim() || null,
+            ops_notes:   document.getElementById('formOpsNotes').value.trim() || null,
         };
 
         const btn = document.getElementById('saveBtn');

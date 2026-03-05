@@ -115,7 +115,8 @@
     .form-group.full { grid-column: 1 / -1; }
     .form-group label { font-size: 0.83rem; font-weight: 600; color: #4a5568; }
     .form-group select,
-    .form-group input[type="datetime-local"],
+    .form-group input[type="date"],
+    .form-group input[type="time"],
     .form-group input[type="number"],
     .form-group input[type="text"] {
         padding: 10px 12px;
@@ -127,6 +128,9 @@
         width: 100%;
         box-sizing: border-box;
     }
+    .dt-pair { display: flex; gap: 8px; }
+    .dt-pair input[type="date"] { flex: 1; }
+    .dt-pair input[type="time"] { width: 110px; flex-shrink: 0; }
     .form-group select:focus,
     .form-group input:focus { border-color: #2563eb; }
     .form-group textarea {
@@ -259,12 +263,18 @@
 
         <div class="form-row">
             <div class="form-group">
-                <label for="formStart">Start *</label>
-                <input type="datetime-local" id="formStart">
+                <label>Start *</label>
+                <div class="dt-pair">
+                    <input type="date" id="formStartDate">
+                    <input type="time" id="formStartTime">
+                </div>
             </div>
             <div class="form-group">
-                <label for="formEnd">End *</label>
-                <input type="datetime-local" id="formEnd">
+                <label>End *</label>
+                <div class="dt-pair">
+                    <input type="date" id="formEndDate">
+                    <input type="time" id="formEndTime">
+                </div>
             </div>
         </div>
 
@@ -423,14 +433,16 @@
 
     // ── Modal helpers ─────────────────────────────────────────────────────────
     function clearForm() {
-        document.getElementById('formName').value     = '';
-        document.getElementById('formStart').value    = '';
-        document.getElementById('formEnd').value      = '';
-        document.getElementById('formType').value     = '';
-        document.getElementById('formLocation').value = '';
-        document.getElementById('formStatus').value   = meta.statuses[0] || 'Planned';
-        document.getElementById('formNotes').value    = '';
-        document.getElementById('formOpsNotes').value = '';
+        document.getElementById('formName').value      = '';
+        document.getElementById('formStartDate').value = '';
+        document.getElementById('formStartTime').value = '';
+        document.getElementById('formEndDate').value   = '';
+        document.getElementById('formEndTime').value   = '';
+        document.getElementById('formType').value      = '';
+        document.getElementById('formLocation').value  = '';
+        document.getElementById('formStatus').value    = meta.statuses[0] || 'Planned';
+        document.getElementById('formNotes').value     = '';
+        document.getElementById('formOpsNotes').value  = '';
     }
 
     window.openNewModal = function () {
@@ -446,14 +458,18 @@
         if (!e) return;
         editingId = eventId;
 
-        document.getElementById('formName').value     = e.event_name || '';
-        document.getElementById('formStart').value    = toLocalInput(e.event_start);
-        document.getElementById('formEnd').value      = toLocalInput(e.event_end);
-        document.getElementById('formType').value     = e.event_type || '';
-        document.getElementById('formLocation').value = e.location_id || '';
-        document.getElementById('formStatus').value   = e.status || 'Planned';
-        document.getElementById('formNotes').value    = e.notes || '';
-        document.getElementById('formOpsNotes').value = e.ops_notes || '';
+        const [sd, st] = splitDt(e.event_start);
+        const [ed, et] = splitDt(e.event_end);
+        document.getElementById('formName').value      = e.event_name || '';
+        document.getElementById('formStartDate').value = sd;
+        document.getElementById('formStartTime').value = st;
+        document.getElementById('formEndDate').value   = ed;
+        document.getElementById('formEndTime').value   = et;
+        document.getElementById('formType').value      = e.event_type || '';
+        document.getElementById('formLocation').value  = e.location_id || '';
+        document.getElementById('formStatus').value    = e.status || 'Planned';
+        document.getElementById('formNotes').value     = e.notes || '';
+        document.getElementById('formOpsNotes').value  = e.ops_notes || '';
 
         document.getElementById('modalTitle').textContent = 'Edit Event';
         document.getElementById('saveBtn').textContent    = 'Save Changes';
@@ -470,23 +486,25 @@
 
     // ── Save ──────────────────────────────────────────────────────────────────
     window.saveEvent = async function () {
-        const name  = document.getElementById('formName').value.trim();
-        const start = document.getElementById('formStart').value;
-        const end   = document.getElementById('formEnd').value;
+        const name      = document.getElementById('formName').value.trim();
+        const startDate = document.getElementById('formStartDate').value;
+        const startTime = document.getElementById('formStartTime').value || '00:00';
+        const endDate   = document.getElementById('formEndDate').value;
+        const endTime   = document.getElementById('formEndTime').value || '00:00';
 
-        if (!name || !start || !end) {
-            showToast('Event name, start, and end are required.', 'error');
+        if (!name || !startDate || !endDate) {
+            showToast('Event name, start date, and end date are required.', 'error');
             return;
         }
-        if (end <= start) {
+        if (`${endDate} ${endTime}` <= `${startDate} ${startTime}`) {
             showToast('End must be after start.', 'error');
             return;
         }
 
         const body = {
             event_name:  name,
-            event_start: start.replace('T', ' '),
-            event_end:   end.replace('T', ' '),
+            event_start: `${startDate} ${startTime}:00`,
+            event_end:   `${endDate} ${endTime}:00`,
             location_id: parseInt(document.getElementById('formLocation').value) || null,
             event_type:  document.getElementById('formType').value || null,
             status:      document.getElementById('formStatus').value,
@@ -562,10 +580,11 @@
         });
     }
 
-    // Convert "2026-06-01 18:00:00" → "2026-06-01T18:00" for datetime-local input
-    function toLocalInput(iso) {
-        if (!iso) return '';
-        return iso.replace(' ', 'T').substring(0, 16);
+    // Split "2026-06-01 18:00:00" → ["2026-06-01", "18:00"]
+    function splitDt(iso) {
+        if (!iso) return ['', ''];
+        const parts = iso.split(' ');
+        return [parts[0] || '', (parts[1] || '').substring(0, 5)];
     }
 
     function esc(s) {

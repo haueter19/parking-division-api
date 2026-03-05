@@ -127,9 +127,9 @@ class ParkingScheduler:
         self.get_shifts()
         self.shift_ids = list(range(len(self.shifts)))
         self.garages = list(dict.fromkeys(s[0] for s in self.shifts))  # unique, order preserved
-        self.get_employees('viewer')       # DataFrame from your DB query
-        #HOURLY_CASHIERS = self.employees[self.employees['Type']=='Hourly']['cashier_id'].tolist()
-        #PERMANENT_CASHIERS = self.employees[self.employees['Type']=='Full Time']['cashier_id'].tolist()
+        self.get_employees() # 12 = cashier job code
+        #HOURLY_CASHIERS = self.employees[self.employees['job_status']=='hourly']['cashier_id'].tolist()
+        #PERMANENT_CASHIERS = self.employees[self.employees['job_status']=='permanent']['cashier_id'].tolist()
         #self.all_cashiers = PERMANENT_CASHIERS + HOURLY_CASHIERS
         self.all_cashiers = self.employees['employee_id'].tolist()
         self.get_requests()
@@ -341,15 +341,17 @@ class ParkingScheduler:
         self.shifts = shifts
         return shifts
 
-    def get_employees(self, role):
+    def get_employees(self):
         """
         """
         employees = pd.read_sql(f"""
             SELECT 
-                e.employee_id, first_name, last_name, e.role, c.cashier_id
+                e.employee_id, first_name, last_name, e.job, e.job_status, e.role--, c.cashier_id
             FROM pt.employees e
-            INNER JOIN app.cashier_id c On (e.employee_id=c.employee_id)
-            WHERE e.role = '{role}'
+            --INNER JOIN app.cashier_id c On (e.employee_id=c.employee_id)
+            WHERE 
+                e.job = 12 -- Cashiers only
+            ORDER BY e.job_status DESC, e.employee_id
             """, self.db.bind)
         
         self.employees = employees

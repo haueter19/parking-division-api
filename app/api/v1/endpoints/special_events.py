@@ -4,22 +4,6 @@ Special Events endpoints.
 Staff can log events that affect parking operations (concerts, sports, festivals, etc.).
 These events inform cashier scheduling and are inputs for future revenue prediction models.
 
-Table DDL (run once in SQL Server):
-    CREATE TABLE app.special_events (
-        event_id    INT IDENTITY(1,1) PRIMARY KEY,
-        event_name  NVARCHAR(200)  NOT NULL,
-        event_start DATETIME2      NOT NULL,
-        event_end   DATETIME2      NOT NULL,
-        location_id INT            NULL REFERENCES app.dim_location(location_id),
-        event_type  NVARCHAR(50)   NULL,
-        status      NVARCHAR(20)   NOT NULL DEFAULT 'Planned',
-        notes       NVARCHAR(MAX)  NULL,
-        ops_notes   NVARCHAR(MAX)  NULL,
-        created_by  NVARCHAR(100)  NULL,
-        created_at  DATETIME2      NOT NULL DEFAULT GETDATE(),
-        updated_by  NVARCHAR(100)  NULL,
-        updated_at  DATETIME2      NULL
-    );
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -75,9 +59,13 @@ async def get_metadata(
     current_user=Depends(get_current_active_user),
 ):
     locations = db.execute(text("""
-        SELECT location_id, location_name
-        FROM app.dim_location
-        ORDER BY location_name
+        SELECT l.location_id, f.facility_name location_name
+        FROM app.dim_location l
+        INNER JOIN app.dim_facility f ON f.facility_id = l.facility_id
+        WHERE 
+            l.space_id IS NULL 
+            AND f.facility_type IN ('lot', 'garage')
+        ORDER BY f.facility_type, f.facility_name
     """)).fetchall()
 
     return {
@@ -131,7 +119,7 @@ async def list_events(
             CONVERT(VARCHAR(19), e.event_start, 120) AS event_start,
             CONVERT(VARCHAR(19), e.event_end,   120) AS event_end,
             e.location_id,
-            l.location_name,
+            f.facility_name,
             e.event_type,
             e.status,
             e.notes,
@@ -142,6 +130,7 @@ async def list_events(
             CONVERT(VARCHAR(19), e.updated_at, 120) AS updated_at
         FROM app.special_events e
         LEFT JOIN app.dim_location l ON l.location_id = e.location_id
+        LEFT JOIN app.dim_facility f ON f.facility_id = l.facility_id
         WHERE {' AND '.join(where)}
         ORDER BY e.event_start ASC
     """)

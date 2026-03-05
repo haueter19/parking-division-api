@@ -168,7 +168,7 @@ async def create_event(
         "status":      body.status,
         "notes":       body.notes,
         "ops_notes":   body.ops_notes,
-        "created_by":  current_user.username,
+        "created_by":  current_user.employee_id,
     })
     new_id = result.scalar()
     db.commit()
@@ -208,7 +208,7 @@ async def update_event(
 
     set_clauses.append("updated_by = :updated_by")
     set_clauses.append("updated_at = GETDATE()")
-    params["updated_by"] = current_user.username
+    params["updated_by"] = current_user.employee_id
 
     sql = text(f"""
         UPDATE app.special_events

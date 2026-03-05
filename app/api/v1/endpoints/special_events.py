@@ -35,6 +35,7 @@ class EventCreate(BaseModel):
     event_start: str          # ISO datetime string from frontend
     event_end: str
     location_id: Optional[int] = None
+    event_venue: Optional[str] = None
     event_type: Optional[str] = None
     status: str = "Planned"
     notes: Optional[str] = None
@@ -46,6 +47,7 @@ class EventUpdate(BaseModel):
     event_start: Optional[str] = None
     event_end: Optional[str] = None
     location_id: Optional[int] = None
+    event_venue: Optional[str] = None
     event_type: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
@@ -120,6 +122,7 @@ async def list_events(
             CONVERT(VARCHAR(19), e.event_end,   120) AS event_end,
             e.location_id,
             f.facility_name,
+            e.event_venue,
             e.event_type,
             e.status,
             e.notes,
@@ -148,11 +151,11 @@ async def create_event(
 ):
     sql = text("""
         INSERT INTO app.special_events
-            (event_name, event_start, event_end, location_id, event_type,
+            (event_name, event_start, event_end, location_id, event_venue, event_type,
              status, notes, ops_notes, created_by, created_at)
         OUTPUT INSERTED.event_id
         VALUES
-            (:event_name, :event_start, :event_end, :location_id, :event_type,
+            (:event_name, :event_start, :event_end, :location_id, :event_venue, :event_type,
              :status, :notes, :ops_notes, :created_by, GETDATE())
     """)
     result = db.execute(sql, {
@@ -160,6 +163,7 @@ async def create_event(
         "event_start": body.event_start,
         "event_end":   body.event_end,
         "location_id": body.location_id,
+        "event_venue": body.event_venue,
         "event_type":  body.event_type,
         "status":      body.status,
         "notes":       body.notes,
@@ -188,6 +192,7 @@ async def update_event(
         "event_start": body.event_start,
         "event_end":   body.event_end,
         "location_id": body.location_id,
+        "event_venue": body.event_venue,
         "event_type":  body.event_type,
         "status":      body.status,
         "notes":       body.notes,

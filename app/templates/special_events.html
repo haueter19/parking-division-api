@@ -286,11 +286,16 @@
                 </select>
             </div>
             <div class="form-group">
-                <label for="formLocation">Location</label>
+                <label for="formLocation">Affected Facility</label>
                 <select id="formLocation">
                     <option value="">— None —</option>
                 </select>
             </div>
+        </div>
+
+        <div class="form-group">
+            <label for="formVenue">Event Venue</label>
+            <input type="text" id="formVenue" placeholder="e.g. Riverfront Amphitheater">
         </div>
 
         <div class="form-group">
@@ -416,7 +421,10 @@
                 }
 
                 return `<tr>
-                    <td><strong>${esc(e.event_name)}</strong></td>
+                    <td>
+                        <strong>${esc(e.event_name)}</strong>
+                        ${e.event_venue ? `<br><span style="font-size:0.78rem;color:#6b7280">${esc(e.event_venue)}</span>` : ''}
+                    </td>
                     <td>${esc(e.event_type) || '—'}</td>
                     <td style="white-space:nowrap">${fmtDt(e.event_start)}</td>
                     <td style="white-space:nowrap">${fmtDt(e.event_end)}</td>
@@ -440,6 +448,7 @@
         document.getElementById('formEndTime').value   = '';
         document.getElementById('formType').value      = '';
         document.getElementById('formLocation').value  = '';
+        document.getElementById('formVenue').value     = '';
         document.getElementById('formStatus').value    = meta.statuses[0] || 'Planned';
         document.getElementById('formNotes').value     = '';
         document.getElementById('formOpsNotes').value  = '';
@@ -467,6 +476,7 @@
         document.getElementById('formEndTime').value   = et;
         document.getElementById('formType').value      = e.event_type || '';
         document.getElementById('formLocation').value  = e.location_id || '';
+        document.getElementById('formVenue').value     = e.event_venue || '';
         document.getElementById('formStatus').value    = e.status || 'Planned';
         document.getElementById('formNotes').value     = e.notes || '';
         document.getElementById('formOpsNotes').value  = e.ops_notes || '';
@@ -506,6 +516,7 @@
             event_start: `${startDate} ${startTime}:00`,
             event_end:   `${endDate} ${endTime}:00`,
             location_id: parseInt(document.getElementById('formLocation').value) || null,
+            event_venue: document.getElementById('formVenue').value.trim() || null,
             event_type:  document.getElementById('formType').value || null,
             status:      document.getElementById('formStatus').value,
             notes:       document.getElementById('formNotes').value.trim() || null,

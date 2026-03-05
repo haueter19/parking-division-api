@@ -11,7 +11,7 @@ DB table required (run once):
       submit_by     INT          NOT NULL,
       updated_at    DATETIME     NULL,
       updated_by    INT          NULL,
-      cancelled     BIT          NOT NULL DEFAULT 0
+      is_cancelled     BIT          NOT NULL DEFAULT 0
   );
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -70,13 +70,16 @@ async def list_requests(
     if date_from:
         filters.append("r.request_date >= :date_from")
         params["date_from"] = date_from
+    else:
+        filters.append("r.request_date >= CAST(GETDATE() AS DATE)")  # default to today
+        params["date_from"] = date.today()
 
     if date_to:
         filters.append("r.request_date <= :date_to")
         params["date_to"] = date_to
 
     if not include_cancelled:
-        filters.append("r.cancelled = 0")
+        filters.append("r.is_cancelled = 0")
 
     where = " AND ".join(filters)
 
@@ -84,20 +87,20 @@ async def list_requests(
         SELECT
             r.request_id,
             r.employee_id,
-            LTRIM(RTRIM(ISNULL(e.first_name,'') + ' ' + ISNULL(e.last_name,'')))   AS employee_name,
+            LTRIM(RTRIM(ISNULL(e.first_name,'') + ' ' + ISNULL(e.last_name,''))) AS employee_name,
             r.request_type,
-            CONVERT(VARCHAR(10), r.request_date, 120)                               AS request_date,
-            CONVERT(VARCHAR(19), r.submit_date,  120)                               AS submit_date,
+            CONVERT(VARCHAR(10), r.request_date, 120) AS request_date,
+            CONVERT(VARCHAR(19), r.submit_date,  120) AS submit_date,
             r.submit_by,
             LTRIM(RTRIM(ISNULL(sb.first_name,'') + ' ' + ISNULL(sb.last_name,''))) AS submit_by_name,
-            CONVERT(VARCHAR(19), r.updated_at,   120)                               AS updated_at,
+            CONVERT(VARCHAR(19), r.updated_at,   120) AS updated_at,
             r.updated_by,
             LTRIM(RTRIM(ISNULL(ub.first_name,'') + ' ' + ISNULL(ub.last_name,''))) AS updated_by_name,
-            r.cancelled
+            r.is_cancelled
         FROM app.time_off_requests r
-        JOIN  pt.employees e   ON e.employee_id  = r.employee_id
-        JOIN  pt.employees sb  ON sb.employee_id = r.submit_by
-        LEFT  JOIN pt.employees ub ON ub.employee_id = r.updated_by
+        INNER JOIN  pt.employees e   ON e.employee_id  = r.employee_id
+        LEFT JOIN  pt.employees sb  ON sb.employee_id = r.submit_by
+        LEFT JOIN pt.employees ub ON ub.employee_id = r.updated_by
         WHERE {where}
         ORDER BY r.request_date DESC, r.submit_date DESC
     """)
@@ -132,7 +135,7 @@ async def create_request(
 
     sql = text("""
         INSERT INTO app.time_off_requests
-            (employee_id, request_type, request_date, submit_date, submit_by, cancelled)
+            (employee_id, request_type, request_date, submit_date, submit_by, is_cancelled)
         OUTPUT INSERTED.request_id
         VALUES (:employee_id, :request_type, :request_date, GETDATE(), :submit_by, 0)
     """)
@@ -177,7 +180,7 @@ async def update_request(
         params["request_date"] = request_date
 
     result = db.execute(
-        text(f"UPDATE app.time_off_requests SET {', '.join(sets)} WHERE request_id = :request_id AND cancelled = 0"),
+        text(f"UPDATE app.time_off_requests SET {', '.join(sets)} WHERE request_id = :request_id AND is_cancelled = 0"),
         params,
     )
     db.commit()
@@ -200,7 +203,7 @@ async def cancel_request(
     user_role = _role_str(current_user)
 
     row = db.execute(
-        text("SELECT employee_id, cancelled FROM app.time_off_requests WHERE request_id = :id"),
+        text("SELECT employee_id, is_cancelled FROM app.time_off_requests WHERE request_id = :id"),
         {"id": request_id},
     ).fetchone()
 
@@ -210,13 +213,13 @@ async def cancel_request(
     if not _can_manage(user_role) and row.employee_id != current_user.employee_id:
         raise HTTPException(status_code=403, detail="You can only cancel your own requests")
 
-    if row.cancelled:
+    if row.is_cancelled:
         raise HTTPException(status_code=400, detail="Request already cancelled")
 
     db.execute(
         text("""
             UPDATE app.time_off_requests
-            SET cancelled = 1, updated_at = GETDATE(), updated_by = :updated_by
+            SET is_cancelled = 1, updated_at = GETDATE(), updated_by = :updated_by
             WHERE request_id = :id
         """),
         {"id": request_id, "updated_by": current_user.employee_id},

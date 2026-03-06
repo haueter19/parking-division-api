@@ -22,7 +22,7 @@ MANAGE_ROLES = [UserRole.SUPERVISOR, UserRole.MANAGER, UserRole.ADMIN]
 VIEW_ROLES = list(UserRole)  # all authenticated roles can view
 
 EVENT_TYPES = [
-    "Concert", "Sports", "Festival", "Convention", "Parade",
+    "Concert", "Show", "Sports", "Festival", "Convention", "Parade",
     "Marathon/Race", "Fair/Expo", "Government/Civic", "Political", "Other", 
 ]
 STATUSES = ["Planned", "Confirmed", "Cancelled", "Completed"]

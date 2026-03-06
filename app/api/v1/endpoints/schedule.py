@@ -87,6 +87,9 @@ async def get_shifts(
             s.start_hour,
             s.end_hour,
             s.special_event,
+            s.safe_num,
+            s.bag_num,
+            s.rush,
             s.created_at,
             s.created_by,
             s.updated_at,
@@ -123,6 +126,9 @@ async def get_shifts(
             end_hour=row.end_hour,
             period=_derive_period(row.start_hour),
             special_event=bool(row.special_event),
+            safe_num=row.safe_num,
+            bag_num=row.bag_num,
+            rush=row.rush,
             created_at=row.created_at,
             created_by=row.created_by,
             updated_at=row.updated_at,
@@ -148,9 +154,11 @@ async def create_shift(
 ):
     sql = text("""
         INSERT INTO app.schedule_shifts
-            (week_start_date, location, booth, day_of_week, start_hour, end_hour, special_event, created_by)
+            (week_start_date, location, booth, day_of_week, start_hour, end_hour,
+             special_event, safe_num, bag_num, rush, created_by)
         OUTPUT INSERTED.shift_id
-        VALUES (:week, :location, :booth, :day, :start_hour, :end_hour, :special_event, :created_by)
+        VALUES (:week, :location, :booth, :day, :start_hour, :end_hour,
+                :special_event, :safe_num, :bag_num, :rush, :created_by)
     """)
     result = db.execute(sql, {
         "week": shift.week_start_date,
@@ -160,6 +168,9 @@ async def create_shift(
         "start_hour": shift.start_hour,
         "end_hour": shift.end_hour,
         "special_event": shift.special_event,
+        "safe_num": shift.safe_num,
+        "bag_num": shift.bag_num,
+        "rush": shift.rush,
         "created_by": current_user.employee_id,
     }).first()
     db.commit()
@@ -195,20 +206,26 @@ async def update_shift(
 
     week = str(existing.week_start_date)
 
-    # Build dynamic SET clause from provided fields
+    # Build dynamic SET clause from provided fields.
+    # Use model_fields_set so explicitly-null values (e.g. clearing bag_num) are included.
     updates = {}
-    if shift.location is not None:
+    provided = shift.model_fields_set
+    if "location" in provided and shift.location is not None:
         updates["location"] = shift.location
-    if shift.booth is not None:
+    if "booth" in provided and shift.booth is not None:
         updates["booth"] = shift.booth
-    if shift.day_of_week is not None:
+    if "day_of_week" in provided and shift.day_of_week is not None:
         updates["day_of_week"] = shift.day_of_week
-    if shift.start_hour is not None:
+    if "start_hour" in provided and shift.start_hour is not None:
         updates["start_hour"] = shift.start_hour
-    if shift.end_hour is not None:
+    if "end_hour" in provided and shift.end_hour is not None:
         updates["end_hour"] = shift.end_hour
-    if shift.special_event is not None:
+    if "special_event" in provided and shift.special_event is not None:
         updates["special_event"] = shift.special_event
+    # Nullable int fields — include whenever explicitly sent (even if None/null)
+    for field in ("safe_num", "bag_num", "rush"):
+        if field in provided:
+            updates[field] = getattr(shift, field)
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")

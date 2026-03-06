@@ -658,6 +658,9 @@ class ShiftCreate(BaseModel):
     start_hour: float = Field(..., ge=0, le=47.75)  # up to 47:45 (double overnight)
     end_hour: float = Field(..., ge=0, le=47.75)
     special_event: bool = False
+    safe_num: Optional[int] = None
+    bag_num: Optional[int] = None   # special event only
+    rush: Optional[int] = None      # special event only; minutes
 
     @field_validator("day_of_week")
     @classmethod
@@ -675,6 +678,9 @@ class ShiftUpdate(BaseModel):
     start_hour: Optional[float] = Field(None, ge=0, le=47.75)
     end_hour: Optional[float] = Field(None, ge=0, le=47.75)
     special_event: Optional[bool] = None
+    safe_num: Optional[int] = None
+    bag_num: Optional[int] = None   # special event only
+    rush: Optional[int] = None      # special event only; minutes
 
     @field_validator("day_of_week")
     @classmethod
@@ -697,6 +703,9 @@ class ShiftResponse(BaseModel):
     end_hour: float
     period: str  # "AM" or "PM" derived server-side
     special_event: bool = False
+    safe_num: Optional[int] = None
+    bag_num: Optional[int] = None
+    rush: Optional[int] = None
     created_at: Optional[datetime] = None
     created_by: Optional[int] = None
     updated_at: Optional[datetime] = None

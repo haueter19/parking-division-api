@@ -422,15 +422,14 @@
                     <option value="Sat">Saturday</option>
                 </select>
             </div>
-            <div class="form-group"><!-- spacer --></div>
+            <div class="form-group">
+                <label for="fSafeNum">Safe #</label>
+                <input type="number" id="fSafeNum" min="1" placeholder="">
+            </div>
 
             <div class="form-group">
                 <label for="fStartTime">Start Time</label>
                 <input type="time" id="fStartTime">
-                <div class="next-day-row">
-                    <input type="checkbox" id="fStartNextDay">
-                    <label for="fStartNextDay">Starts next day (+24 h)</label>
-                </div>
             </div>
             <div class="form-group">
                 <label for="fEndTime">End Time</label>
@@ -443,8 +442,21 @@
 
             <div class="form-group full">
                 <div class="next-day-row" style="margin-top:0;">
-                    <input type="checkbox" id="fSpecialEvent">
+                    <input type="checkbox" id="fSpecialEvent" onchange="toggleSpecialEventFields()">
                     <label for="fSpecialEvent">Special event shift</label>
+                </div>
+            </div>
+
+            <div id="specialEventFields" style="display:none; grid-column: 1 / -1;">
+                <div class="form-grid" style="margin-bottom:0;">
+                    <div class="form-group">
+                        <label for="fBagNum">Bag #</label>
+                        <input type="number" id="fBagNum" min="1" placeholder="">
+                    </div>
+                    <div class="form-group">
+                        <label for="fRush">Rush (minutes)</label>
+                        <input type="number" id="fRush" min="0" placeholder="e.g. 90">
+                    </div>
                 </div>
             </div>
         </div>
@@ -697,16 +709,19 @@ function openEditModal(shiftId) {
     document.getElementById('fLocation').value = s.location;
     document.getElementById('fBooth').value    = s.booth;
     document.getElementById('fDay').value      = s.day_of_week;
+    document.getElementById('fSafeNum').value  = s.safe_num ?? '';
 
     const startBase = s.start_hour % 24;
-    document.getElementById('fStartTime').value    = decimalToTimeInput(startBase);
-    document.getElementById('fStartNextDay').checked = s.start_hour >= 24;
+    document.getElementById('fStartTime').value = decimalToTimeInput(startBase);
 
     const endBase = s.end_hour % 24;
     document.getElementById('fEndTime').value    = decimalToTimeInput(endBase);
     document.getElementById('fEndNextDay').checked = s.end_hour >= 24;
 
     document.getElementById('fSpecialEvent').checked = !!s.special_event;
+    document.getElementById('fBagNum').value = s.bag_num ?? '';
+    document.getElementById('fRush').value   = s.rush ?? '';
+    document.getElementById('specialEventFields').style.display = s.special_event ? '' : 'none';
 
     document.getElementById('shiftModal').classList.add('open');
 }
@@ -716,15 +731,27 @@ function closeModal() {
     editingShiftId = null;
 }
 
+function toggleSpecialEventFields() {
+    const isSpecial = document.getElementById('fSpecialEvent').checked;
+    document.getElementById('specialEventFields').style.display = isSpecial ? '' : 'none';
+    if (!isSpecial) {
+        document.getElementById('fBagNum').value = '';
+        document.getElementById('fRush').value   = '';
+    }
+}
+
 function clearForm() {
     document.getElementById('fLocation').value = '';
     document.getElementById('fBooth').value    = '';
     document.getElementById('fDay').value      = 'Sun';
+    document.getElementById('fSafeNum').value  = '';
     document.getElementById('fStartTime').value = '';
-    document.getElementById('fStartNextDay').checked = false;
     document.getElementById('fEndTime').value   = '';
     document.getElementById('fEndNextDay').checked = false;
     document.getElementById('fSpecialEvent').checked = false;
+    document.getElementById('fBagNum').value   = '';
+    document.getElementById('fRush').value     = '';
+    document.getElementById('specialEventFields').style.display = 'none';
 }
 
 async function saveShift() {
@@ -732,7 +759,6 @@ async function saveShift() {
     const booth     = parseInt(document.getElementById('fBooth').value, 10);
     const day       = document.getElementById('fDay').value;
     const startTime = document.getElementById('fStartTime').value;
-    const startNext = document.getElementById('fStartNextDay').checked;
     const endTime   = document.getElementById('fEndTime').value;
     const endNext   = document.getElementById('fEndNextDay').checked;
 
@@ -741,8 +767,8 @@ async function saveShift() {
         return;
     }
 
-    const startHour = timeInputToDecimal(startTime, startNext);
-    const endHour   = timeInputToDecimal(endTime,   endNext);
+    const startHour = timeInputToDecimal(startTime, false);
+    const endHour   = timeInputToDecimal(endTime, endNext);
 
     if (endHour <= startHour) {
         showToast('End time must be after start time.', 'error');
@@ -750,7 +776,23 @@ async function saveShift() {
     }
 
     const isSpecialEvent = document.getElementById('fSpecialEvent').checked;
-    const body = { week_start_date: week, location, booth, day_of_week: day, start_hour: startHour, end_hour: endHour, special_event: isSpecialEvent };
+
+    const safeNumRaw = document.getElementById('fSafeNum').value;
+    const bagNumRaw  = document.getElementById('fBagNum').value;
+    const rushRaw    = document.getElementById('fRush').value;
+
+    const body = {
+        week_start_date: week,
+        location,
+        booth,
+        day_of_week: day,
+        start_hour: startHour,
+        end_hour: endHour,
+        special_event: isSpecialEvent,
+        safe_num: safeNumRaw !== '' ? parseInt(safeNumRaw, 10) : null,
+        bag_num:  isSpecialEvent && bagNumRaw !== '' ? parseInt(bagNumRaw, 10) : null,
+        rush:     isSpecialEvent && rushRaw   !== '' ? parseInt(rushRaw,   10) : null,
+    };
 
     try {
         if (editingShiftId === null) {

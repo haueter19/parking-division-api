@@ -955,6 +955,14 @@ function showToast(msg, type = 'info') {
     toastTimer = setTimeout(() => { el.classList.remove('show'); }, 3500);
 }
 
+// Auto-fill end time from start time when end time is empty
+document.getElementById('fStartTime').addEventListener('change', function() {
+    const endField = document.getElementById('fEndTime');
+    if (this.value && !endField.value) {
+        endField.value = this.value;
+    }
+});
+
 // Close modal on backdrop click
 document.getElementById('shiftModal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();

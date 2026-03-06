@@ -617,6 +617,14 @@
         el.style.display = 'block';
     }
 
+    // Auto-fill end date from start date when end date is empty
+    document.getElementById('formStartDate').addEventListener('change', function() {
+        const endDate = document.getElementById('formEndDate');
+        if (this.value && !endDate.value) {
+            endDate.value = this.value;
+        }
+    });
+
     init();
 })();
 </script>

@@ -178,8 +178,8 @@ async def get_cityworks_stats(
 
             -- Assigned last 7 days (DateSubmitToOpen populated in last week)
             SUM(CASE
-                WHEN wo.DateSubmitToOpen >= DATEADD(DAY, -7, GETDATE())
-                     AND wo.DateSubmitToOpen < GETDATE()
+                WHEN wo.InitiateDate >= DATEADD(DAY, -7, GETDATE())
+                     AND wo.InitiateDate < GETDATE()
                 THEN 1 ELSE 0
             END) AS assigned_last_week,
 
@@ -199,7 +199,12 @@ async def get_cityworks_stats(
                      AND wo.ActualFinishDate >= DATEADD(DAY, -90, GETDATE())
                 THEN CAST(DATEDIFF(DAY, wo.InitiateDate, wo.ActualFinishDate) AS FLOAT)
                 ELSE NULL
-            END) AS avg_days_to_complete
+            END) AS avg_days_to_complete,
+            -- Closed but not completed
+            SUM(CASE
+                WHEN wo.Status In ('COMPLETE') AND wo.DateWoClosed IS NULL THEN 1
+                ELSE 0
+            END) As closed_not_completed
 
         FROM CMMS.azteca.WorkOrder wo
         WHERE wo.DomainID = 3
@@ -212,7 +217,8 @@ async def get_cityworks_stats(
             "open_count": int(row.open_count or 0),
             "assigned_last_week": int(row.assigned_last_week or 0),
             "closed_last_week": int(row.closed_last_week or 0),
-            "avg_days_to_complete": round(float(row.avg_days_to_complete), 1) if row.avg_days_to_complete is not None else None
+            "avg_days_to_complete": round(float(row.avg_days_to_complete), 1) if row.avg_days_to_complete is not None else None,
+            "closed_not_completed": int(row.closed_not_completed or 0)
         }
     except Exception as e:
         raise HTTPException(

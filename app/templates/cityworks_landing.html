@@ -141,6 +141,11 @@
         <div class="stat-value loading" id="statAvgDays">—</div>
         <div class="stat-sub">Moving avg, last 90 days</div>
     </div>
+        <div class="stat-card stat-time">
+        <div class="stat-label">Closed Not Completed</div>
+        <div class="stat-value loading" id="closedNotCompleted">—</div>
+        <div class="stat-sub">Waiting to be completed</div>
+    </div>
 </div>
 
 <div class="card">
@@ -171,6 +176,7 @@ async function loadStats() {
         document.getElementById('statAssigned').textContent = s.assigned_last_week ?? '—';
         document.getElementById('statClosed').textContent = s.closed_last_week ?? '—';
         document.getElementById('statAvgDays').textContent = s.avg_days_to_complete != null ? s.avg_days_to_complete + 'd' : '—';
+        document.getElementById('closedNotCompleted').textContent = s.closed_not_completed ?? '—';
     } catch(e) {
         ['statOpen','statAssigned','statClosed','statAvgDays'].forEach(id => {
             document.getElementById(id).textContent = 'Err';

@@ -88,6 +88,7 @@ class ParkingScheduler:
         print("===================\n")
 
     def solve(self, time_limit=30.0):
+        """Call after build() to solve the model. Returns the solver status."""
         self.solver.parameters.max_time_in_seconds = time_limit
         status = self.solver.Solve(self.model)
         self._solution = status
@@ -137,6 +138,7 @@ class ParkingScheduler:
     
     def _apply_hard_constraints(self):
         """
+        Applies hard constraints to the scheduling problem.
         """
         # Decision variables
         # assign[c][s] = 1 if cashier c works shift s
@@ -194,6 +196,7 @@ class ParkingScheduler:
 
     def _apply_soft_constraints(self):
         """
+        Applies soft constraints to the scheduling problem.
         """
         # Soft constraint: prefer cashier works at only 1 garage per week
         # Penalty added to objective for each extra garage a cashier works at
@@ -261,6 +264,7 @@ class ParkingScheduler:
         
     def _apply_fixed_schedules(self):
         """
+        Hard constraint: McConley and Chan have fixed schedules that must be enforced exactly.
         """
         # Look up employee IDs by name (same pattern as Treleven/Wood/Siegel)
         mcconley_id = int(self.employees[self.employees['last_name'] == 'McConley'].iloc[0]['employee_id'])
@@ -301,6 +305,7 @@ class ParkingScheduler:
                         
     def _apply_availability(self):
         """
+        Hard constraint: Takes time-off requests into account by blocking cashiers from shifts on days they requested off.
         """
         if not isinstance(self.requests, pd.DataFrame):
             self.get_requests()
@@ -329,7 +334,9 @@ class ParkingScheduler:
         return availability
 
     def get_shifts(self):
-        # Returns a list of tuples suitable for JSON serialization
+        """
+        Returns a list of shifts for the week. Each shift is a tuple: (garage, booth, day_of_week, start_hour, end_hour)
+        """
         shifts_df = pd.read_sql("""
             SELECT * FROM PUReporting.app.schedule_shifts WHERE week_start_date = ?
             """, self.db.bind, params=(self.week_start,))
@@ -343,6 +350,7 @@ class ParkingScheduler:
 
     def get_employees(self):
         """
+        Returns a DataFrame of cashiers, ordered by job_status (permanent first) and employee_id for consistency.
         """
         employees = pd.read_sql(f"""
             SELECT 
@@ -359,6 +367,9 @@ class ParkingScheduler:
         return employees
         
     def get_requests(self):
+        """
+        Returns time-off requests for the week, with an added 'day_of_week' column for easier filtering.
+        """
         week_end = self.week_start + timedelta(6)
         requests = pd.read_sql("""
             SELECT 

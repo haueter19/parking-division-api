@@ -539,11 +539,14 @@ async def preload_shifts(
 
     # ── Chan: Frances Booth 1, AM, Mon–Fri ──
     for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']:
-        _insert('Frances', 1, day, 7.0, 15.5)
+        _insert('Frances', 1, day, 11.0, 19.5)
 
     # ── McConley: Frances Booth 2, PM, Tue–Sat ──
-    for day in ['Tue', 'Wed', 'Thu', 'Fri', 'Sat']:
-        _insert('Frances', 2, day, 15.0, 23.5)
+    for day in ['Tue', 'Wed']:
+        _insert('Frances', 2, day, 15.0, 23.0)
+    _insert('Frances', 2, 'Thu', 15.0, 23.5)
+    for day in ['Fri', 'Sat']:
+        _insert('Frances', 2, day, 16.0, 25.0)
 
     # ── Special-event implied shifts ──
     events = db.execute(text("""

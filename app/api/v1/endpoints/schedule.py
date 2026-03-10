@@ -562,7 +562,9 @@ async def preload_shifts(
         fname_lc = facility.lower()
 
         # Booth assignment by venue
-        if 'overture' in fname_lc or 'state' in fname_lc:
+        if 'overture' in fname_lc:
+            booths = [1, 3]
+        elif 'state' in fname_lc:
             booths = [2, 4]
         else:  # Livingston and any other venue
             booths = [1, 2]

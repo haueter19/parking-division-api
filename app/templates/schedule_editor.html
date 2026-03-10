@@ -351,6 +351,7 @@
 
     <div class="toolbar">
         <button class="btn btn-success" onclick="openAddModal()">+ Add Shift</button>
+        <button class="btn btn-primary" id="preloadBtn" onclick="preloadShifts()">Preload Routine Shifts</button>
         <button class="btn btn-ghost" id="saveAssignBtn" style="display:none;" onclick="saveAssignments()">Save Assignments</button>
         <span id="shiftCount" style="font-size:0.85rem;color:#6b7280;"></span>
         <div class="view-toggle">
@@ -953,6 +954,26 @@ function showToast(msg, type = 'info') {
     el.className = `toast toast-${type} show`;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { el.classList.remove('show'); }, 3500);
+}
+
+// ─── Preload routine shifts ────────────────────────────────────────────────
+async function preloadShifts() {
+    if (shifts.length > 0) {
+        if (!confirm('This will add routine Chan/McConley shifts and any special-event shifts on top of shifts already defined for this week. Continue?')) return;
+    }
+    const btn = document.getElementById('preloadBtn');
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    try {
+        const result = await apiFetch(`/schedule/preload?week=${week}`, { method: 'POST' });
+        await loadShifts();
+        showToast(`${result.shifts_created} shifts preloaded.`, 'success');
+    } catch (err) {
+        showToast('Preload failed: ' + err.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Preload Routine Shifts';
+    }
 }
 
 // Auto-fill end time from start time when end time is empty

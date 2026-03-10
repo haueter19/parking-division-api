@@ -494,6 +494,101 @@ async def get_employee_schedule(
 
 
 # ---------------------------------------------------------------------------
+# POST /schedule/preload?week=YYYY-MM-DD
+# Inserts routine fixed shifts (Chan/McConley) and event-implied shifts
+# ---------------------------------------------------------------------------
+@router.post("/preload", status_code=201)
+async def preload_shifts(
+    week: str = Query(..., description="Week start date as YYYY-MM-DD (Sunday)"),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role(SCHEDULE_ROLES)),
+):
+    from datetime import date as _date, timedelta as _td
+
+    week_date = _date.fromisoformat(week)
+    week_end  = week_date + _td(days=6)
+
+    # Sun=0 … Sat=6 (Python weekday: Mon=0, Sun=6)
+    _DOW = {0: 'Mon', 1: 'Tue', 2: 'Wed', 3: 'Thu', 4: 'Fri', 5: 'Sat', 6: 'Sun'}
+
+    created = 0
+
+    def _insert(location, booth, day, start_hour, end_hour,
+                special_event=False, safe_num=None, bag_num=None, rush=None):
+        nonlocal created
+        db.execute(text("""
+            INSERT INTO app.schedule_shifts
+                (week_start_date, location, booth, day_of_week, start_hour, end_hour,
+                 special_event, safe_num, bag_num, rush, created_by)
+            VALUES (:week, :location, :booth, :day, :start_hour, :end_hour,
+                    :special_event, :safe_num, :bag_num, :rush, :created_by)
+        """), {
+            "week":          week,
+            "location":      location,
+            "booth":         booth,
+            "day":           day,
+            "start_hour":    start_hour,
+            "end_hour":      end_hour,
+            "special_event": special_event,
+            "safe_num":      safe_num,
+            "bag_num":       bag_num,
+            "rush":          rush,
+            "created_by":    current_user.employee_id,
+        })
+        created += 1
+
+    # ── Chan: Frances Booth 1, AM, Mon–Fri ──
+    for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']:
+        _insert('Frances', 1, day, 7.0, 15.5)
+
+    # ── McConley: Frances Booth 2, PM, Tue–Sat ──
+    for day in ['Tue', 'Wed', 'Thu', 'Fri', 'Sat']:
+        _insert('Frances', 2, day, 15.0, 23.5)
+
+    # ── Special-event implied shifts ──
+    events = db.execute(text("""
+        SELECT se.*, f.facility_name
+        FROM app.special_events se
+        INNER JOIN app.dim_location l ON se.location_id = l.location_id
+        INNER JOIN app.dim_facility f ON l.facility_id  = f.facility_id
+        WHERE se.event_start BETWEEN :start_date AND :end_date
+    """), {
+        "start_date": str(week_date),
+        "end_date":   str(week_end) + " 23:59:59",
+    }).fetchall()
+
+    for ev in events:
+        facility = (ev.facility_name or '').strip()
+        fname_lc = facility.lower()
+
+        # Booth assignment by venue
+        if 'overture' in fname_lc or 'state' in fname_lc:
+            booths = [2, 4]
+        else:  # Livingston and any other venue
+            booths = [1, 2]
+
+        # Decimal hours from event datetimes
+        ev_start = ev.event_start   # datetime from SQL Server
+        ev_end   = ev.event_end
+        start_hour = ev_start.hour + ev_start.minute / 60.0
+        end_hour   = ev_end.hour   + ev_end.minute   / 60.0
+        if ev_end.date() > ev_start.date():
+            end_hour += 24.0
+
+        rush = int((5 - (end_hour - start_hour)) * 60)
+
+        # Day-of-week from event_start (Python weekday: Mon=0 … Sun=6)
+        day_of_week = _DOW[ev_start.weekday()]
+
+        for booth in booths:
+            _insert(facility, booth, day_of_week, start_hour, end_hour,
+                    special_event=True, rush=rush)
+
+    db.commit()
+    return {"shifts_created": created}
+
+
+# ---------------------------------------------------------------------------
 # GET /schedule/metadata  — dropdown data for UI
 # ---------------------------------------------------------------------------
 @router.get("/metadata")

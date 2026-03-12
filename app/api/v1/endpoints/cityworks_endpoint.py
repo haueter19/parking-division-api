@@ -486,8 +486,6 @@ async def close_work_order_endpoint(
                 'timestamp': datetime.now().isoformat()
             }
         
-        print('made it passed the update')
-
         # Now close the work order via Cityworks API
         close_response = wo_api.close_work_order(str(work_order_id))
 

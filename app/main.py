@@ -234,6 +234,16 @@ async def analytics_landing_page(request: Request):
     """Data & Analytics section landing page"""
     return templates.TemplateResponse(name="analytics_landing.html", context={"request": request})
 
+@app.get("/analytics/efficiency-gains", response_class=HTMLResponse)
+async def analytics_efficiency_gains(request: Request):
+    """Parking Division Efficiency Gains report"""
+    return templates.TemplateResponse(name="parking_division_efficiency_gains_v3.html", context={"request": request})
+
+@app.get("/analytics/gis-capacity", response_class=HTMLResponse)
+async def analytics_gis_capacity(request: Request):
+    """GIS & Cityworks Capacity Story report"""
+    return templates.TemplateResponse(name="gis_cityworks_capacity_story_v3.html", context={"request": request})
+
 
 if __name__ == "__main__":
     import uvicorn

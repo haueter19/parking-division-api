@@ -8,18 +8,30 @@
     .section-header { margin-bottom: 24px; }
     .section-header h1 { font-size: 1.5rem; color: #1e2a3a; font-weight: 700; }
 
-    .placeholder-card {
+    .report-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 20px;
+    }
+    .report-card {
         background: #fff;
         border-radius: 10px;
-        padding: 40px;
+        padding: 28px 24px;
         box-shadow: 0 2px 6px rgba(0,0,0,0.07);
-        text-align: center;
-        max-width: 480px;
-        margin: 40px auto;
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        transition: box-shadow 0.15s, transform 0.15s;
     }
-    .placeholder-card .icon { font-size: 3rem; margin-bottom: 16px; opacity: 0.5; }
-    .placeholder-card h2 { color: #374151; font-size: 1.1rem; margin-bottom: 8px; }
-    .placeholder-card p { color: #9ca3af; font-size: 0.9rem; }
+    .report-card:hover {
+        box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+    .report-card .icon { font-size: 2rem; }
+    .report-card h2 { font-size: 1rem; font-weight: 600; color: #1e2a3a; margin: 0; }
+    .report-card p { font-size: 0.85rem; color: #6b7280; margin: 0; line-height: 1.5; }
 </style>
 {% endblock %}
 
@@ -27,9 +39,16 @@
 <div class="section-header">
     <h1>Data & Analytics</h1>
 </div>
-<div class="placeholder-card">
-    <div class="icon">📊</div>
-    <h2>Data & Analytics</h2>
-    <p>Cross-section visualizations, trend analysis, and advanced reporting will be available here.</p>
+<div class="report-grid">
+    <a href="/analytics/efficiency-gains" class="report-card">
+        <div class="icon">⚡</div>
+        <h2>Parking Division Efficiency Gains</h2>
+        <p>Before/after comparison of operational throughput and processing improvements across key areas.</p>
+    </a>
+    <a href="/analytics/gis-capacity" class="report-card">
+        <div class="icon">🗺️</div>
+        <h2>GIS & Cityworks Capacity Story</h2>
+        <p>Spatial capacity analysis and Cityworks work order trends across parking facilities.</p>
+    </a>
 </div>
 {% endblock %}

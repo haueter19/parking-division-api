@@ -1,0 +1,151 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .slide { padding: 1.5rem 1.25rem 1.25rem; display: flex; flex-direction: column; gap: 14px; }
+  .header-row { display: flex; align-items: baseline; justify-content: space-between; }
+  .slide-title { font-size: 16px; font-weight: 500; color: var(--color-text-primary); }
+  .record-pill { font-size: 12px; color: var(--color-text-success); background: var(--color-background-success); padding: 3px 10px; border-radius: 20px; }
+  .top-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md, 8px); padding: 12px 14px; }
+  .metric-label { font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px; }
+  .metric-val { font-size: 22px; font-weight: 500; color: var(--color-text-primary); line-height: 1.1; }
+  .metric-sub { font-size: 11px; color: var(--color-text-secondary); margin-top: 3px; }
+  .metric-val.green { color: #0F6E56; }
+  .chart-card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg, 12px); padding: 1rem 1.1rem 0.9rem; }
+  .bottom-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+  .context-card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg, 12px); padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 6px; }
+  .ctx-phase { font-size: 10px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; }
+  .ctx-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+  .ctx-body { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  .legend { display: flex; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
+  .leg-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--color-text-secondary); }
+  .leg-swatch { width: 10px; height: 10px; border-radius: 2px; }
+</style>
+
+<div class="slide">
+  <div class="header-row">
+    <span class="slide-title">GIS / Cityworks — capacity recovery &amp; growth</span>
+    <span class="record-pill">609 assets processed in a single day</span>
+  </div>
+
+  <div class="top-grid">
+    <div class="metric">
+      <div class="metric-label">Single-day record</div>
+      <div class="metric-val green">609</div>
+      <div class="metric-sub">assets processed — 74.5% above prior record</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Sign requests (11 weeks)</div>
+      <div class="metric-val green">403</div>
+      <div class="metric-sub">116 involve metered spaces → ~550 GIS updates/yr</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Data gap period</div>
+      <div class="metric-val">2023–2024</div>
+      <div class="metric-sub">~723 WOs completed with no dedicated GIS manager</div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="legend">
+      <div class="leg-item"><div class="leg-swatch" style="background:#5DCAA5;"></div>Work orders completed</div>
+      <div class="leg-item"><div class="leg-swatch" style="background:#B4B2A9;"></div>Staffing gap</div>
+      <div class="leg-item"><div class="leg-swatch" style="background:#7F77DD;"></div>Metered sign requests (GIS updates)</div>
+      <div class="leg-item"><div class="leg-swatch" style="background:rgba(29,158,117,0.35);border:0.5px dashed #1D9E75;"></div>2026 projected</div>
+    </div>
+    <div style="position:relative;width:100%;height:210px;">
+      <canvas id="woChart"></canvas>
+    </div>
+  </div>
+
+  <div class="bottom-grid">
+    <div class="context-card">
+      <div class="ctx-phase" style="color:#0F6E56;"><span class="dot" style="background:#0F6E56;"></span>2021–early 2023</div>
+      <div class="ctx-title">Staffed operations</div>
+      <div class="ctx-body">GIS technician role functioning as intended. ~430–450 WOs completed annually with dedicated processing.</div>
+    </div>
+    <div class="context-card">
+      <div class="ctx-phase" style="color:#888780;"><span class="dot" style="background:#888780;"></span>Mar 2023–late 2024</div>
+      <div class="ctx-title">Staffing gap</div>
+      <div class="ctx-body">Declining WO completions could be due to not having a GIS manager during this time. Without authoritative oversight, many GIS work orders never generated leading to significant setbacks in data quality and completeness.</div>
+    </div>
+    <div class="context-card">
+      <div class="ctx-phase" style="color:#534AB7;"><span class="dot" style="background:#534AB7;"></span>2025–present</div>
+      <div class="ctx-title">Automation + new capacity</div>
+      <div class="ctx-body">Automated processing enables backlog recovery. Sign checks added to Cityworks — ~550 metered GIS updates/yr now trackable and processable.</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+const textColor = isDark ? '#9c9a92' : '#73726c';
+const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)';
+
+const woColors = ['#5DCAA5','#5DCAA5','#B4B2A9','#B4B2A9','#D3D1C7','#1D9E75','rgba(29,158,117,0.35)'];
+const signColors = ['transparent','transparent','transparent','transparent','transparent','#7F77DD','rgba(127,119,221,0.35)'];
+
+new Chart(document.getElementById('woChart'), {
+  type: 'bar',
+  data: {
+    labels: ['2021','2022','2023','2024','2025','2026 (11 wks)','2026 proj.'],
+    datasets: [
+      {
+        label: 'Work orders completed',
+        data: [443, 426, 378, 345, 280, 110, 390],
+        backgroundColor: woColors,
+        borderRadius: [4,4,4,4,4,4,0],
+        borderSkipped: false,
+        stack: 'stack'
+      },
+      {
+        label: 'Metered sign requests',
+        data: [0, 0, 0, 0, 0, 116, 550],
+        backgroundColor: signColors,
+        borderRadius: [0,0,0,0,0,4,0],
+        borderSkipped: false,
+        stack: 'stack'
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            if (ctx.parsed.y === 0) return null;
+            return ' ' + ctx.dataset.label + ': ' + ctx.parsed.y;
+          },
+          footer: items => {
+            const total = items.reduce((s, i) => s + i.parsed.y, 0);
+            if (items.some(i => i.dataIndex >= 5)) return 'Total: ' + total;
+            return '';
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: textColor, font: { size: 11 }, autoSkip: false },
+        grid: { display: false },
+        border: { display: false },
+        stacked: true
+      },
+      y: {
+        ticks: { color: textColor, font: { size: 11 } },
+        grid: { color: gridColor },
+        border: { display: false },
+        stacked: true,
+        min: 0,
+        max: 1050,
+        title: { display: true, text: 'records processed', color: textColor, font: { size: 11 } }
+      }
+    }
+  }
+});
+</script>

@@ -1,0 +1,152 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .slide { padding: 1.5rem 1.25rem 1.25rem; display: flex; flex-direction: column; gap: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg, 12px); padding: 1.1rem 1.1rem 1rem; display: flex; flex-direction: column; gap: 14px; }
+  .area-label { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-tertiary); }
+  .multiplier { font-size: 42px; font-weight: 500; line-height: 1; }
+  .mult-sub { font-size: 12px; color: var(--color-text-secondary); margin-top: 3px; }
+  .bar-section { display: flex; flex-direction: column; gap: 7px; }
+  .bar-row { display: flex; flex-direction: column; gap: 3px; }
+  .bar-label { font-size: 11px; color: var(--color-text-secondary); }
+  .bar-track { height: 20px; background: var(--color-background-secondary); border-radius: 4px; overflow: hidden; position: relative; }
+  .bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 7px; }
+  .bar-val { font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .bar-fill.before { background: #B4B2A9; }
+  .bar-fill.after  { background: #1D9E75; }
+  .bar-val.before { color: #2C2C2A; }
+  .bar-val.after  { color: #04342C; }
+  .divider { border: none; border-top: 0.5px solid var(--color-border-tertiary); margin: 0; }
+  .savings { display: flex; flex-direction: column; gap: 3px; }
+  .savings-label { font-size: 11px; color: var(--color-text-secondary); }
+  .savings-val { font-size: 18px; font-weight: 500; color: var(--color-text-primary); }
+  .savings-unit { font-size: 12px; color: var(--color-text-secondary); }
+  .legend { display: flex; gap: 16px; margin-bottom: 10px; }
+  .leg-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--color-text-secondary); }
+  .leg-swatch { width: 10px; height: 10px; border-radius: 2px; }
+  .header-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+  .slide-title { font-size: 16px; font-weight: 500; color: var(--color-text-primary); }
+  .total-pill { font-size: 12px; color: var(--color-text-success); background: var(--color-background-success); padding: 3px 10px; border-radius: 20px; }
+</style>
+
+<div class="slide">
+  <div class="header-row">
+    <span class="slide-title">Operational efficiency gains</span>
+    <span class="total-pill">1,116–1,401 hrs/yr recovered</span>
+  </div>
+
+  <div class="legend">
+    <div class="leg-item"><div class="leg-swatch" style="background:#B4B2A9"></div>Before</div>
+    <div class="leg-item"><div class="leg-swatch" style="background:#1D9E75"></div>After</div>
+  </div>
+
+  <div class="grid">
+
+    <div class="card">
+      <div class="area-label">Revenue data processing</div>
+      <div>
+        <div class="multiplier" style="color:#1D9E75">6–9×</div>
+        <div class="mult-sub">faster per day</div>
+      </div>
+      <hr class="divider">
+      <div class="bar-section">
+        <div class="bar-row">
+          <div class="bar-label">Before</div>
+          <div class="bar-track">
+            <div class="bar-fill before" style="width:100%">
+              <span class="bar-val before">30–45 min / day</span>
+            </div>
+          </div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">After</div>
+          <div class="bar-track">
+            <div class="bar-fill after" style="width:14%"></div>
+            <span style="position:absolute;left:calc(14% + 6px);top:50%;transform:translateY(-50%);font-size:11px;font-weight:500;color:var(--color-text-success)">5 min / day</span>
+          </div>
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="savings">
+        <div class="savings-label">Annual time recovered</div>
+        <div>
+          <span class="savings-val">150–245</span>
+          <span class="savings-unit"> hrs / yr</span>
+        </div>
+        <div class="savings-label" style="font-size:10px">(25–40 min saved × 365 days)</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="area-label">Operations scheduling</div>
+      <div>
+        <div class="multiplier" style="color:#1D9E75">7–8×</div>
+        <div class="mult-sub">faster per week</div>
+      </div>
+      <hr class="divider">
+      <div class="bar-section">
+        <div class="bar-row">
+          <div class="bar-label">Before</div>
+          <div class="bar-track">
+            <div class="bar-fill before" style="width:100%">
+              <span class="bar-val before">20–25 hrs / week</span>
+            </div>
+          </div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">After</div>
+          <div class="bar-track">
+            <div class="bar-fill after" style="width:14%"></div>
+            <span style="position:absolute;left:calc(14% + 6px);top:50%;transform:translateY(-50%);font-size:11px;font-weight:500;color:var(--color-text-success)">~3 hrs / week</span>
+          </div>
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="savings">
+        <div class="savings-label">Annual time recovered</div>
+        <div>
+          <span class="savings-val">884–1,144</span>
+          <span class="savings-unit"> hrs / yr</span>
+        </div>
+        <div class="savings-label" style="font-size:10px">(17–22 hrs saved × 52 weeks)</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="area-label">GIS / Cityworks processing</div>
+      <div>
+        <div class="multiplier" style="color:#1D9E75">15–30×</div>
+        <div class="mult-sub">faster per work order</div>
+      </div>
+      <hr class="divider">
+      <div class="bar-section">
+        <div class="bar-row">
+          <div class="bar-label">Before</div>
+          <div class="bar-track">
+            <div class="bar-fill before" style="width:100%">
+              <span class="bar-val before">15–30 min / WO</span>
+            </div>
+          </div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">After</div>
+          <div class="bar-track">
+            <div class="bar-fill after" style="width:5%"></div>
+            <span style="position:absolute;left:calc(5% + 6px);top:50%;transform:translateY(-50%);font-size:11px;font-weight:500;color:var(--color-text-success)">&lt;1 min / WO</span>
+          </div>
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="savings">
+        <div class="savings-label">Annual time recovered</div>
+        <div>
+          <span class="savings-val">88–182</span>
+          <span class="savings-unit"> hrs / yr</span>
+        </div>
+        <div class="savings-label" style="font-size:10px">(~376 completed WOs/yr avg × 14–29 min)</div>
+      </div>
+    </div>
+
+  </div>
+</div>

@@ -1,0 +1,52 @@
+sDatabaseName,sTableName,sColumnName,dtColDate,bCanBeNull,sDataType,sColDescription
+OPMS,Transactions,TransactionTimeStamp,47:04.8,FALSE,varchar (8),Time of transaction.
+OPMS,Transactions,TransactionType,47:04.8,TRUE,smallint (2),The transaction type (or ID). See table decription for possible transaction ID's.
+OPMS,Transactions,ValidationIndex,47:05.1,TRUE,smallint (2),"The rebate (or validation) index in the transaction (if available). Appears in transaction 30, 31, 40 and 41."
+OPMS,Transactions,xmlexport,47:05.1,TRUE,smallint (2),Used by the old XML export interface (XMLExport.exe) to mark if a transaction was already exported or not. Not used for new installations anymore.
+OPMS,Transactions,Amount,47:04.9,TRUE,int (4),The calculated costs (if available).
+OPMS,Transactions,CardNumber,47:04.9,TRUE,int (4),The (virtual) ticket number (KP) or card number (DP). Equal to the field TicketNumber.
+OPMS,Transactions,Id_Equipment,47:04.7,FALSE,smallint (2),The ID of the equipment (use OPMS..Equipment to get equipment details).
+OPMS,Transactions,Id_Location,47:04.7,FALSE,smallint (2),The ID of the location (use OPMS..Location to get location details).
+OPMS,Transactions,Id_Parking,47:04.7,FALSE,smallint (2),The ID of the car park (use OPMS..ParkingAdmin to get car park details).
+OPMS,Transactions,IdCashier,47:04.9,TRUE,smallint (2),"The cashier ID for transactions with credit card details. Relevant only for manual cashier terminals.
+Not used for reporting as the cashier ID is missing for other transactions (e.g. cash payment)."
+OPMS,Transactions,IdShift,47:04.9,TRUE,smallint (2),"The shift ID for transactions with credit card details. Relevant only for manual cashier terminals.
+Not used for reporting as the cashier ID is missing for other transactions (e.g. cash payment)."
+OPMS,Transactions,Parking,47:04.9,TRUE,smallint (2),The PH number reported in the transaction.
+OPMS,Transactions,PaymentMethod,47:04.9,TRUE,smallint (2),"The payment method (if a payment took place):
+  0: cash
+  1: common credit card
+  2: check
+  3: value card
+  4: value card 2 (DL700)
+  10..21: credit card, peripheral type 0..11"
+OPMS,Transactions,PreviousStationAddress,47:04.9,TRUE,varchar (4),The previous station address.
+OPMS,Transactions,RegionCode,47:04.9,TRUE,smallint (2),The region code.
+OPMS,Transactions,SubNumber,47:04.9,TRUE,smallint (2),"The sub-number relevant for certain DP card types (e.g. congress and visitor cards). Refer to ""Parcotax 900 Ticketspecification"" document for more details."
+OPMS,Transactions,T2Amount,47:05.1,TRUE,int (4),Track 2 data: amount
+OPMS,Transactions,T2AmountStatus,47:05.0,TRUE,tinyint (1),Track 2 data: amount status
+OPMS,Transactions,T2Date,47:05.0,TRUE,datetime (8),Track 2 data: date
+OPMS,Transactions,T2InPark,47:05.0,TRUE,tinyint (1),Track 2 data: flag inside / outside car park
+OPMS,Transactions,T2Neutral,47:05.0,TRUE,tinyint (1),Track 2 data: neutral flag for DP cards
+OPMS,Transactions,T2Paid,47:05.0,TRUE,tinyint (1),Track 2 data: not paid / paid flag
+OPMS,Transactions,T2Parking,47:05.0,TRUE,smallint (2),Track 2 data: PH number
+OPMS,Transactions,T2RegionCode,47:05.0,TRUE,smallint (2),Track 2 data: region code
+OPMS,Transactions,T2StationAdddress,47:05.1,TRUE,varchar (4),Track 2 data: station address (type and address combined)
+OPMS,Transactions,T2Status,47:05.0,TRUE,smallint (2),Track 2 status in transaction.
+OPMS,Transactions,T2Time,47:05.0,TRUE,varchar (8),Track 2 data: time
+OPMS,Transactions,Tariff,47:04.9,TRUE,tinyint (1),Tariff used fo tariff calculation (if tariff calculation took place).
+OPMS,Transactions,TicketNumber,47:04.8,TRUE,int (4),The (virtual) ticket number (KP) or card number (DP). Equal to the field TicketNumber.
+OPMS,Transactions,TicketType,47:04.9,TRUE,smallint (2),"The ticket or card type:
+  0: KP (also used for CC and tag transactions)
+  1: value card
+  2: normal DP
+  3: congress
+  4: visitor
+  5: fixed time per day
+  7: fixed number of entries
+  8: pool card"
+OPMS,Transactions,TransactionDate,47:04.8,TRUE,datetime (8),Date on ticket.
+OPMS,Transactions,TransactionDateStamp,47:04.8,FALSE,datetime (8),Date of transaction.
+OPMS,Transactions,TransactionError,47:04.8,TRUE,smallint (2),Rejection code if available (transaction 63 and 64 don't have a rejection code).
+OPMS,Transactions,TransactionId,47:04.8,FALSE,smallint (2),The transaction number (0 - 9999). The field name is a bit misleading; transaction ID is usually used for the transaction identifier (see field TransactionType).
+OPMS,Transactions,TransactionTime,47:04.8,TRUE,varchar (8),Time on ticket.

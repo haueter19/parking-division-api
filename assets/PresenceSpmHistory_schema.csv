@@ -1,24 +1,46 @@
 sDatabaseName,sTableName,sColumnName,dtColDate,bCanBeNull,sDataType,sColDescription
-OPMS,PresenceSpmHistory,cAmountPaid,43:27.0,FALSE,money (8),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,cAmountPaidTagPayment,43:27.0,FALSE,money (8),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,cCalculatedCosts,43:27.0,FALSE,money (8),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,cCalculatedCostsTagPayment,43:27.0,FALSE,money (8),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,dtEntryDate,43:27.0,FALSE,smalldatetime (4),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,dtExitDate,43:27.0,FALSE,smalldatetime (4),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,eMediaType,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,eState,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,iCountingGroup,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,iDPType,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,iEntryLocationId,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,iExitLocationId,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,iInfoPattern,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,iParkingDuration,43:27.0,FALSE,int (4),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,iParkingId,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,iPHNumber,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,lVirtualTicketNumber,43:27.0,FALSE,int (4),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,sCompanyId,43:27.0,FALSE,varchar (10),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,sEntryKpTrace,43:27.0,FALSE,varchar (50),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,sEntryTime,43:27.0,FALSE,varchar (8),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,sExitTime,43:27.0,FALSE,varchar (8),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,sMediaNumber,43:27.0,FALSE,varchar (50),See field description in table OPMS..PresenceSpm.
-OPMS,PresenceSpmHistory,sZLCFacilityCode,43:27.0,FALSE,varchar (10),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpm,eState,43:27.0,FALSE,smallint (2),"The current status of this database record:
+  1: only entry data present so far
+  2: only exit data present so far
+  3: entry and exit data present
+  4: lost exit (entry without exit data)
+  5: lost entry (exit without entry data)
+""Closed"" records (state = 3, 4 or 5) are moved to the table OPMS..PresenceSpmHistory."
+OPMS,PresenceSpm,iCountingGroup,43:27.0,FALSE,smallint (2),"The counting group the media was assigned to at the time of this presence. The counting group is used as a link between SPMAdmin and the counting system.
+Once written this value is not accessed by internal mechanisms or by the reporting."
+OPMS,PresenceSpm,iDPType,43:27.0,FALSE,smallint (2),The DP type in case the media type is DP card. Usually only DP type 2 (normal DP card) or 8 (pool card) are used.
+OPMS,PresenceSpm,iEntryLocationId,43:27.0,FALSE,smallint (2),The entry location ID (use OPMS..Location to get location details).
+OPMS,PresenceSpm,iExitLocationId,43:27.0,FALSE,smallint (2),The exit location ID (use OPMS..Location to get location details).
+OPMS,PresenceSpm,iInfoPattern,43:27.0,FALSE,smallint (2),not used
+OPMS,PresenceSpm,iParkingDuration,43:27.0,FALSE,int (4),not used (this field was foreseen to hold to parking duration in minutes but the value is not calculated; calculation takes place in the reports if necessary)
+OPMS,PresenceSpm,iParkingId,43:27.0,FALSE,smallint (2),The ID of the car park (use OPMS..ParkingAdmin to get car park details).
+OPMS,PresenceSpm,iPHNumber,43:27.0,FALSE,smallint (2),Holds the PH number assigned to this presence (by the entry station).
+OPMS,PresenceSpm,lVirtualTicketNumber,43:27.0,FALSE,int (4),The virtual ticket number assigned to online SPM media presences. The value 0 is written for offline (DP card) presences.
+OPMS,PresenceSpm,sCompanyId,43:27.0,FALSE,varchar (10),"This field is not important; it was originally designed to store the company ID for credit cards used as season cards. Using credit cards as season cards is quite unusual though and the feature is not allowed in PCI compliant systems.
+"
+OPMS,PresenceSpm,sEntryKpTrace,43:27.0,FALSE,varchar (50),The (virtual) KP trace generated at the entry station for online media types is stored in this field.
+OPMS,PresenceSpm,sEntryTime,43:27.0,FALSE,varchar (8),The entry time.
+OPMS,PresenceSpm,sExitTime,43:27.0,FALSE,varchar (8),The exit time.
+OPMS,PresenceSpm,sMediaNumber,43:27.0,FALSE,varchar (50),The media number.
+OPMS,PresenceSpm,sZLCFacilityCode,43:27.0,FALSE,varchar (10),The facility code for reported by the old ZLC (AVI) system from RevCon. Not used for new installations.
+OPMS,PresenceSpm,cAmountPaid,43:27.0,FALSE,money (8),The paid amount reported in transaction 30. Not used by the SPM reports.
+OPMS,PresenceSpm,cAmountPaidTagPayment,43:27.0,FALSE,money (8),"This field holds the sum of the actual tag payments (transaction 37) during this presence. The value might be smaller then cCalculatedCostsTagPayment in case the customer used validations to lower the payment amount.
+  cAmountPaidTagPayment = cCalculatedCostsTagPayment - validations"
+OPMS,PresenceSpm,cCalculatedCosts,43:27.0,FALSE,money (8),"The amount calculated by the exit station is stored in this fields. This is used to calculate the amount to be charged in case the pass without payment feature is enabled. Tag payment and pass without payment cannopt be used in parallel hence ZMS uses the following formula to calculate the amount to be charged for pass without payment:
+  IF (cAmountPaidTagPayment = 0) AND (cCalculatedCostsTagPayment = 0)
+    pass without payment amount = cCalculatedCosts
+  ELSE
+    pass without payment amount = 0"
+OPMS,PresenceSpm,cCalculatedCostsTagPayment,43:27.0,FALSE,money (8),"This field holds the sum of the calculated tag payments costs (transaction 37) during this presence:
+  cCalculatedCostsTagPayment = cAmountPaidTagPayment + validations"
+OPMS,PresenceSpm,dtEntryDate,43:27.0,FALSE,smalldatetime (4),The entry date.
+OPMS,PresenceSpm,dtExitDate,43:27.0,FALSE,smalldatetime (4),The exit date.
+OPMS,PresenceSpm,eMediaType,43:27.0,FALSE,smallint (2),"The media type. Possible media types:
+  0: DP card
+  1: credit card (not allowed for PCI compliant systems)
+  2: L300 card (decto)
+  3: AVI/ZLC card (not used for new systems)
+  4: ticket (not used)
+  5: L4 card (Wiegand)
+  6: L5 card (casino card, not used for new systems)
+  7: L6 card (variable length)"

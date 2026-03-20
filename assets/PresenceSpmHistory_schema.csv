@@ -1,0 +1,24 @@
+sDatabaseName,sTableName,sColumnName,dtColDate,bCanBeNull,sDataType,sColDescription
+OPMS,PresenceSpmHistory,cAmountPaid,43:27.0,FALSE,money (8),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,cAmountPaidTagPayment,43:27.0,FALSE,money (8),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,cCalculatedCosts,43:27.0,FALSE,money (8),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,cCalculatedCostsTagPayment,43:27.0,FALSE,money (8),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,dtEntryDate,43:27.0,FALSE,smalldatetime (4),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,dtExitDate,43:27.0,FALSE,smalldatetime (4),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,eMediaType,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,eState,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,iCountingGroup,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,iDPType,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,iEntryLocationId,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,iExitLocationId,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,iInfoPattern,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,iParkingDuration,43:27.0,FALSE,int (4),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,iParkingId,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,iPHNumber,43:27.0,FALSE,smallint (2),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,lVirtualTicketNumber,43:27.0,FALSE,int (4),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,sCompanyId,43:27.0,FALSE,varchar (10),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,sEntryKpTrace,43:27.0,FALSE,varchar (50),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,sEntryTime,43:27.0,FALSE,varchar (8),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,sExitTime,43:27.0,FALSE,varchar (8),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,sMediaNumber,43:27.0,FALSE,varchar (50),See field description in table OPMS..PresenceSpm.
+OPMS,PresenceSpmHistory,sZLCFacilityCode,43:27.0,FALSE,varchar (10),See field description in table OPMS..PresenceSpm.

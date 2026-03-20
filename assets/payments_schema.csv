@@ -1,0 +1,35 @@
+sDatabaseName,sTableName,sColumnName,dtColDate,bCanBeNull,sDataType,sColDescription
+OPMS,Payments,Time,47:06.8,FALSE,char (8),The time the payment occured.
+OPMS,Payments,Amount,47:06.9,TRUE,money (8),Hold the total calculated amount.
+OPMS,Payments,AmountPaid,47:06.9,TRUE,money (8),Holds the amount actually paid (calculated amount - validations).
+OPMS,Payments,AuthDescription,43:26.9,TRUE,varchar (50),The authorisation description in case of a credit card payment. Empty if PCI configured.
+OPMS,Payments,Authorisation,47:06.9,TRUE,char (15),The authorisation code in case of a credit card payment. Empty if PCI configured.
+OPMS,Payments,BatchRetry,47:06.9,TRUE,int (4),Holds the number of batch retries for credit card payments if batch clearing in use.
+OPMS,Payments,CardNumber,47:06.8,TRUE,int (4),"The ticket number (KP) or card number (DP, WP) the customer paid for."
+OPMS,Payments,ClearingStatus,47:06.9,TRUE,int (4),Holds the latest clearing status in case of a credit card payment (e.g. relevant for batch clearing).
+OPMS,Payments,CreditCardNumber,47:06.8,TRUE,char (25),The credit card number in case of a credit card payment. Masked if PCI configured.
+OPMS,Payments,CreditCardNumberEncrypted,43:26.9,FALSE,varchar (100),The encrypted credit card number. Empty if PCI configured.
+OPMS,Payments,CreditData,47:06.9,TRUE,char (40),The additional credit card data in case of a credit card payment. Empty if PCI configured.
+OPMS,Payments,Date,47:06.8,FALSE,smalldatetime (4),The date the payment occured.
+OPMS,Payments,ExpiryDate,47:06.9,TRUE,char (6),The expiry date of the credit card in case of a credit card payment.
+OPMS,Payments,Id_CardCompany,47:06.8,TRUE,char (3),The card company ID in case of a credit card payment.
+OPMS,Payments,Id_Equipment,47:06.8,FALSE,int (4),The ID of the equipment (use OPMS..Equipment to get equipment details).
+OPMS,Payments,Id_Location,47:06.8,FALSE,int (4),The ID of the location (use OPMS..Location to get location details).
+OPMS,Payments,Id_Parking,47:06.7,FALSE,int (4),The ID of the car park (use OPMS..ParkingAdmin to get car park details).
+OPMS,Payments,isSpmCard,43:26.9,TRUE,bit (1),1 in case of a payment for a season parker card (e.g. value card reload).
+OPMS,Payments,LastBatchRetryDate,43:26.9,TRUE,datetime (8),Last batch retry date in case of a credit card payment with batch clearing.
+OPMS,Payments,OfflineSale,43:26.9,FALSE,tinyint (1),1 in case the peripheral station accepted the credit card paymnt in offline mode.
+OPMS,Payments,OnLineClear,47:06.9,TRUE,int (4),1 in case credit card has been cleared online (used for credit card paymnts only).
+OPMS,Payments,ParkhouseNumber,47:07.0,TRUE,smallint (2),The parkhouse number on the ticket. Relevant fo tarif calculation.
+OPMS,Payments,PayMethod,47:07.0,TRUE,smallint (2),"The method of payment (cash, credit card, WP card ...)."
+OPMS,Payments,PreviousStationAddress,47:07.0,TRUE,varchar (10),The station address the customer has been prior to the payment station.
+OPMS,Payments,RebateIndex,47:07.0,TRUE,smallint (2),The rebate index if a rebate card has been used to pay.
+OPMS,Payments,ServiceCode,47:06.9,TRUE,char (3),The service code in case of a credit card payment. Empty if PCI configured.
+OPMS,Payments,sTagNumber,43:26.9,FALSE,varchar (30),The tag number a payment was made for (isSpmCard = 1). Used e.g. in case of a virtual card reload.
+OPMS,Payments,StatusKPTrace,47:07.0,TRUE,smallint (2),The new KP trace on the ticket (after payment).
+OPMS,Payments,T2Amount,43:26.9,FALSE,int (4),The track 2 amount after the payment. See ZEAG ticket specification.
+OPMS,Payments,T2AmountStatus,43:26.9,FALSE,tinyint (1),The track 2 amount status after the payment. See ZEAG ticket specification.
+OPMS,Payments,TariffNumber,47:07.0,TRUE,smallint (2),The tarif number used to calculate the tarif. Conditions might change this number (to be verified).
+OPMS,Payments,TicketNumber,47:06.8,TRUE,int (4),"The ticket number (KP) or card number (DP, WP) the customer paid for."
+OPMS,Payments,TicketType,47:06.8,FALSE,int (4),The ticket type of the media that the customer paid for or the credit card ID in case the customer paid with a credit card.
+OPMS,Payments,TicketTypeInTransaction,47:07.0,TRUE,smallint (2),The actual ticket type in the transaction. Other than the field 'TicketType' this field always holds the ticket type of the media the customer paid for (even if the customer paid with a credit card).

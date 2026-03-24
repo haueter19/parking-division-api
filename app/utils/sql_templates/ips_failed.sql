@@ -51,6 +51,7 @@ LEFT JOIN app.dim_payment_method pm On (
             WHEN s.card_type = 'DISC' THEN 'Discover' 
             WHEN s.card_type = 'AMEX' Then 'American Express'
             WHEN s.card_type IS NULL AND s.transaction_type = 'Coins' THEN 'Cash'
+            WHEN s.card_type IS NULL AND s.transaction_type = 'Credit Card' THEN 'unknown'
             WHEN s.card_type LIKE '%Remote%' THEN 'Remote/PBC'
             WHEN s.card_type LIKE '%PBC%' THEN 'Remote/PBC'
             ELSE s.card_type 

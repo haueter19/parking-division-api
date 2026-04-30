@@ -89,7 +89,7 @@ async def get_work_orders(
             wo.DomainID = 3
             AND wo.WOTEMPLATEID IN ('217', '1586')
             AND wo.Status IN ('OPEN', 'HOLD')
-            AND (al.LINKTYPE = 'Parent' or al.LINKTYPE IS NULL)
+            AND (al.LINKTYPE IN ('Parent', 'Related') or al.LINKTYPE IS NULL)
             AND (al.SOURCEACTIVITYTYPE IN ('WorkOrder', 'ServiceRequest') Or al.SOURCEACTIVITYTYPE IS NULL)
         ORDER BY 1 DESC
     """)

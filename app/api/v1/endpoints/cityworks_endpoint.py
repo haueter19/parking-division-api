@@ -82,9 +82,9 @@ async def get_work_orders(
                 WHEN pa.Description IS NULL AND wo.WOTemplateId = '217' THEN 'TE Signing'
                 ELSE pa.Description
             END As ParentTemplateDescription
-        FROM CMMS.azteca.WorkOrder wo
-        left join CMMS.azteca.ActivityLink al On (wo.WorkorderId=al.DESTACTIVITYID AND al.DestActivityType!='Inspection')
-        left join CMMS.azteca.WorkOrder pa On (al.SOURCEACTIVITYID=pa.WorkOrderId)
+        FROM CITYWORKS.azteca.WorkOrder wo
+        left join CITYWORKS.azteca.ActivityLink al On (wo.WorkorderId=al.DESTACTIVITYID AND al.DestActivityType!='Inspection')
+        left join CITYWORKS.azteca.WorkOrder pa On (al.SOURCEACTIVITYID=pa.WorkOrderId)
         WHERE
             wo.DomainID = 3
             AND wo.WOTEMPLATEID IN ('217', '1586')
@@ -206,7 +206,7 @@ async def get_cityworks_stats(
                 ELSE 0
             END) As closed_not_completed
 
-        FROM CMMS.azteca.WorkOrder wo
+        FROM CITYWORKS.azteca.WorkOrder wo
         WHERE wo.DomainID = 3
           AND wo.WOTEMPLATEID IN ('217', '1586')
     """)
@@ -241,10 +241,10 @@ async def get_filter_options(
 
     parent_templates = text("""select 
         distinct wo.Description
-    from CMMS.azteca.WorkOrder wo
-    inner join CMMS.azteca.WOTEMPLATE t On (wo.WOTEMPLATEID = t.WOTEMPLATEID)
-    left join CMMS.azteca.ActivityLink al On (wo.WorkorderId=al.SOURCEACTIVITYID)
-    left join CMMS.azteca.WorkOrder ch On (al.DESTACTIVITYID=ch.WorkOrderId)
+    from CITYWORKS.azteca.WorkOrder wo
+    inner join CITYWORKS.azteca.WOTEMPLATE t On (wo.WOTEMPLATEID = t.WOTEMPLATEID)
+    left join CITYWORKS.azteca.ActivityLink al On (wo.WorkorderId=al.SOURCEACTIVITYID)
+    left join CITYWORKS.azteca.WorkOrder ch On (al.DESTACTIVITYID=ch.WorkOrderId)
     where
         wo.domainId = 3
         and al.LINKTYPE = 'Parent'

@@ -614,7 +614,7 @@ class DataLoader:
         if file_path.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(file_path, dtype=set_dtypes)
         else:
-            df = pd.read_csv(file_path, dtype=set_dtypes)
+            df = pd.read_csv(file_path, dtype=set_dtypes, encoding='latin-1')
 
         # --- Check for a sum or total at the bottom of the report and remove it ---
         df = df[df['Date'].notna()]

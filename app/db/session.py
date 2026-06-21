@@ -35,9 +35,21 @@ connection_string = (
 )
 traffic_engine = create_engine(connection_string)
 
+# Connect to AIMS database using ConnectionManager
+# This is used for the Enforcement stats endpoint which queries AIMS directly.
+server3 = 'policelstn'
+database3 = 'AIMS'
+pw3 = 'fake' # Note: In production, this password should be stored securely (e.g., environment variable, secrets manager) and not hardcoded.
+connection_string = (
+    f"mssql+pyodbc://AIMS_RW:{pw3}@{server3}/{database3}"
+    "?driver=ODBC+Driver+17+for+SQL+Server"
+)
+aims_engine = create_engine(connection_string)
+
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 SessionLocalTraffic = sessionmaker(autocommit=False, autoflush=False, bind=traffic_engine)
+SessionLocalAims = sessionmaker(autocommit=False, autoflush=False, bind=aims_engine)
 
 # Base class for declarative models
 metadata = MetaData(schema="app")
@@ -72,6 +84,21 @@ def get_traffic_db() -> Generator[Session, None, None]:
             ...
     """
     db = SessionLocalTraffic()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def get_aims_db() -> Generator[Session, None, None]:
+    """
+    Dependency that provides a database session bound to the AIMS engine.
+
+    Use in endpoints or background tasks that need to query the AIMS DB:
+
+        def handler(db: Session = Depends(get_aims_db)):
+            ...
+    """
+    db = SessionLocalAims()
     try:
         yield db
     finally:

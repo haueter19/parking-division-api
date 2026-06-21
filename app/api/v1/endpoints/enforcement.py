@@ -36,7 +36,9 @@ async def get_enforcement_stats(
 
     try:
         rows = aims_db.execute(citations_sql).fetchall()
+        print(f"Fetched {len(rows)} citations from AIMS for enforcement stats")
     except Exception as e:
+        print(f"Error fetching enforcement stats from AIMS: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching enforcement stats: {str(e)}"
@@ -86,7 +88,7 @@ async def get_enforcement_stats(
 
         if "WARNING" in status_upper:
             warnings += 1
-        if "TOW" in status_upper:
+        if row.FirstViolationDesc == "TOW FEE":
             tows += 1
         if row.StatusDesc == 'Void Approved':
             voids += 1

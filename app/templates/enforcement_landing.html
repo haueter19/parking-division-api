@@ -4,32 +4,402 @@
 {% block title %}Enforcement – Parking Division{% endblock %}
 
 {% block head_extra %}
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <style>
-    .section-header { margin-bottom: 24px; }
+    .section-header {
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        margin-bottom: 24px;
+    }
     .section-header h1 { font-size: 1.5rem; color: #1e2a3a; font-weight: 700; }
+    .section-header .period-note { color: #6b7280; font-size: 0.9rem; }
 
-    .placeholder-card {
+    /* ── Stat cards ── */
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 16px;
+        margin-bottom: 28px;
+    }
+    .stat-card {
         background: #fff;
         border-radius: 10px;
-        padding: 40px;
+        padding: 20px 22px;
         box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+        border-top: 4px solid #6b7280;
         text-align: center;
-        max-width: 480px;
-        margin: 40px auto;
     }
-    .placeholder-card .icon { font-size: 3rem; margin-bottom: 16px; opacity: 0.5; }
-    .placeholder-card h2 { color: #374151; font-size: 1.1rem; margin-bottom: 8px; }
-    .placeholder-card p { color: #9ca3af; font-size: 0.9rem; }
+    .stat-card .stat-label {
+        font-size: 0.78rem;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 8px;
+    }
+    .stat-card .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1e2a3a;
+        line-height: 1;
+    }
+    .stat-card .stat-sub {
+        font-size: 0.78rem;
+        color: #9ca3af;
+        margin-top: 6px;
+    }
+    .stat-card.stat-citations  { border-top-color: #1d4ed8; }
+    .stat-card.stat-citations .stat-value { color: #1d4ed8; }
+    .stat-card.stat-amount     { border-top-color: #059669; }
+    .stat-card.stat-amount .stat-value { color: #059669; }
+    .stat-card.stat-warnings   { border-top-color: #d97706; }
+    .stat-card.stat-warnings .stat-value { color: #d97706; }
+    .stat-card.stat-tows       { border-top-color: #dc2626; }
+    .stat-card.stat-tows .stat-value { color: #dc2626; }
+    .stat-card.stat-voids      { border-top-color: #9ca3af; }
+
+    /* ── Chart / table cards ── */
+    .card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 20px 22px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+        margin-bottom: 20px;
+    }
+    .card h2 {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #374151;
+        margin-bottom: 14px;
+    }
+
+    .two-col {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+    .two-col-equal {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    @media (max-width: 860px) {
+        .two-col, .two-col-equal { grid-template-columns: 1fr; }
+    }
+
+    /* ── Badge / status table ── */
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+    }
+    .data-table th {
+        text-align: left;
+        color: #6b7280;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 6px 10px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    .data-table td {
+        padding: 7px 10px;
+        border-bottom: 1px solid #f3f4f6;
+        color: #374151;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table td.num { text-align: right; font-weight: 600; color: #1e2a3a; }
+
+    .bar-mini-wrap { display: flex; align-items: center; gap: 8px; }
+    .bar-mini-bg {
+        flex: 1;
+        background: #f3f4f6;
+        border-radius: 3px;
+        height: 8px;
+        overflow: hidden;
+    }
+    .bar-mini-fill { height: 100%; border-radius: 3px; background: #1d4ed8; }
+
+    .loading { color: #9ca3af; font-size: 0.875rem; text-align: center; padding: 24px 0; }
+    .error   { color: #ef4444; font-size: 0.875rem; padding: 12px 0; }
+    .no-data { color: #9ca3af; font-size: 0.875rem; text-align: center; padding: 16px 0; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="section-header">
     <h1>Enforcement</h1>
+    <span class="period-note" id="reportDateLabel">Loading…</span>
 </div>
-<div class="placeholder-card">
-    <div class="icon">🚔</div>
-    <h2>Enforcement Section</h2>
-    <p>This section is under development. Enforcement operations and reporting will be available here.</p>
+
+<!-- Summary stat cards -->
+<div class="stats-row">
+    <div class="stat-card stat-citations">
+        <div class="stat-label">Citations</div>
+        <div class="stat-value" id="statCitations">—</div>
+        <div class="stat-sub">Previous day</div>
+    </div>
+    <div class="stat-card stat-amount">
+        <div class="stat-label">Total Amount</div>
+        <div class="stat-value" id="statAmount">—</div>
+        <div class="stat-sub">Fines issued</div>
+    </div>
+    <div class="stat-card stat-warnings">
+        <div class="stat-label">Warnings</div>
+        <div class="stat-value" id="statWarnings">—</div>
+        <div class="stat-sub">No fine</div>
+    </div>
+    <div class="stat-card stat-tows">
+        <div class="stat-label">Tows</div>
+        <div class="stat-value" id="statTows">—</div>
+        <div class="stat-sub">Vehicles towed</div>
+    </div>
+    <div class="stat-card stat-voids">
+        <div class="stat-label">Voids</div>
+        <div class="stat-value" id="statVoids">—</div>
+        <div class="stat-sub">Dismissed / voided</div>
+    </div>
 </div>
+
+<!-- Row 2: hourly trend + top violations -->
+<div class="two-col">
+    <div class="card">
+        <h2>Citations by Hour</h2>
+        <div id="hourlyChart" style="height:260px"><div class="loading">Loading…</div></div>
+    </div>
+    <div class="card">
+        <h2>Top Violations</h2>
+        <div id="violationChart" style="height:260px"><div class="loading">Loading…</div></div>
+    </div>
+</div>
+
+<!-- Row 3: status breakdown + badge table -->
+<div class="two-col-equal">
+    <div class="card">
+        <h2>Citations by Status</h2>
+        <div id="statusChart" style="height:220px"><div class="loading">Loading…</div></div>
+    </div>
+    <div class="card">
+        <h2>Citations by Badge</h2>
+        <div id="badgeTableWrap"><div class="loading">Loading…</div></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const token = localStorage.getItem('access_token');
+
+const PLOTLY_CONFIG = { displayModeBar: false, responsive: true };
+const PLOTLY_MARGIN = { t: 10, r: 10, b: 40, l: 10 };
+const ENF_BLUE = '#1d4ed8';
+const ENF_GRAY = '#6b7280';
+
+async function loadStats() {
+    let data;
+    try {
+        const resp = await fetch('/api/v1/enforcement/stats', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!resp.ok) {
+            const err = await resp.text();
+            showError(`Failed to load data (${resp.status})`);
+            return;
+        }
+        data = await resp.json();
+    } catch (e) {
+        showError('Network error loading enforcement stats');
+        return;
+    }
+
+    // Date label
+    const d = new Date(data.report_date + 'T12:00:00');
+    document.getElementById('reportDateLabel').textContent =
+        d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+    // Stat cards
+    const s = data.summary;
+    document.getElementById('statCitations').textContent = s.citations.toLocaleString();
+    document.getElementById('statAmount').textContent = '$' + s.total_amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    document.getElementById('statWarnings').textContent = s.warnings.toLocaleString();
+    document.getElementById('statTows').textContent = s.tows.toLocaleString();
+    document.getElementById('statVoids').textContent = s.voids.toLocaleString();
+
+    // Charts
+    renderHourly(data.by_hour);
+    renderViolations(data.by_violation);
+    renderStatus(data.by_status);
+    renderBadgeTable(data.by_badge);
+}
+
+function renderHourly(byHour) {
+    const el = document.getElementById('hourlyChart');
+    if (!byHour || byHour.length === 0) {
+        el.innerHTML = '<div class="no-data">No data</div>';
+        return;
+    }
+    el.innerHTML = '';
+
+    const labels = byHour.map(r => {
+        const h = r.hour % 12 || 12;
+        const ampm = r.hour < 12 ? 'AM' : 'PM';
+        return `${h} ${ampm}`;
+    });
+    const counts = byHour.map(r => r.count);
+
+    Plotly.newPlot(el, [{
+        x: labels,
+        y: counts,
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: { color: ENF_BLUE, width: 2.5, shape: 'spline' },
+        marker: { color: ENF_BLUE, size: 5 },
+        fill: 'tozeroy',
+        fillcolor: 'rgba(29,78,216,0.08)',
+        hovertemplate: '%{x}: <b>%{y}</b> citations<extra></extra>',
+    }], {
+        margin: PLOTLY_MARGIN,
+        xaxis: {
+            showgrid: false,
+            tickfont: { size: 10, color: '#9ca3af' },
+            tickangle: -45,
+        },
+        yaxis: {
+            gridcolor: '#f3f4f6',
+            tickfont: { size: 10, color: '#9ca3af' },
+            rangemode: 'tozero',
+        },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+    }, PLOTLY_CONFIG);
+}
+
+function renderViolations(byViolation) {
+    const el = document.getElementById('violationChart');
+    if (!byViolation || byViolation.length === 0) {
+        el.innerHTML = '<div class="no-data">No data</div>';
+        return;
+    }
+    el.innerHTML = '';
+
+    // Top 10
+    const top = byViolation.slice(0, 10);
+    const labels = top.map(r => r.violation);
+    const counts = top.map(r => r.count);
+
+    Plotly.newPlot(el, [{
+        x: counts,
+        y: labels,
+        type: 'bar',
+        orientation: 'h',
+        marker: { color: ENF_BLUE, opacity: 0.85 },
+        hovertemplate: '<b>%{y}</b><br>%{x} citations<extra></extra>',
+    }], {
+        margin: { t: 10, r: 20, b: 30, l: 10 },
+        xaxis: {
+            gridcolor: '#f3f4f6',
+            tickfont: { size: 10, color: '#9ca3af' },
+        },
+        yaxis: {
+            showgrid: false,
+            tickfont: { size: 10, color: '#374151' },
+            automargin: true,
+            autorange: 'reversed',
+        },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+    }, PLOTLY_CONFIG);
+}
+
+function renderStatus(byStatus) {
+    const el = document.getElementById('statusChart');
+    if (!byStatus || byStatus.length === 0) {
+        el.innerHTML = '<div class="no-data">No data</div>';
+        return;
+    }
+    el.innerHTML = '';
+
+    const labels = byStatus.map(r => r.status);
+    const counts = byStatus.map(r => r.count);
+
+    // Assign colors: first item gets blue, rest get graduated grays
+    const colors = counts.map((_, i) => i === 0 ? ENF_BLUE : `rgba(107,114,128,${0.7 - i * 0.08})`);
+
+    Plotly.newPlot(el, [{
+        x: counts,
+        y: labels,
+        type: 'bar',
+        orientation: 'h',
+        marker: { color: colors },
+        hovertemplate: '<b>%{y}</b><br>%{x} citations<extra></extra>',
+    }], {
+        margin: { t: 10, r: 20, b: 30, l: 10 },
+        xaxis: {
+            gridcolor: '#f3f4f6',
+            tickfont: { size: 10, color: '#9ca3af' },
+        },
+        yaxis: {
+            showgrid: false,
+            tickfont: { size: 10, color: '#374151' },
+            automargin: true,
+            autorange: 'reversed',
+        },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+    }, PLOTLY_CONFIG);
+}
+
+function renderBadgeTable(byBadge) {
+    const wrap = document.getElementById('badgeTableWrap');
+    if (!byBadge || byBadge.length === 0) {
+        wrap.innerHTML = '<div class="no-data">No data</div>';
+        return;
+    }
+
+    const maxCount = byBadge[0].count;
+
+    const rows = byBadge.map(r => {
+        const pct = maxCount > 0 ? (r.count / maxCount * 100).toFixed(1) : 0;
+        return `<tr>
+            <td>${r.badge}</td>
+            <td>
+                <div class="bar-mini-wrap">
+                    <div class="bar-mini-bg">
+                        <div class="bar-mini-fill" style="width:${pct}%"></div>
+                    </div>
+                </div>
+            </td>
+            <td class="num">${r.count}</td>
+        </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `<table class="data-table">
+        <thead>
+            <tr>
+                <th>Badge</th>
+                <th></th>
+                <th style="text-align:right">Citations</th>
+            </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function showError(msg) {
+    document.getElementById('reportDateLabel').textContent = '';
+    ['statCitations','statAmount','statWarnings','statTows','statVoids'].forEach(id => {
+        document.getElementById(id).textContent = '—';
+        document.getElementById(id).classList.add('error');
+    });
+    ['hourlyChart','violationChart','statusChart'].forEach(id => {
+        document.getElementById(id).innerHTML = `<div class="error">${msg}</div>`;
+    });
+    document.getElementById('badgeTableWrap').innerHTML = `<div class="error">${msg}</div>`;
+}
+
+loadStats();
+</script>
 {% endblock %}

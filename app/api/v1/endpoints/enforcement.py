@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from collections import defaultdict
-from app.db.session import get_db
+from app.db.session import get_aims_db, get_db
 from app.api.dependencies import require_role, UserProxy
 from app.models.database import UserRole
 
@@ -12,6 +12,7 @@ router = APIRouter(prefix="/enforcement", tags=["enforcement"])
 @router.get("/stats")
 async def get_enforcement_stats(
     db: Session = Depends(get_db),
+    aims_db: Session = Depends(get_aims_db),
     current_user: UserProxy = Depends(require_role([UserRole.ENFORCEMENT, UserRole.MANAGER, UserRole.ADMIN]))
 ):
     """
@@ -20,18 +21,18 @@ async def get_enforcement_stats(
     All aggregation is done in Python from a single DB query.
     """
 
-    # TODO: Replace placeholder table/schema with the actual enforcement citation table.
-    #       Verify column names (Amount, and the logic for warnings/tows/voids) before using.
     citations_sql = text("""
         SELECT
             t.ticketid,
-            t.IssuedDate,
+            t.IssueDate,
             t.FirstViolationDesc,
-            t.StatusDesc0,
+            t.StatusDesc,
             t.BadgeNumber,
-            t.Amount  -- TODO: verify the dollar-amount column name
-        FROM placeholder_schema.placeholder_citations_table t  -- TODO: update schema.table
-        WHERE CAST(t.IssuedDate AS DATE) = CAST(DATEADD(DAY, -1, GETDATE()) AS DATE)
+            t.BadgeLastName,
+            t.Amount
+        FROM AIMS.dbo.VT_Tickets t
+        WHERE CAST(t.IssueDate AS DATE) = CAST(DATEADD(DAY, -1, GETDATE()) AS DATE)
+        ORDER BY t.IssueDate
     """)
 
     try:
@@ -81,18 +82,19 @@ async def get_enforcement_stats(
         amount = float(row.Amount or 0)
         total_amount += amount
 
-        status_raw = (row.StatusDesc0 or "").strip()
+        status_raw = (row.StatusDesc or "").strip()
         status_upper = status_raw.upper()
 
-        # TODO: Verify these status string patterns match the actual data values
         if "WARNING" in status_upper:
             warnings += 1
         if "TOW" in status_upper:
             tows += 1
-        if "VOID" in status_upper or "DISMISS" in status_upper:
+        if row.StatusDesc == 'Void Approved':
             voids += 1
+            total_citations -= 1
+            total_amount -= amount
 
-        issued = row.IssuedDate
+        issued = row.IssueDate
         if issued is not None:
             hour = issued.hour
             by_hour[hour] += 1

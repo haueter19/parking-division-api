@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from collections import defaultdict
-from app.db.session import get_aims_db, get_db
+from app.db.session import get_aims_db
 from app.api.dependencies import require_role, UserProxy
 from app.models.database import UserRole
 
@@ -11,7 +11,6 @@ router = APIRouter(prefix="/enforcement", tags=["enforcement"])
 
 @router.get("/stats")
 async def get_enforcement_stats(
-    db: Session = Depends(get_db),
     aims_db: Session = Depends(get_aims_db),
     current_user: UserProxy = Depends(require_role([UserRole.ENFORCEMENT, UserRole.MANAGER, UserRole.ADMIN]))
 ):
@@ -30,13 +29,13 @@ async def get_enforcement_stats(
             t.BadgeNumber,
             t.BadgeLastName,
             t.Amount
-        FROM AIMS.dbo.VT_Tickets t
+        FROM dbo.VT_Tickets t
         WHERE CAST(t.IssueDate AS DATE) = CAST(DATEADD(DAY, -1, GETDATE()) AS DATE)
         ORDER BY t.IssueDate
     """)
 
     try:
-        rows = db.execute(citations_sql).fetchall()
+        rows = aims_db.execute(citations_sql).fetchall()
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

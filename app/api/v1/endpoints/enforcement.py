@@ -86,9 +86,9 @@ async def get_enforcement_stats(
         status_raw = (row.StatusDesc or "").strip()
         status_upper = status_raw.upper()
 
-        if "WARNING" in status_upper:
+        if row.StatusDesc == "Warning":
             warnings += 1
-        if row.FirstViolationDesc == "TOW FEE":
+        if row.FirstViolationDesc == "TOW FEE" and row.StatusDesc != 'Void Approved':
             tows += 1
         if row.StatusDesc == 'Void Approved':
             voids += 1

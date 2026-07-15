@@ -147,7 +147,7 @@ function renderWorkOrders() {
     if (filteredWorkOrders.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="8">
+                <td colspan="9">
                     <div class="empty-state">
                         <div class="empty-state-icon">&#128269;</div>
                         <p>No work orders found matching your filters.</p>
@@ -167,7 +167,8 @@ function renderWorkOrders() {
                 <td>${getStatusBadge(wo.status)}</td>
                 <td>${wo.submit_to || '--'}</td>
                 <td>${formatDate(wo.initiate_date)}</td>
-                <td>${formatDate(wo.actual_start_date)}</td>
+                <td>${formatDate(wo.parent_start_date)}</td>
+                <td>${formatDate(wo.parent_end_date)}</td>
                 <td>${truncateText(wo.parent_template, 30) || '--'}</td>
                 <td>${wo.requested_by || '--'}</td>
             </tr>
@@ -373,7 +374,7 @@ function updateStats() {
 function showLoading() {
     document.getElementById('workOrdersBody').innerHTML = `
         <tr>
-            <td colspan="8">
+            <td colspan="9">
                 <div class="loading">
                     <div class="loading-spinner"></div>
                     Loading work orders...
@@ -390,7 +391,7 @@ function showError(message) {
 
     document.getElementById('workOrdersBody').innerHTML = `
         <tr>
-            <td colspan="8">
+            <td colspan="9">
                 <div class="empty-state">
                     <div class="empty-state-icon">&#9888;</div>
                     <p>Error loading work orders. Please try again.</p>

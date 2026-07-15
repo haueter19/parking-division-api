@@ -79,18 +79,26 @@ async def get_work_orders(
             wo.SupervisorSid, wo.RequestedBySid, wo.InitiatedBySid, wo.SubmitToSid, wo.SubmitToOpenBySid, wo.WorkCompletedBySid,
             CASE
                 WHEN pa.Description IS NULL AND wo.WOTemplateId = '1586' THEN 'Portable CC Reader Move'
-                WHEN pa.Description IS NULL AND wo.WOTemplateId = '217' THEN 'TE Signing'
+                WHEN pa.Description IS NULL AND wo.WOTemplateId = '217' THEN 'No parent'
                 ELSE pa.Description
-            END As ParentTemplateDescription
+            END As ParentTemplateDescription,
+            CASE
+                WHEN pa.Description = 'No Parking Sign Check' THEN pa.ProjStartDate
+                WHEN pa.Description IN ('Hood Install', 'Hood/Sign Space') THEN pa.ActualFinishDate
+                ELSE NULL
+            END AS ParentStartDate,
+            CASE
+                WHEN pa.Description = 'No Parking Sign Check' THEN pa.ProjFinishDate
+                WHEN pa.Description IN ('Hood Removal', 'Hood/Sign Removal') THEN pa.ActualFinishDate
+                ELSE NULL
+            END AS ParentFinishDate
         FROM CITYWORKS.azteca.WorkOrder wo
-        left join CITYWORKS.azteca.ActivityLink al On (wo.WorkorderId=al.DESTACTIVITYID AND al.DestActivityType!='Inspection')
-        left join CITYWORKS.azteca.WorkOrder pa On (al.SOURCEACTIVITYID=pa.WorkOrderId)
+        LEFT JOIN CITYWORKS.azteca.ActivityLink al ON (wo.WorkOrderId = al.DestActivityId AND al.DestActivityType = 'WorkOrder' AND al.LinkType = 'Parent' AND al.SourceActivityType = 'WorkOrder')
+        LEFT JOIN CITYWORKS.azteca.WorkOrder pa ON (al.SourceActivityId = pa.WorkOrderId)
         WHERE
             wo.DomainID = 3
             AND wo.WOTEMPLATEID IN ('217', '1586')
             AND wo.Status IN ('OPEN', 'HOLD')
-            AND (al.LINKTYPE IN ('Parent', 'Related') or al.LINKTYPE IS NULL)
-            AND (al.SOURCEACTIVITYTYPE IN ('WorkOrder', 'ServiceRequest') Or al.SOURCEACTIVITYTYPE IS NULL)
         ORDER BY 1 DESC
     """)
 
@@ -108,6 +116,8 @@ async def get_work_orders(
                 "initiate_date": row.InitiateDate.isoformat() if row.InitiateDate else None,
                 "actual_start_date": row.ActualStartDate.isoformat() if row.ActualStartDate else None,
                 "parent_template": row.ParentTemplateDescription,
+                "parent_start_date": row.ParentStartDate.isoformat() if row.ParentStartDate else None,
+                "parent_end_date": row.ParentFinishDate.isoformat() if row.ParentFinishDate else None,
                 "requested_by": row.RequestedBy
             })
 

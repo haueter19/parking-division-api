@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ table.schema }}.{{ table.name }}{% endblock %}
+{% block content %}
+<p><a href="/admin/schema/">&larr; back to overview</a></p>
+<h2>{{ table.schema }}.{{ table.name }}</h2>
+
+<table class="meta-table">
+    <tr><th>Row count</th><td>
+        {% if table.row_count is not none %}
+            {{ "{:,}".format(table.row_count) }}{% if not table.row_count_is_exact %} (approx.){% endif %}
+        {% else %}unknown{% endif %}
+    </td></tr>
+    <tr><th>Geometry type</th><td>
+        {% if table.geometry_type %}{{ table.geometry_type }} (SRID {{ table.srid }}){% else %}n/a{% endif %}
+    </td></tr>
+    <tr><th>Columns</th><td>{{ table.columns|length }}</td></tr>
+</table>
+
+{% if table.notes %}
+<div class="notes-box"><strong>Notes:</strong> {{ table.notes }}</div>
+{% endif %}
+{% if table.data_quality_notes %}
+<div class="dq-box"><strong>Data quality / completeness:</strong> {{ table.data_quality_notes }}</div>
+{% endif %}
+
+<pre class="mermaid">
+{{ diagram }}
+</pre>
+
+<h3>Columns</h3>
+<table class="meta-table">
+    <tr><th>#</th><th>Name</th><th>Type</th><th>Nullable</th><th>Flags</th><th>Notes</th></tr>
+    {% for c in table.columns %}
+    <tr>
+        <td>{{ c.ordinal_position }}</td>
+        <td>{{ c.name }}</td>
+        <td>{{ c.data_type }}</td>
+        <td>{{ "yes" if c.nullable else "no" }}</td>
+        <td>
+            {% if c.is_primary_key %}<span class="badge badge-pk">PK</span>{% endif %}
+            {% if c.is_foreign_key %}<span class="badge badge-fk">FK</span>{% endif %}
+            {% if c.is_geometry %}<span class="badge badge-geom">geometry</span>{% endif %}
+        </td>
+        <td>{{ c.notes or "" }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}

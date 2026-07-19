@@ -8,6 +8,7 @@ from sqlalchemy import text
 from app.api.v1.api import api_router
 from app.db.session import init_db, SessionLocalTraffic, SessionLocal
 from app.config import settings
+from app.schema_viz.webapp import app as schema_viz_app
 #from app.utils import etl_cache
 from app.utils.etl_processor import ETLProcessor
 import os
@@ -44,6 +45,10 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
+
+# Mount the schema visualization sub-app (reads app/schema_viz/snapshots/latest.json;
+# self-contained FastAPI app with its own templates, see app/schema_viz/README.md)
+app.mount("/admin/schema", schema_viz_app)
 
 # Serve static files (for the web interface)
 static_dir = os.path.join(os.path.dirname(__file__), "static")

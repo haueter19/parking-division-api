@@ -1,0 +1,252 @@
+{
+  "generated_at": "2026-07-18T17:38:56",
+  "source_description": "PUReporting.dw + Traffic.SDE (synthetic test data)",
+  "tables": [
+    {
+      "schema": "dw",
+      "name": "VisitDetails",
+      "columns": [
+        {
+          "name": "TripDetailID",
+          "data_type": "varchar(32)",
+          "simple_type": "string",
+          "nullable": false,
+          "ordinal_position": 1,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "GarageID",
+          "data_type": "int",
+          "simple_type": "int",
+          "nullable": false,
+          "ordinal_position": 2,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "EntryDate",
+          "data_type": "datetime2",
+          "simple_type": "datetime",
+          "nullable": false,
+          "ordinal_position": 3,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": "Clipped at rebuild window bounds"
+        },
+        {
+          "name": "ExitDate",
+          "data_type": "datetime2",
+          "simple_type": "datetime",
+          "nullable": true,
+          "ordinal_position": 4,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "customer_type",
+          "data_type": "varchar(20)",
+          "simple_type": "string",
+          "nullable": true,
+          "ordinal_position": 5,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "LoadDate",
+          "data_type": "datetime2",
+          "simple_type": "datetime",
+          "nullable": false,
+          "ordinal_position": 6,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": "Bounds rebuild window"
+        },
+        {
+          "name": "PermitNumber",
+          "data_type": "varchar(20)",
+          "simple_type": "string",
+          "nullable": true,
+          "ordinal_position": 7,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "is_geometry": false,
+          "notes": null
+        }
+      ],
+      "row_count": 4812330,
+      "row_count_is_exact": true,
+      "geometry_type": null,
+      "srid": null,
+      "notes": "Entry/exit event pairs; source of truth for occupancy rebuild.",
+      "data_quality_notes": "OOS backlog causes both under- and overstated occupancy in opposite directions; see worklist output from occupancy_pipeline.py.",
+      "last_modified": null
+    },
+    {
+      "schema": "dw",
+      "name": "VisitSummary",
+      "columns": [
+        {
+          "name": "GarageID",
+          "data_type": "int",
+          "simple_type": "int",
+          "nullable": false,
+          "ordinal_position": 1,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "date",
+          "data_type": "date",
+          "simple_type": "datetime",
+          "nullable": false,
+          "ordinal_position": 2,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "minute_of_day",
+          "data_type": "int",
+          "simple_type": "int",
+          "nullable": false,
+          "ordinal_position": 3,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "dayofweek",
+          "data_type": "tinyint",
+          "simple_type": "int",
+          "nullable": false,
+          "ordinal_position": 4,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "transient",
+          "data_type": "int",
+          "simple_type": "int",
+          "nullable": false,
+          "ordinal_position": 5,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "permit",
+          "data_type": "int",
+          "simple_type": "int",
+          "nullable": false,
+          "ordinal_position": 6,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        }
+      ],
+      "row_count": 712004112,
+      "row_count_is_exact": false,
+      "geometry_type": null,
+      "srid": null,
+      "notes": "Occupancy counts by minute. Fully rebuildable from dw.VisitDetails.",
+      "data_quality_notes": null,
+      "last_modified": null
+    },
+    {
+      "schema": "SDE",
+      "name": "PU_METERS_ON_ST",
+      "columns": [
+        {
+          "name": "OBJECTID",
+          "data_type": "int",
+          "simple_type": "int",
+          "nullable": false,
+          "ordinal_position": 1,
+          "is_primary_key": true,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "cwAssetID",
+          "data_type": "varchar(20)",
+          "simple_type": "string",
+          "nullable": true,
+          "ordinal_position": 2,
+          "is_primary_key": false,
+          "is_foreign_key": true,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "Hrs_Operation",
+          "data_type": "varchar(100)",
+          "simple_type": "string",
+          "nullable": true,
+          "ordinal_position": 3,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": "Freeform enforced-hours string; parsed by meter_hours.py"
+        },
+        {
+          "name": "Status",
+          "data_type": "varchar(20)",
+          "simple_type": "string",
+          "nullable": true,
+          "ordinal_position": 4,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "is_geometry": false,
+          "notes": null
+        },
+        {
+          "name": "Shape",
+          "data_type": "geometry",
+          "simple_type": "geometry",
+          "nullable": true,
+          "ordinal_position": 5,
+          "is_primary_key": false,
+          "is_foreign_key": false,
+          "is_geometry": true,
+          "notes": null
+        }
+      ],
+      "row_count": 3204,
+      "row_count_is_exact": true,
+      "geometry_type": "Point",
+      "srid": 2263,
+      "notes": "On-street meter space inventory.",
+      "data_quality_notes": null,
+      "last_modified": null
+    }
+  ],
+  "relationships": [
+    {
+      "from_table": "dw.VisitDetails",
+      "to_table": "dw.VisitSummary",
+      "from_column": "GarageID",
+      "to_column": "GarageID",
+      "label": "rebuilds_into"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Overview</h2>
+<p>Key columns only (PK / FK / geometry). Click a table below for the full detail view.</p>
+<pre class="mermaid">
+{{ diagram }}
+</pre>
+
+<h2>Tables</h2>
+<ul class="table-list">
+{% for t in tables %}
+    <li>
+        <a href="/table/{{ t.schema }}/{{ t.name }}">{{ t.schema }}.{{ t.name }}</a>
+        &mdash; {{ t.columns|length }} columns
+        {% if t.row_count is not none %}, {{ "{:,}".format(t.row_count) }} rows{% endif %}
+        {% if t.geometry_type %}<span class="badge badge-geom">{{ t.geometry_type }}</span>{% endif %}
+    </li>
+{% endfor %}
+</ul>
+{% endblock %}

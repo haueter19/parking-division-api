@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% set current_section = "analytics" %}
+
+{% block title %}Garage Performance – Parking Division{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+    .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); max-width: 1400px; margin: 0 auto; }
+    h1 { font-size: 1.4rem; color: #1e2a3a; margin-bottom: 6px; }
+    .back-link { font-size: 0.875rem; color: #2563eb; text-decoration: none; display: inline-block; margin-bottom: 12px; }
+    .back-link:hover { text-decoration: underline; }
+    .note { color: #6b7280; font-size: 0.9rem; margin-bottom: 16px; }
+
+    .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 20px; }
+    .control-group { display: flex; flex-direction: column; gap: 4px; }
+    .control-group label { font-weight: 600; font-size: 0.85rem; color: #374151; }
+    .control-group select {
+        padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 6px; min-width: 220px; font-size: 0.9rem;
+    }
+    .control-group select:focus { outline: none; border-color: #2563eb; }
+    .as-of { color: #6b7280; font-size: 0.85rem; margin-left: auto; }
+    #loading { display: none; color: #6b7280; font-style: italic; }
+
+    .chart-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+    #occupancyChart { min-height: 440px; }
+
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+    }
+    .metric-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 16px;
+        min-height: 220px;
+    }
+    .metric-card h3 { font-size: 0.9rem; color: #374151; margin-bottom: 10px; }
+
+    .stat-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 150px; }
+    .stat-tile .value { font-size: 2.2rem; font-weight: 700; color: #1e293b; }
+    .stat-tile .sub { font-size: 0.85rem; color: #6b7280; margin-top: 4px; }
+
+    .empty-note { color: #6b7280; text-align: center; padding: 30px; font-size: 0.9rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <a class="back-link" href="/analytics">← Back to Analytics</a>
+    <h1>Garage Performance</h1>
+    <p class="note">Occupancy and revenue for a selected garage, centered on the previous day.</p>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="garageSelect">Garage</label>
+            <select id="garageSelect" onchange="loadDashboard()"></select>
+        </div>
+        <span class="as-of" id="asOfLabel"></span>
+        <span id="loading">Loading...</span>
+    </div>
+
+    <div class="chart-card">
+        <div id="occupancyChart"></div>
+    </div>
+
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <h3>Trips by Customer Type</h3>
+            <div id="tripsByTypeChart"></div>
+        </div>
+        <div class="metric-card">
+            <h3>Days Capacity Reached</h3>
+            <div class="stat-tile">
+                <div class="value" id="daysAtCapacityValue">—</div>
+                <div class="sub" id="daysAtCapacitySub">trailing 52 weeks, same weekday</div>
+            </div>
+        </div>
+        <div class="metric-card">
+            <h3>Revenue by Payment Method</h3>
+            <div id="revenueByMethodChart"></div>
+        </div>
+        <div class="metric-card">
+            <h3>Revenue by Payment Brand</h3>
+            <div id="revenueByBrandChart"></div>
+        </div>
+        <div class="metric-card">
+            <h3>Revenue by Device Type</h3>
+            <div id="revenueByDeviceChart"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const token = localStorage.getItem('access_token');
+    const authHeaders = { 'Authorization': `Bearer ${token}` };
+
+    // Fixed hue order so the same category always gets the same color,
+    // regardless of its rank by amount that day.
+    const PALETTE = ['#2563eb', '#008300', '#e87ba4', '#eda100'];
+    const categoryColorCache = new Map();
+
+    function colorFor(scopeKey, label) {
+        const key = `${scopeKey}::${label}`;
+        if (!categoryColorCache.has(key)) {
+            const usedInScope = [...categoryColorCache.keys()].filter(k => k.startsWith(`${scopeKey}::`)).length;
+            categoryColorCache.set(key, PALETTE[usedInScope % PALETTE.length]);
+        }
+        return categoryColorCache.get(key);
+    }
+
+    function minuteGrid() {
+        const minutes = [];
+        for (let h = 0; h < 24; h++) {
+            for (let m = 0; m < 60; m++) {
+                minutes.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+            }
+        }
+        return minutes;
+    }
+
+    async function loadGarages() {
+        const resp = await fetch('/api/v1/garage-analytics/garages', { headers: authHeaders });
+        const garages = await resp.json();
+        const select = document.getElementById('garageSelect');
+        select.innerHTML = garages.map(g => `<option value="${g.garage_id}">${g.garage_name}</option>`).join('');
+        if (garages.length) loadDashboard();
+    }
+
+    async function loadDashboard() {
+        const garageId = document.getElementById('garageSelect').value;
+        if (!garageId) return;
+
+        document.getElementById('loading').style.display = 'inline';
+        try {
+            const [occupancyResp, revenueResp] = await Promise.all([
+                fetch(`/api/v1/garage-analytics/occupancy?garage_id=${garageId}`, { headers: authHeaders }),
+                fetch(`/api/v1/garage-analytics/revenue?garage_id=${garageId}`, { headers: authHeaders })
+            ]);
+            const occupancy = await occupancyResp.json();
+            const revenue = await revenueResp.json();
+
+            document.getElementById('asOfLabel').textContent = `Data for ${occupancy.date}`;
+
+            renderOccupancyChart(occupancy);
+            renderTripsByType(occupancy.trips_by_customer_type);
+            renderDaysAtCapacity(occupancy.days_at_capacity, occupancy.days_in_window);
+            renderRevenueBars('revenueByMethodChart', revenue.by_payment_method, 'method');
+            renderRevenueBars('revenueByBrandChart', revenue.by_payment_brand, 'brand');
+            renderRevenueBars('revenueByDeviceChart', revenue.by_device_type, 'device');
+        } catch (err) {
+            console.error('Failed to load garage dashboard:', err);
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+        }
+    }
+
+    function renderOccupancyChart(occupancy) {
+        const capacity = occupancy.capacity;
+        const grid = minuteGrid();
+
+        const yesterdayMap = Object.fromEntries(occupancy.yesterday.map(d => [d.minute, d.total]));
+        const avgMap = Object.fromEntries(occupancy.history.map(d => [d.minute, d.avg_total]));
+        const maxMap = Object.fromEntries(occupancy.history.map(d => [d.minute, d.max_total]));
+
+        const yesterdayY = grid.map(m => yesterdayMap[m] ?? null);
+        const avgY = grid.map(m => avgMap[m] ?? null);
+        const maxY = grid.map(m => maxMap[m] ?? null);
+
+        const peak = Math.max(
+            capacity || 0,
+            ...yesterdayY.filter(v => v != null),
+            ...maxY.filter(v => v != null)
+        );
+        const leftRange = [0, peak * 1.05];
+        // Right axis is a locked linear function of the left axis (count / capacity) -
+        // never independently scaled, so the two axes can't be arranged to mislead.
+        const rightRange = capacity ? [0, (peak * 1.05 / capacity) * 100] : [0, 100];
+
+        if (!occupancy.yesterday.length) {
+            document.getElementById('occupancyChart').innerHTML =
+                '<p class="empty-note">No occupancy data found for this garage/date.</p>';
+            return;
+        }
+
+        Plotly.newPlot('occupancyChart', [
+            {
+                x: grid, y: maxY, name: 'Same-weekday max (trailing year)',
+                type: 'scatter', mode: 'lines', line: { color: '#6b7280', width: 1, dash: 'dot' },
+                hovertemplate: 'Max: %{y:,.0f}<extra></extra>'
+            },
+            {
+                x: grid, y: avgY, name: 'Same-weekday avg (trailing year)',
+                type: 'scatter', mode: 'lines', line: { color: '#6b7280', width: 2, dash: 'dash' },
+                hovertemplate: 'Avg: %{y:,.0f}<extra></extra>'
+            },
+            {
+                x: grid, y: yesterdayY, name: 'Yesterday',
+                type: 'scatter', mode: 'lines', line: { color: '#2563eb', width: 2 },
+                hovertemplate: 'Yesterday: %{y:,.0f}<extra></extra>'
+            }
+        ], {
+            xaxis: { title: 'Time of Day', type: 'category', categoryorder: 'array', categoryarray: grid, tickvals: grid.filter((_, i) => i % 60 === 0), tickfont: { size: 11 } },
+            yaxis: { title: 'Vehicles', range: leftRange, gridcolor: '#e5e7eb' },
+            yaxis2: { title: '% of Capacity', range: rightRange, overlaying: 'y', side: 'right', showgrid: false, ticksuffix: '%' },
+            legend: { orientation: 'h', y: -0.25 },
+            margin: { t: 20, b: 90, l: 70, r: 70 },
+            plot_bgcolor: 'white', paper_bgcolor: 'white', hovermode: 'x unified'
+        }, { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d', 'select2d'], displaylogo: false });
+    }
+
+    function renderTripsByType(trips) {
+        if (!trips || !trips.length) {
+            document.getElementById('tripsByTypeChart').innerHTML = '<p class="empty-note">No trip data found.</p>';
+            return;
+        }
+        const sorted = [...trips].sort((a, b) => b.trip_count - a.trip_count);
+        Plotly.newPlot('tripsByTypeChart', [{
+            x: sorted.map(d => d.trip_count),
+            y: sorted.map(d => d.customer_type),
+            type: 'bar', orientation: 'h',
+            marker: { color: sorted.map(d => colorFor('customer_type', d.customer_type)) },
+            text: sorted.map(d => d.trip_count.toLocaleString()),
+            textposition: 'outside',
+            hovertemplate: '%{y}: %{x:,}<extra></extra>'
+        }], {
+            margin: { t: 10, b: 30, l: 90, r: 20 },
+            xaxis: { showgrid: true, gridcolor: '#e5e7eb' },
+            plot_bgcolor: 'white', paper_bgcolor: 'white', height: 170
+        }, { responsive: true, displayModeBar: false });
+    }
+
+    function renderDaysAtCapacity(days, windowSize) {
+        document.getElementById('daysAtCapacityValue').textContent = `${days} / ${windowSize}`;
+    }
+
+    function renderRevenueBars(containerId, items, scopeKey) {
+        if (!items || !items.length) {
+            document.getElementById(containerId).innerHTML = '<p class="empty-note">No revenue data found.</p>';
+            return;
+        }
+        Plotly.newPlot(containerId, [{
+            x: items.map(d => d.amount),
+            y: items.map(d => d.label),
+            type: 'bar', orientation: 'h',
+            marker: { color: items.map(d => colorFor(scopeKey, d.label)) },
+            text: items.map(d => `$${d.amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}`),
+            textposition: 'outside',
+            hovertemplate: '%{y}: $%{x:,.2f}<extra></extra>'
+        }], {
+            margin: { t: 10, b: 30, l: 110, r: 20 },
+            xaxis: { showgrid: true, gridcolor: '#e5e7eb', tickformat: '$,.0f' },
+            plot_bgcolor: 'white', paper_bgcolor: 'white', height: 170
+        }, { responsive: true, displayModeBar: false });
+    }
+
+    loadGarages();
+</script>
+{% endblock %}

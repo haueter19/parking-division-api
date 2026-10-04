@@ -249,6 +249,11 @@ async def analytics_gis_capacity(request: Request):
     """GIS & Cityworks Capacity Story report"""
     return templates.TemplateResponse(name="gis_cityworks_capacity_story_v3.html", context={"request": request})
 
+@app.get("/analytics/garage-performance", response_class=HTMLResponse)
+async def analytics_garage_performance(request: Request):
+    """Garage occupancy & revenue performance dashboard"""
+    return templates.TemplateResponse(name="garage_performance.html", context={"request": request})
+
 
 if __name__ == "__main__":
     import uvicorn

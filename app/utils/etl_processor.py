@@ -291,7 +291,7 @@ class ETLProcessor:
         # Access cards do not change that often. Should periodically check to make sure they are up to date. 
         # Can download access cards from IPS: https://www.ipsmetersystems.com/Pages/Admin/ManageAccessCards.aspx
         # Doesn't change very often, could download once a month or possibly even less. Could add this to Luci's tasks. 
-        access_cards = r'F:\Pkroot\ParkingMaintenance\PARKING METERS\IPS\Manage Access Cards_01_09_2026.csv'
+        access_cards = r'F:\Pkroot\ParkingMaintenance\PARKING METERS\IPS\Manage Access Cards_09_01_2026.csv'
         # Read in the access cards
         access_cards_df = pd.read_csv(access_cards, dtype={'Card #': 'str', 'Card Number': 'str'})
 

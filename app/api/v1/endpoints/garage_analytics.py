@@ -95,7 +95,7 @@ async def get_garage_occupancy(
 
         max_total_by_date[r.date] = max(max_total_by_date[r.date], total)
 
-        if r.date == target:
+        if datetime.date(r.date) == target:
             yesterday_by_minute[minute_key] = total
         else:
             history_by_minute[minute_key].append(total)

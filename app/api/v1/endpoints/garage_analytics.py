@@ -29,7 +29,9 @@ async def get_garages(
     query = text("""
         SELECT facility_id, facility_name
         FROM app.dim_facility
-        WHERE facility_type = 'garage'
+        WHERE 
+            facility_type = 'garage'
+            AND facility_id != 13
         ORDER BY facility_name
     """)
     rows = db.execute(query).fetchall()
@@ -59,6 +61,7 @@ async def get_garage_occupancy(
 
     target = target_date or (date_type.today() - timedelta(days=1))
     start_date = target - timedelta(days=365)
+    start_date = datetime.combine(start_date, datetime.min.time())
     capacity = GARAGE_CAPACITY.get(garage_id)
 
     # dayofweek is matched by looking up the value stored for the target
@@ -68,17 +71,15 @@ async def get_garage_occupancy(
         SELECT GarageID, date, transient, permit, employee, total, hms
         FROM dw.VisitSummary
         WHERE GarageID = :garage_id
-          AND date BETWEEN :start_date AND :target_date
-          AND dayofweek = (
-              SELECT TOP 1 dayofweek FROM dw.VisitSummary
-              WHERE GarageID = :garage_id AND date = :target_date
-          )
+          AND date >= :start_date 
+          AND dayofweek = :weekday
         ORDER BY date, hms
     """)
     rows = db.execute(occupancy_query, {
         "garage_id": garage_id,
         "start_date": start_date,
-        "target_date": target
+        #"target_date": target,
+        "weekday": target.weekday()
     }).fetchall()
 
     yesterday_by_minute = {}
@@ -164,10 +165,6 @@ async def get_garage_revenue(
     day_start = datetime.combine(target, datetime.min.time())
     day_end = datetime.combine(target, datetime.max.time())
 
-    # TODO(Dan): pm/ss joins weren't in the SQL you sent - confirm the
-    # actual table/column names for payment method and settlement system.
-    # Assuming app.dim_payment_method (keyed by t.payment_method_id) and
-    # app.dim_system (keyed by t.system_id) below.
     revenue_query = text("""
         SELECT
             t.transaction_id, t.transaction_date, t.transaction_amount,

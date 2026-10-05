@@ -182,8 +182,8 @@ async def get_garage_revenue(
         INNER JOIN app.dim_location l ON (t.location_id = l.location_id)
         INNER JOIN app.dim_facility f ON (l.facility_id = f.facility_id)
         INNER JOIN app.dim_device d ON (t.device_id = d.device_id)
-        LEFT JOIN app.dim_payment_method pm ON (t.payment_method_id = pm.payment_method_id)
-        LEFT JOIN app.dim_system ss ON (t.system_id = ss.system_id)
+        INNER JOIN app.dim_payment_method pm ON (t.payment_method_id = pm.payment_method_id)
+        INNER JOIN app.dim_settlement_system ss ON (t.settlement_system_id = ss.settlement_system_id)
         WHERE t.transaction_date BETWEEN :day_start AND :day_end
           AND f.facility_type = 'garage'
           AND f.facility_id = :garage_id
